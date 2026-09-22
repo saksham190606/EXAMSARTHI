@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle, Play, Square, Volume2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -18,6 +18,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import type { Exam } from "@/lib/mock-exam"
+import { useSpeech } from '@/hooks/useSpeech'
+import { useAccessibilityStore } from '@/store/useAccessibilityStore'
 
 interface ExamSessionProps {
   exam: Exam;
@@ -30,6 +32,9 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   
   const questionTitleRef = useRef<HTMLHeadingElement>(null);
+
+  const { speak, stop, status, isSupported } = useSpeech();
+  const { audioAssistance, autoReadQuestions } = useAccessibilityStore();
   
   const currentQuestion = exam.questions[currentIndex];
   const totalQuestions = exam.questions.length;
@@ -40,7 +45,14 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
     if (questionTitleRef.current) {
       questionTitleRef.current.focus();
     }
-  }, [currentIndex]);
+
+    if (audioAssistance && autoReadQuestions) {
+      // Small timeout to allow DOM update before speaking
+      setTimeout(() => {
+        speak(`Question ${currentIndex + 1}: ${exam.questions[currentIndex].text}`, 'Reading question');
+      }, 300);
+    }
+  }, [currentIndex, audioAssistance, autoReadQuestions, speak, exam.questions]);
 
   const handleOptionChange = (value: string) => {
     setAnswers(prev => ({
@@ -50,18 +62,21 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   };
 
   const handleNext = () => {
+    stop();
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex(prev => prev + 1);
     }
   };
 
   const handlePrev = () => {
+    stop();
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
     }
   };
 
   const handleSubmit = () => {
+    stop();
     setIsSubmitDialogOpen(false);
     onComplete(answers);
   };
@@ -94,6 +109,45 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
             <span className="sr-only">Question {currentIndex + 1}: </span>
             {currentQuestion.text}
           </h2>
+
+          {/* Voice Controls */}
+          {audioAssistance && isSupported && (
+            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
+                className={status === 'Reading question' ? 'bg-primary/10' : ''}
+              >
+                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+                Read Question
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
+                  speak(`Options: ${optionsText}`, 'Reading options');
+                }}
+                className={status === 'Reading options' ? 'bg-primary/10' : ''}
+              >
+                <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                Read Options
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={stop}
+                disabled={status === 'Speech stopped'}
+              >
+                <Square className="mr-2 h-4 w-4" aria-hidden="true" />
+                Stop
+              </Button>
+              <div className="sr-only" aria-live="polite">
+                {status}
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {/* Fieldset grouping handles semantic relationships for screen readers */}

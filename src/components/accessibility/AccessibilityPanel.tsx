@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 
-const emptySubscribe = () => () => {}
+const emptySubscribe = () => () => { }
 
 export function AccessibilityPanel() {
   const mounted = React.useSyncExternalStore(
@@ -26,12 +26,13 @@ export function AccessibilityPanel() {
     () => true,
     () => false
   )
-  
-  const { 
+
+  const {
     textSize, setTextSize,
     contrast, setContrast,
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
+    autoReadQuestions, setAutoReadQuestions,
     voiceSpeed, setVoiceSpeed
   } = useAccessibilityStore()
 
@@ -57,14 +58,14 @@ export function AccessibilityPanel() {
             Customize your experience. These settings will be saved automatically.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-6 py-4">
-          
+
           {/* Text Size */}
           <fieldset className="space-y-3">
             <legend id="ts-legend" className="text-base font-semibold">Text Size</legend>
-            <RadioGroup 
-              value={textSize} 
+            <RadioGroup
+              value={textSize}
               onValueChange={(val) => setTextSize(val as TextSize)}
               className="flex flex-col space-y-1"
               aria-labelledby="ts-legend"
@@ -87,8 +88,8 @@ export function AccessibilityPanel() {
           {/* Contrast */}
           <fieldset className="space-y-3">
             <legend id="c-legend" className="text-base font-semibold">Contrast</legend>
-            <RadioGroup 
-              value={contrast} 
+            <RadioGroup
+              value={contrast}
               onValueChange={(val) => setContrast(val as Contrast)}
               className="flex flex-col space-y-1"
               aria-labelledby="c-legend"
@@ -107,8 +108,8 @@ export function AccessibilityPanel() {
           {/* Theme */}
           <fieldset className="space-y-3">
             <legend id="theme-legend" className="text-base font-semibold">Theme</legend>
-            <RadioGroup 
-              value={theme || 'system'} 
+            <RadioGroup
+              value={theme || 'system'}
               onValueChange={(val) => setTheme(val)}
               className="flex flex-col space-y-1"
               aria-labelledby="theme-legend"
@@ -136,7 +137,7 @@ export function AccessibilityPanel() {
                 Minimize animations
               </p>
             </div>
-            <Switch 
+            <Switch
               id="reduced-motion-switch"
               checked={reducedMotion}
               onCheckedChange={setReducedMotion}
@@ -153,7 +154,7 @@ export function AccessibilityPanel() {
                 Enable voice navigation
               </p>
             </div>
-            <Switch 
+            <Switch
               id="audio-assistance-switch"
               checked={audioAssistance}
               onCheckedChange={setAudioAssistance}
@@ -162,11 +163,30 @@ export function AccessibilityPanel() {
             />
           </div>
 
+          {/* Auto Read Questions */}
+          {audioAssistance && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-read-switch" className="text-base font-semibold">Auto Read Questions</Label>
+                <p id="auto-read-desc" className="text-sm text-muted-foreground">
+                  Automatically read new questions
+                </p>
+              </div>
+              <Switch
+                id="auto-read-switch"
+                checked={autoReadQuestions}
+                onCheckedChange={setAutoReadQuestions}
+                aria-label="Toggle auto read questions"
+                aria-describedby="auto-read-desc"
+              />
+            </div>
+          )}
+
           {/* Voice Speed */}
           <fieldset className="space-y-3">
             <legend id="vs-legend" className="text-base font-semibold">Voice Speed</legend>
-            <RadioGroup 
-              value={voiceSpeed} 
+            <RadioGroup
+              value={voiceSpeed}
               onValueChange={(val) => setVoiceSpeed(val as VoiceSpeed)}
               className="flex flex-col space-y-1"
               disabled={!audioAssistance}
@@ -186,7 +206,7 @@ export function AccessibilityPanel() {
               </div>
             </RadioGroup>
           </fieldset>
-          
+
         </div>
       </DialogContent>
     </Dialog>
