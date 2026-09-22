@@ -138,13 +138,18 @@ export function AccessibilityPanel() {
                 Minimize animations
               </p>
             </div>
-            <Switch
-              id="reduced-motion-switch"
-              checked={reducedMotion}
-              onCheckedChange={setReducedMotion}
-              aria-label="Toggle reduced motion"
-              aria-describedby="reduced-motion-desc"
-            />
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                {reducedMotion ? 'On' : 'Off'}
+              </span>
+              <Switch
+                id="reduced-motion-switch"
+                checked={reducedMotion}
+                onCheckedChange={setReducedMotion}
+                aria-label="Toggle reduced motion"
+                aria-describedby="reduced-motion-desc"
+              />
+            </div>
           </div>
 
           {/* Audio Assistance */}
@@ -155,13 +160,18 @@ export function AccessibilityPanel() {
                 Enable voice navigation
               </p>
             </div>
-            <Switch
-              id="audio-assistance-switch"
-              checked={audioAssistance}
-              onCheckedChange={setAudioAssistance}
-              aria-label="Toggle audio assistance"
-              aria-describedby="audio-assistance-desc"
-            />
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                {audioAssistance ? 'On' : 'Off'}
+              </span>
+              <Switch
+                id="audio-assistance-switch"
+                checked={audioAssistance}
+                onCheckedChange={setAudioAssistance}
+                aria-label="Toggle audio assistance"
+                aria-describedby="audio-assistance-desc"
+              />
+            </div>
           </div>
 
           {/* Auto Read Questions */}
@@ -170,16 +180,21 @@ export function AccessibilityPanel() {
               <div className="space-y-0.5">
                 <Label htmlFor="auto-read-switch" className="text-base font-semibold">Auto Read Questions</Label>
                 <p id="auto-read-desc" className="text-sm text-muted-foreground">
-                  Automatically read new questions
+                  Automatically read questions out loud when they appear
                 </p>
               </div>
-              <Switch
-                id="auto-read-switch"
-                checked={autoReadQuestions}
-                onCheckedChange={setAutoReadQuestions}
-                aria-label="Toggle auto read questions"
-                aria-describedby="auto-read-desc"
-              />
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                  {autoReadQuestions ? 'On' : 'Off'}
+                </span>
+                <Switch
+                  id="auto-read-switch"
+                  checked={autoReadQuestions}
+                  onCheckedChange={setAutoReadQuestions}
+                  aria-label="Toggle auto read questions"
+                  aria-describedby="auto-read-desc"
+                />
+              </div>
             </div>
           )}
 
@@ -192,6 +207,10 @@ export function AccessibilityPanel() {
                   Control exam with your voice
                 </p>
               </div>
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                {enableVoiceCommands ? 'On' : 'Off'}
+              </span>
               <Switch
                 id="voice-commands-switch"
                 checked={enableVoiceCommands}
@@ -199,6 +218,7 @@ export function AccessibilityPanel() {
                 aria-label="Toggle voice commands"
                 aria-describedby="voice-commands-desc"
               />
+            </div>
             </div>
           )}
 

@@ -150,11 +150,11 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
               variant="outline"
               size="sm"
               onClick={() => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
-              className={status === 'Reading question' ? 'bg-primary/10' : ''}
+              className={status === 'Reading question' ? 'bg-primary/10 border-primary font-bold ring-1 ring-primary' : ''}
               disabled={!isSupported}
             >
               <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-              Read Question
+              {status === 'Reading question' ? 'Reading...' : 'Read Question'}
             </Button>
             <Button
               variant="outline"
@@ -163,11 +163,11 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
                 const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
                 speak(`Options: ${optionsText}`, 'Reading options');
               }}
-              className={status === 'Reading options' ? 'bg-primary/10' : ''}
+              className={status === 'Reading options' ? 'bg-primary/10 border-primary font-bold ring-1 ring-primary' : ''}
               disabled={!isSupported}
             >
               <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
-              Read Options
+              {status === 'Reading options' ? 'Reading...' : 'Read Options'}
             </Button>
             <Button
               variant="outline"
@@ -226,7 +226,7 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
                     {/* The label expands to fill the container for a large touch target */}
                     <Label 
                       htmlFor={optionId} 
-                      className="flex-1 cursor-pointer text-base leading-relaxed font-normal flex items-center before:content-[''] before:inline-block before:w-5 before:h-5 before:mr-3 before:border-2 before:border-primary/50 before:rounded-full [&:has(:checked)]:before:bg-primary [&:has(:checked)]:before:border-primary peer-data-[state=checked]:font-medium"
+                      className="flex-1 cursor-pointer text-base leading-relaxed font-normal flex items-center before:content-[''] before:inline-block before:w-5 before:h-5 before:mr-3 before:border-2 before:border-primary before:rounded-full [&:has(:checked)]:before:bg-primary [&:has(:checked)]:before:border-primary peer-data-[state=checked]:font-medium"
                     >
                       {/* Fake radio circle is handled by the before pseudo element above. 
                           For accessibility, the actual RadioGroupItem handles standard semantics. */}
