@@ -34,16 +34,17 @@ export function Header() {
         
         <div className="flex items-center gap-4">
           <MobileNav />
-          <Link href="/" className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center space-x-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm">
             <span className="font-bold text-xl tracking-tight text-primary">EXAMSARTHI</span>
           </Link>
           
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium ml-6">
+          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6 text-sm font-medium ml-6">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`transition-colors hover:text-foreground/80 ${
+                {...(pathname === item.href ? { "aria-current": "page" } : {})}
+                className={`transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm px-2 py-1 ${
                   pathname === item.href ? "text-foreground" : "text-foreground/60"
                 }`}
               >

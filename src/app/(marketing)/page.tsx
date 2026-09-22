@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 
 export default function LandingPage() {
   return (
-    <div className="flex flex-col min-h-screen">
+    <main id="main-content" className="flex flex-col min-h-screen">
       
       {/* Hero Section */}
       <section className="flex-1 flex flex-col items-center justify-center text-center px-4 py-24 md:py-32 bg-primary/5">
@@ -17,10 +17,10 @@ export default function LandingPage() {
             EXAMSARTHI is the accessibility-first examination and practice platform designed to empower visually impaired candidates.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-            <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8" render={<Link href="/practice" />}>
+            <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/practice" />}>
               Start Practicing <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8" render={<Link href="/exam" />}>
+            <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/exam" />}>
               Explore Exams
             </Button>
           </div>
@@ -32,7 +32,7 @@ export default function LandingPage() {
         <div className="text-center mb-16 space-y-4">
           <h2 className="text-3xl md:text-4xl font-bold">Built for Accessibility First</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            We don't just comply with standards; we build with them at our core so you can focus on your exams without barriers.
+            We don&apos;t just comply with standards; we build with them at our core so you can focus on your exams without barriers.
           </p>
         </div>
         
@@ -111,6 +111,6 @@ export default function LandingPage() {
         </div>
       </footer>
       
-    </div>
+    </main>
   )
 }
