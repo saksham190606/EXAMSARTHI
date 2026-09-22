@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccessibilityStore, VoiceSpeed } from '@/store/useAccessibilityStore';
 
-export type SpeechStatus = 'Speech stopped' | 'Reading question' | 'Reading options' | 'Unsupported';
+export type SpeechStatus = 'Speech stopped' | 'Reading question' | 'Reading options' | 'Voice feedback' | 'Unsupported';
 
 export function useSpeech() {
   const [status, setStatus] = useState<SpeechStatus>('Speech stopped');
-  const { voiceSpeed, audioAssistance } = useAccessibilityStore();
+  const { voiceSpeed } = useAccessibilityStore();
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
@@ -17,12 +17,9 @@ export function useSpeech() {
   }, [synth]);
 
   const speak = useCallback(
-    (text: string, context: 'Reading question' | 'Reading options') => {
+    (text: string, context: SpeechStatus) => {
       if (!synth) {
         setStatus('Unsupported');
-        return;
-      }
-      if (!audioAssistance) {
         return;
       }
 
@@ -55,7 +52,7 @@ export function useSpeech() {
       utteranceRef.current = utterance;
       synth.speak(utterance);
     },
-    [synth, audioAssistance, voiceSpeed, stop]
+    [synth, voiceSpeed, stop]
   );
 
   // Cleanup on unmount

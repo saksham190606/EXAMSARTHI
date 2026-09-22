@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { CheckCircle2, XCircle, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Exam } from "@/lib/mock-exam"
 import Link from 'next/link'
@@ -105,9 +105,9 @@ export function ExamResults({ exam, answers, onRetry }: ExamResultsProps) {
         <Button onClick={onRetry} variant="outline" size="lg" className="w-full sm:w-auto">
           Retry Exam
         </Button>
-        <Button render={<Link href="/dashboard" />} size="lg" className="w-full sm:w-auto">
+        <Link href="/dashboard" className={buttonVariants({ size: "lg", className: "w-full sm:w-auto" })}>
           Return to Dashboard <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-        </Button>
+        </Link>
       </div>
     </div>
   )

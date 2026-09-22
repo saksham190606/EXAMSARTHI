@@ -9,7 +9,7 @@ export default function ExamPage() {
       <p className="text-muted-foreground max-w-lg mb-8">
         The secure, timed official examination environment is currently locked. For the hackathon demo, please try our fully accessible mock exam in the Practice Center.
       </p>
-      <Button render={<Link href="/practice" />} size="lg" className="min-h-11">
+      <Button render={<Link href="/practice" />} size="lg" className="min-h-11" nativeButton={false}>
         Go to Practice Center <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
       </Button>
     </main>

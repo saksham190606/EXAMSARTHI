@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle, Play, Square, Volume2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle, Play, Square, Volume2, Mic, MicOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import type { Exam } from "@/lib/mock-exam"
 import { useSpeech } from '@/hooks/useSpeech'
+import { useVoiceCommands } from '@/hooks/useVoiceCommands'
 import { useAccessibilityStore } from '@/store/useAccessibilityStore'
 
 interface ExamSessionProps {
@@ -81,6 +82,34 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
     onComplete(answers);
   };
 
+  const voiceCommands = useVoiceCommands({
+    isSubmitDialogOpen,
+    onSelectOptionIndex: (index) => {
+      const opt = currentQuestion?.options[index];
+      if (opt) handleOptionChange(opt.id);
+    },
+    onNext: handleNext,
+    onPrev: handlePrev,
+    onGoToQuestion: (index) => {
+      if (index >= 0 && index < totalQuestions) {
+        stop();
+        setCurrentIndex(index);
+      }
+    },
+    onReadQuestion: () => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question'),
+    onReadOptions: () => {
+      const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
+      speak(`Options: ${optionsText}`, 'Reading options');
+    },
+    onStopSpeaking: stop,
+    onSubmitExam: () => setIsSubmitDialogOpen(true),
+    onConfirmSubmit: handleSubmit,
+    onCancelSubmit: () => setIsSubmitDialogOpen(false),
+    onFeedback: (msg) => {
+      speak(msg, 'Voice feedback');
+    }
+  });
+
   const unansweredCount = totalQuestions - Object.keys(answers).length;
 
   return (
@@ -111,43 +140,74 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
           </h2>
 
           {/* Voice Controls */}
-          {audioAssistance && isSupported && (
-            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
-                className={status === 'Reading question' ? 'bg-primary/10' : ''}
-              >
-                <Play className="mr-2 h-4 w-4" aria-hidden="true" />
-                Read Question
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
-                  speak(`Options: ${optionsText}`, 'Reading options');
-                }}
-                className={status === 'Reading options' ? 'bg-primary/10' : ''}
-              >
-                <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                Read Options
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={stop}
-                disabled={status === 'Speech stopped'}
-              >
-                <Square className="mr-2 h-4 w-4" aria-hidden="true" />
-                Stop
-              </Button>
-              <div className="sr-only" aria-live="polite">
-                {status}
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+            {!isSupported && (
+              <div className="w-full text-sm text-destructive mt-1" role="alert">
+                Text-to-speech is not supported in this browser.
               </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
+              className={status === 'Reading question' ? 'bg-primary/10' : ''}
+              disabled={!isSupported}
+            >
+              <Play className="mr-2 h-4 w-4" aria-hidden="true" />
+              Read Question
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
+                speak(`Options: ${optionsText}`, 'Reading options');
+              }}
+              className={status === 'Reading options' ? 'bg-primary/10' : ''}
+              disabled={!isSupported}
+            >
+              <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
+              Read Options
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stop}
+              disabled={status === 'Speech stopped' || !isSupported}
+            >
+              <Square className="mr-2 h-4 w-4" aria-hidden="true" />
+              Stop
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={voiceCommands.isListening ? voiceCommands.stopListening : voiceCommands.startListening}
+              className={voiceCommands.isListening ? 'bg-primary/10 border-primary' : ''}
+              disabled={!voiceCommands.isSupported}
+            >
+              {voiceCommands.isListening ? (
+                <Mic className="mr-2 h-4 w-4 animate-pulse text-primary" aria-hidden="true" />
+              ) : (
+                <MicOff className="mr-2 h-4 w-4" aria-hidden="true" />
+              )}
+              {voiceCommands.isListening ? 'Listening...' : 'Voice Command'}
+            </Button>
+
+            <div className="sr-only" aria-live="polite">
+              {status}
             </div>
-          )}
+
+            <div className="w-full text-sm font-medium text-muted-foreground mt-2" aria-live="polite">
+              {voiceCommands.statusText}
+            </div>
+
+            {!voiceCommands.isSupported && (
+              <div className="w-full text-sm text-destructive mt-1" role="alert">
+                Voice commands are not supported in this browser.
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {/* Fieldset grouping handles semantic relationships for screen readers */}

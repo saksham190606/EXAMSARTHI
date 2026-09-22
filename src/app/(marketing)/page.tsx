@@ -17,10 +17,10 @@ export default function LandingPage() {
             EXAMSARTHI is the accessibility-first examination and practice platform designed to empower visually impaired candidates.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-            <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/practice" />}>
+            <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/practice" />} nativeButton={false}>
               Start Practicing <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-            <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/exam" />}>
+            <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" render={<Link href="/exam" />} nativeButton={false}>
               Explore Exams
             </Button>
           </div>

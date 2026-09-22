@@ -33,6 +33,7 @@ export function AccessibilityPanel() {
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
     autoReadQuestions, setAutoReadQuestions,
+    enableVoiceCommands, setEnableVoiceCommands,
     voiceSpeed, setVoiceSpeed
   } = useAccessibilityStore()
 
@@ -178,6 +179,25 @@ export function AccessibilityPanel() {
                 onCheckedChange={setAutoReadQuestions}
                 aria-label="Toggle auto read questions"
                 aria-describedby="auto-read-desc"
+              />
+            </div>
+          )}
+
+          {/* Voice Commands */}
+          {audioAssistance && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="voice-commands-switch" className="text-base font-semibold">Voice Commands</Label>
+                <p id="voice-commands-desc" className="text-sm text-muted-foreground">
+                  Control exam with your voice
+                </p>
+              </div>
+              <Switch
+                id="voice-commands-switch"
+                checked={enableVoiceCommands}
+                onCheckedChange={setEnableVoiceCommands}
+                aria-label="Toggle voice commands"
+                aria-describedby="voice-commands-desc"
               />
             </div>
           )}
