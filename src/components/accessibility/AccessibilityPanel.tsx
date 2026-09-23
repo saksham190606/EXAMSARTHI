@@ -52,7 +52,7 @@ export function AccessibilityPanel() {
       <DialogTrigger render={<Button variant="outline" size="icon" aria-label="Accessibility Settings" />}>
         <Settings2 className="h-[1.2rem] w-[1.2rem]" />
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[425px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl">Accessibility Settings</DialogTitle>
           <DialogDescription>
@@ -60,11 +60,11 @@ export function AccessibilityPanel() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
+        <div className="grid gap-6 py-4 overflow-y-auto min-h-0 pr-1">
 
           {/* Text Size */}
-          <fieldset className="space-y-3">
-            <legend id="ts-legend" className="text-base font-semibold">Text Size</legend>
+          <div className="space-y-3">
+            <div id="ts-legend" className="text-base font-semibold">Text Size</div>
             <RadioGroup
               value={textSize}
               onValueChange={(val) => setTextSize(val as TextSize)}
@@ -84,11 +84,11 @@ export function AccessibilityPanel() {
                 <Label htmlFor="ts-xlarge">Extra Large</Label>
               </div>
             </RadioGroup>
-          </fieldset>
+          </div>
 
           {/* Contrast */}
-          <fieldset className="space-y-3">
-            <legend id="c-legend" className="text-base font-semibold">Contrast</legend>
+          <div className="space-y-3">
+            <div id="c-legend" className="text-base font-semibold">Contrast</div>
             <RadioGroup
               value={contrast}
               onValueChange={(val) => setContrast(val as Contrast)}
@@ -104,11 +104,11 @@ export function AccessibilityPanel() {
                 <Label htmlFor="c-high">High Contrast</Label>
               </div>
             </RadioGroup>
-          </fieldset>
+          </div>
 
           {/* Theme */}
-          <fieldset className="space-y-3">
-            <legend id="theme-legend" className="text-base font-semibold">Theme</legend>
+          <div className="space-y-3">
+            <div id="theme-legend" className="text-base font-semibold">Theme</div>
             <RadioGroup
               value={theme || 'system'}
               onValueChange={(val) => setTheme(val)}
@@ -128,7 +128,7 @@ export function AccessibilityPanel() {
                 <Label htmlFor="theme-system">System</Label>
               </div>
             </RadioGroup>
-          </fieldset>
+          </div>
 
           {/* Reduced Motion */}
           <div className="flex items-center justify-between">
@@ -223,8 +223,8 @@ export function AccessibilityPanel() {
           )}
 
           {/* Voice Speed */}
-          <fieldset className="space-y-3">
-            <legend id="vs-legend" className="text-base font-semibold">Voice Speed</legend>
+          <div className="space-y-3">
+            <div id="vs-legend" className="text-base font-semibold">Voice Speed</div>
             <RadioGroup
               value={voiceSpeed}
               onValueChange={(val) => setVoiceSpeed(val as VoiceSpeed)}
@@ -245,7 +245,7 @@ export function AccessibilityPanel() {
                 <Label htmlFor="vs-fast">Fast</Label>
               </div>
             </RadioGroup>
-          </fieldset>
+          </div>
 
         </div>
       </DialogContent>

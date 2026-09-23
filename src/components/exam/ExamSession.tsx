@@ -222,14 +222,11 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
                 const optionId = `q${currentIndex}-o${option.id}`;
                 return (
                   <div key={option.id} className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 focus-within:ring-3 focus-within:ring-ring focus-within:ring-offset-2 transition-colors">
-                    <RadioGroupItem value={option.id} id={optionId} className="sr-only" />
-                    {/* The label expands to fill the container for a large touch target */}
+                    <RadioGroupItem value={option.id} id={optionId} />
                     <Label 
                       htmlFor={optionId} 
-                      className="flex-1 cursor-pointer text-base leading-relaxed font-normal flex items-center before:content-[''] before:inline-block before:w-5 before:h-5 before:mr-3 before:border-2 before:border-primary before:rounded-full [&:has(:checked)]:before:bg-primary [&:has(:checked)]:before:border-primary peer-data-[state=checked]:font-medium"
+                      className="flex-1 cursor-pointer text-base leading-relaxed font-normal flex items-center peer-data-checked:font-medium"
                     >
-                      {/* Fake radio circle is handled by the before pseudo element above. 
-                          For accessibility, the actual RadioGroupItem handles standard semantics. */}
                       {option.text}
                     </Label>
                   </div>
