@@ -33,6 +33,7 @@ import { Recommendation, PerformanceProfile } from "@/lib/personalization/types"
 import { getPerformanceHistory } from "@/lib/personalization/history"
 import { generateRecommendations } from "@/lib/personalization/engine"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "@/lib/i18n"
 
 function formatTimestamp(timestamp: number): string {
   try {
@@ -52,6 +53,7 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<PerformanceProfile[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     const storedHistory = getPerformanceHistory()
@@ -87,10 +89,10 @@ export default function DashboardPage() {
             id="welcome-heading"
             className="text-3xl md:text-4xl font-bold tracking-tight text-foreground"
           >
-            Welcome back, {UserProfile.name}.
+            {t('welcomeBack')}, {UserProfile.name}.
           </h1>
           <p className="text-base md:text-lg text-muted-foreground">
-            Your learning journey continues. Here&apos;s what needs your attention today.
+            {t('dashboardSubtitle')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -99,7 +101,7 @@ export default function DashboardPage() {
             className="h-11 px-6 font-medium shadow-xs"
             render={<Link href="/practice" />}
           >
-            <span>Continue Practice</span>
+            <span>{t('continuePractice')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
           </Button>
           <Button
@@ -109,7 +111,7 @@ export default function DashboardPage() {
             render={<Link href="/settings" />}
           >
             <Sliders className="size-4" aria-hidden="true" />
-            <span>Accessibility Settings</span>
+            <span>{t('accessibilitySettings')}</span>
           </Button>
         </div>
       </section>
@@ -120,7 +122,7 @@ export default function DashboardPage() {
           id="performance-heading"
           className="text-2xl font-bold tracking-tight text-foreground"
         >
-          Performance Snapshot
+          {t('performanceSnapshot')}
         </h2>
 
         {hasHistory ? (
@@ -129,7 +131,7 @@ export default function DashboardPage() {
             <Card className="border shadow-xs">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Latest Score
+                  {t('latestScore')}
                 </CardTitle>
                 <Target className="size-4 text-primary" aria-hidden="true" />
               </CardHeader>
@@ -147,7 +149,7 @@ export default function DashboardPage() {
             <Card className="border shadow-xs">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Average Accuracy
+                  {t('averageAccuracy')}
                 </CardTitle>
                 <Trophy className="size-4 text-primary" aria-hidden="true" />
               </CardHeader>
@@ -165,7 +167,7 @@ export default function DashboardPage() {
             <Card className="border shadow-xs">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Questions Attempted
+                  {t('totalAttempted')}
                 </CardTitle>
                 <BookOpen className="size-4 text-primary" aria-hidden="true" />
               </CardHeader>
@@ -183,7 +185,7 @@ export default function DashboardPage() {
             <Card className="border shadow-xs">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Exams Completed
+                  {t('completedExams')}
                 </CardTitle>
                 <Clock className="size-4 text-primary" aria-hidden="true" />
               </CardHeader>
@@ -204,13 +206,13 @@ export default function DashboardPage() {
               <Target className="size-6" aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-2 text-foreground">
-              No Exam Data Yet
+              {t('firstAttemptPrompt')}
             </h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6 leading-relaxed">
-              Complete your first practice exam to unlock real-time accuracy metrics, subject performance breakdowns, and personalized recommendations.
+              {t('dashboardSubtitle')}
             </p>
             <Button render={<Link href="/exam" />} size="sm" className="font-medium">
-              Take Your First Mock Exam
+              {t('takeMockExam')}
             </Button>
           </Card>
         )}
@@ -223,10 +225,10 @@ export default function DashboardPage() {
             id="recommendations-heading"
             className="text-2xl font-bold tracking-tight text-foreground"
           >
-            Your Personalized Learning
+            {t('recommendedForYou')}
           </h2>
           <p className="text-sm md:text-base text-muted-foreground">
-            Based on your recent performance, here&apos;s where you can improve next.
+            {t('practiceNextDesc')}
           </p>
         </div>
 
@@ -396,7 +398,7 @@ export default function DashboardPage() {
               id="mock-exams-heading"
               className="text-2xl font-bold tracking-tight text-foreground"
             >
-              Available Mock Exams
+              {t('takeMockExam')}
             </h2>
             <p className="text-sm text-muted-foreground">
               Full-length accessible simulations designed for competitive exam readiness.

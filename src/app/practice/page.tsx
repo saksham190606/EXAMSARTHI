@@ -40,6 +40,7 @@ import { Recommendation } from "@/lib/personalization/types"
 import { getPerformanceHistory } from "@/lib/personalization/history"
 import { generateRecommendations } from "@/lib/personalization/engine"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "@/lib/i18n"
 
 const SUBJECT_CATEGORIES = [
   { id: "all", label: "All Subjects" },
@@ -56,6 +57,7 @@ function getSubjectDisplayName(slug: string): string {
 
 function PracticeContent() {
   const searchParams = useSearchParams()
+  const { t } = useTranslation()
 
   const urlSubject = searchParams?.get("subject") || "all"
   const urlTopic = searchParams?.get("topic") || ""
@@ -144,10 +146,10 @@ function PracticeContent() {
             id="practice-heading"
             className="text-3xl md:text-4xl font-bold tracking-tight text-foreground"
           >
-            Practice & Preparation
+            {t('practiceTitle')}
           </h1>
           <p className="text-base md:text-lg text-muted-foreground max-w-3xl">
-            Build confidence through focused practice and realistic examination questions.
+            {t('practiceSubtitle')}
           </p>
         </div>
         <div className="flex-shrink-0">
@@ -156,7 +158,7 @@ function PracticeContent() {
             className="h-11 px-6 font-medium shadow-xs"
             render={<Link href="/exam" />}
           >
-            <span>Take a Mock Exam</span>
+            <span>{t('takeMockExam')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
           </Button>
         </div>
@@ -242,7 +244,7 @@ function PracticeContent() {
               onClick={handleClearAllFilters}
               className="text-xs font-medium text-muted-foreground hover:text-foreground h-8 px-2.5"
             >
-              Clear all filters
+              {t('clearFilters')}
             </Button>
           )}
         </div>
@@ -252,7 +254,7 @@ function PracticeContent() {
           {/* Search Input */}
           <div className="md:col-span-6 space-y-1.5">
             <Label htmlFor="search-practice" className="text-sm font-medium">
-              Search by Keyword or Topic
+              {t('searchPlaceholder')}
             </Label>
             <div className="relative">
               <Search
@@ -261,7 +263,7 @@ function PracticeContent() {
               />
               <Input
                 id="search-practice"
-                placeholder="e.g. Percentages, Grammar, Geography..."
+                placeholder={t('searchPlaceholder')}
                 className="pl-10 h-10 text-base border-border bg-background"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -482,7 +484,7 @@ function PracticeContent() {
                     render={<Link href={`/practice/${practice.id}`} />}
                   >
                     <PlayCircle className="mr-2 size-5" aria-hidden="true" />
-                    <span>Start Practice</span>
+                    <span>{t('startPractice')}</span>
                   </Button>
                 </CardFooter>
               </Card>
@@ -494,17 +496,17 @@ function PracticeContent() {
               <Filter className="size-6" aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-2 text-foreground">
-              No practice sets found
+              {t('noPracticeFound')}
             </h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6 leading-relaxed">
-              We couldn&apos;t find any practice material matching your search keywords or active filters. Try adjusting your search query or reset your filters.
+              {t('noPracticeFoundDesc')}
             </p>
             <Button
               variant="outline"
               onClick={handleClearAllFilters}
               className="font-medium border-border"
             >
-              Clear All Filters
+              {t('clearFilters')}
             </Button>
           </Card>
         )}

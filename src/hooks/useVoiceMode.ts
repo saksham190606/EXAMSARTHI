@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseVoiceCommand, ParsedCommand } from '@/lib/voice/voiceParser';
 import { ExamActions, ExamState } from '@/lib/useExamEngine';
 import { Question } from '@/lib/examData';
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { getTranslation } from '@/lib/i18n';
 
 export type VoiceStatus = 'Ready' | 'Listening' | 'Processing' | 'Speaking' | 'Error' | 'Unsupported';
 
@@ -19,236 +21,437 @@ interface UseVoiceModeProps {
 }
 
 export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }: UseVoiceModeProps) {
+  const language = useAccessibilityStore((s) => s.language);
+  const voiceSpeed = useAccessibilityStore((s) => s.voiceSpeed);
+
   const [isActive, setIsActive] = useState(false);
   const [status, setStatus] = useState<VoiceStatus>('Unsupported');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   
-  // To handle confirmation flows
+  // Pending action for two-step confirmation (e.g., submit)
   const [pendingAction, setPendingAction] = useState<ParsedCommand | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
+  const isSpeakingRef = useRef(false);
+  const isActiveRef = useRef(false);
+  const statusRef = useRef<VoiceStatus>('Unsupported');
+  const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastReadQuestionIndexRef = useRef<number | null>(null);
 
-  // Initialize Speech APIs
+  // Keep refs in sync with state for lifecycle callbacks
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      synthesisRef.current = window.speechSynthesis;
-      
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = 'en-US';
-        setStatus('Ready');
+    isActiveRef.current = isActive;
+  }, [isActive]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Clean up any pending restart timer
+  const clearRestartTimer = () => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+  };
+
+  // Select appropriate voice based on active language
+  const getPreferredVoice = useCallback(() => {
+    if (!synthesisRef.current) return null;
+    const voices = synthesisRef.current.getVoices();
+    if (!voices || voices.length === 0) return null;
+
+    if (language === 'hi') {
+      const hindiVoice = voices.find((v) => v.lang.toLowerCase().startsWith('hi'));
+      if (hindiVoice) return hindiVoice;
+    }
+
+    // Default or English
+    const inEnglishVoice = voices.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en-in'));
+    if (inEnglishVoice) return inEnglishVoice;
+
+    const anyEnglishVoice = voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+    return anyEnglishVoice || voices[0] || null;
+  }, [language]);
+
+  // Safely stop recognition
+  const stopListening = useCallback(() => {
+    clearRestartTimer();
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {
+        // Ignore errors when aborting idle recognition
       }
     }
   }, []);
 
-  const speak = useCallback((text: string, onEnd?: () => void) => {
-    if (!synthesisRef.current) return;
-    synthesisRef.current.cancel(); // Stop any ongoing speech
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    
-    utterance.onstart = () => {
-      if (isActive) setStatus('Speaking');
-    };
-    
-    utterance.onend = () => {
-      if (onEnd) onEnd();
-      else if (isActive) {
-        // Automatically start listening after speaking if active and no specific callback
-        startListening();
-      }
-    };
-    
-    synthesisRef.current.speak(utterance);
-  }, [isActive]);
-
+  // Safely start recognition (only if active and not speaking)
   const startListening = useCallback(() => {
-    if (!recognitionRef.current || !isActive) return;
-    
+    clearRestartTimer();
+    if (!recognitionRef.current || !isActiveRef.current || isSpeakingRef.current) {
+      return;
+    }
+
     try {
       recognitionRef.current.start();
       setStatus('Listening');
-    } catch (e) {
-      // Already started
-    }
-  }, [isActive]);
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
+    } catch (e: any) {
+      // If already started, ensure status reflects Listening
+      if (e?.name === 'InvalidStateError' || e?.message?.includes('already started')) {
+        setStatus('Listening');
+      }
     }
   }, []);
 
-  // Handle auto-reading when a new question arrives, if voice mode is active
+  // Speech synthesis wrapper that cleanly suppresses microphone collision
+  const speak = useCallback((text: string, onEnd?: () => void) => {
+    if (!synthesisRef.current || typeof window === 'undefined') return;
+
+    // Immediately stop recognition before audio output begins
+    stopListening();
+    isSpeakingRef.current = true;
+    setStatus('Speaking');
+
+    try {
+      synthesisRef.current.cancel(); // Stop any pending utterances
+    } catch (e) {}
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Set speech rate from user preference
+    if (voiceSpeed === 'slow') utterance.rate = 0.85;
+    else if (voiceSpeed === 'fast') utterance.rate = 1.2;
+    else utterance.rate = 1.0;
+
+    const voice = getPreferredVoice();
+    if (voice) {
+      utterance.voice = voice;
+    }
+    utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
+
+    const handleSpeechEnd = () => {
+      isSpeakingRef.current = false;
+      // Allow audio buffer to flush (250ms delay) to prevent microphone echo
+      clearRestartTimer();
+      restartTimerRef.current = setTimeout(() => {
+        if (isActiveRef.current && !isSpeakingRef.current) {
+          if (onEnd) {
+            onEnd();
+          } else {
+            startListening();
+          }
+        }
+      }, 250);
+    };
+
+    utterance.onend = handleSpeechEnd;
+    utterance.onerror = (e) => {
+      // If speech was canceled manually (e.g. by stopListening), do not trigger errors
+      isSpeakingRef.current = false;
+      if (isActiveRef.current && !isSpeakingRef.current) {
+        startListening();
+      }
+    };
+
+    try {
+      synthesisRef.current.speak(utterance);
+    } catch (e) {
+      isSpeakingRef.current = false;
+      if (isActiveRef.current) {
+        startListening();
+      }
+    }
+  }, [voiceSpeed, language, getPreferredVoice, stopListening, startListening]);
+
+  // Read current question out loud
+  const readCurrentQuestion = useCallback(() => {
+    const isHindi = language === 'hi';
+    const qNum = state.currentQuestionIndex + 1;
+    const optionsText = currentQuestion.options
+      .map((opt, i) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
+      .join(' ');
+
+    const promptText = isHindi
+      ? `प्रश्न ${qNum} का ${totalQuestions}। ${currentQuestion.text}। ${optionsText}। आपका उत्तर सुन रहे हैं।`
+      : `Question ${qNum} of ${totalQuestions}. ${currentQuestion.text}. ${optionsText}. Listening for your answer.`;
+
+    speak(promptText, () => {
+      startListening();
+    });
+  }, [language, state.currentQuestionIndex, totalQuestions, currentQuestion, speak, startListening]);
+
+  // Initialize Speech APIs once on mount and update language when preference changes
   useEffect(() => {
-    if (isActive) {
-      // Cancel previous speech/listening
-      synthesisRef.current?.cancel();
-      stopListening();
-      
-      const textToRead = `Question ${state.currentQuestionIndex + 1} of ${totalQuestions}. ${currentQuestion.text}. ` + 
-        currentQuestion.options.map((opt, i) => `Option ${String.fromCharCode(65 + i)}: ${opt.text}.`).join(' ');
-      
-      speak(textToRead + " Listening for your answer.", () => {
-        if (isActive) startListening();
-      });
-    }
-  }, [state.currentQuestionIndex, currentQuestion, isActive, totalQuestions]); // Dependencies designed to trigger on question change
+    if (typeof window === 'undefined') return;
 
-  // Setup recognition handlers
+    synthesisRef.current = window.speechSynthesis;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
+      recognitionRef.current = recognition;
+
+      if (statusRef.current === 'Unsupported') {
+        setStatus('Ready');
+      }
+    } else {
+      setStatus('Unsupported');
+    }
+
+    return () => {
+      clearRestartTimer();
+      if (synthesisRef.current) {
+        try { synthesisRef.current.cancel(); } catch (e) {}
+      }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+    };
+  }, [language]);
+
+  // Update recognition language dynamically when language changes
   useEffect(() => {
-    if (!recognitionRef.current) return;
-
-    recognitionRef.current.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setLastCommand(transcript);
-      setStatus('Processing');
-      handleCommand(transcript);
-    };
-
-    recognitionRef.current.onerror = (event: any) => {
-      if (event.error === 'not-allowed') {
-        setStatus('Error');
-        speak("Microphone permission denied. You can continue using keyboard controls.");
-        setIsActive(false);
-      } else if (event.error !== 'aborted' && isActive) {
-        setStatus('Error');
-        speak("I didn't catch that.", () => startListening());
-      }
-    };
-
-    recognitionRef.current.onend = () => {
-      // If we are active and supposed to be ready/listening, restart listening
-      // unless we are currently speaking (speaking callback handles restart)
-      if (isActive && status === 'Listening') {
-        // We stopped without a result, try restarting
-        try { recognitionRef.current.start(); } catch(e){}
-      }
-    };
-  }, [isActive, status, currentQuestion]);
-
-  const handleCommand = (transcript: string) => {
-    const cmd = parseVoiceCommand(transcript);
-
-    // If we have a pending confirmation
-    if (pendingAction) {
-      if (cmd.type === 'YES') {
-        executeCommand(pendingAction);
-        setPendingAction(null);
-      } else if (cmd.type === 'NO') {
-        setPendingAction(null);
-        speak("Action cancelled.", () => startListening());
-      } else {
-        speak("Please say yes or no.", () => startListening());
-      }
-      return;
+    if (recognitionRef.current) {
+      recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-IN';
     }
+  }, [language]);
 
-    // Direct actions that need confirmation
-    if (cmd.type === 'SUBMIT') {
-      const unanswered = totalQuestions - Object.keys(state.answers).length;
-      setPendingAction(cmd);
-      speak(`You have ${unanswered} unanswered questions. Are you sure you want to submit the exam?`, () => startListening());
-      return;
-    }
+  // Command execution router
+  const executeCommand = useCallback((cmd: ParsedCommand) => {
+    const isHindi = language === 'hi';
 
-    if (cmd.type === 'SELECT_OPTION') {
-      const option = currentQuestion.options[cmd.letterIndex];
-      if (option) {
-        // Concise confirmation and action
-        const letter = String.fromCharCode(65 + cmd.letterIndex);
-        speak(`${letter} selected.`, () => {
-          actions.selectAnswer(currentQuestion.id, option.id);
-          startListening();
-        });
-      } else {
-        speak("That option is not available.", () => startListening());
-      }
-      return;
-    }
-
-    // Direct actions without confirmation
-    executeCommand(cmd);
-  };
-
-  const executeCommand = (cmd: ParsedCommand) => {
     switch (cmd.type) {
       case 'NEXT':
         if (state.currentQuestionIndex < totalQuestions - 1) {
           actions.goToNext();
         } else {
-          speak("You are on the last question.", () => startListening());
+          speak(isHindi ? 'आप अंतिम प्रश्न पर हैं।' : 'You are on the last question.', () => startListening());
         }
         break;
+
       case 'PREVIOUS':
         if (state.currentQuestionIndex > 0) {
           actions.goToPrevious();
         } else {
-          speak("You are on the first question.", () => startListening());
+          speak(isHindi ? 'आप पहले प्रश्न पर हैं।' : 'You are on the first question.', () => startListening());
         }
         break;
+
       case 'GOTO':
         const targetIndex = cmd.questionNumber - 1;
         if (targetIndex >= 0 && targetIndex < totalQuestions) {
-          actions.goToQuestion(targetIndex);
+          if (targetIndex === state.currentQuestionIndex) {
+            readCurrentQuestion();
+          } else {
+            actions.goToQuestion(targetIndex);
+          }
         } else {
-          speak(`Question ${cmd.questionNumber} is not available.`, () => startListening());
+          speak(
+            isHindi ? `प्रश्न ${cmd.questionNumber} उपलब्ध नहीं है।` : `Question ${cmd.questionNumber} is not available.`,
+            () => startListening()
+          );
         }
         break;
+
       case 'TIME_LEFT':
         const mins = Math.floor(state.timeRemaining / 60);
         const secs = state.timeRemaining % 60;
-        speak(`You have ${mins} minutes and ${secs} seconds remaining.`, () => startListening());
+        speak(
+          isHindi
+            ? `आपके पास ${mins} मिनट और ${secs} सेकंड का समय शेष है।`
+            : `You have ${mins} minutes and ${secs} seconds remaining.`,
+          () => startListening()
+        );
         break;
+
       case 'REPEAT':
-        const textToRead = `${currentQuestion.text}. ` + 
-          currentQuestion.options.map((opt, i) => `Option ${String.fromCharCode(65 + i)}: ${opt.text}.`).join(' ');
-        speak(textToRead, () => startListening());
+        readCurrentQuestion();
         break;
+
       case 'READ_QUESTION':
         speak(currentQuestion.text, () => startListening());
         break;
+
       case 'READ_OPTIONS':
-        const optionsText = currentQuestion.options.map((opt, i) => `Option ${String.fromCharCode(65 + i)}: ${opt.text}.`).join(' ');
+        const optionsText = currentQuestion.options
+          .map((opt, i) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
+          .join(' ');
         speak(optionsText, () => startListening());
         break;
+
       case 'SUBMIT':
         actions.submitExam();
-        speak("Exam submitted.");
+        speak(isHindi ? 'परीक्षा सबमिट कर दी गई है।' : 'Exam submitted.');
         setIsActive(false);
         break;
+
       case 'UNKNOWN':
-        speak("I didn't understand that. Please say A, B, C, D, or a command such as next or repeat.", () => startListening());
+        // Crucial fix: Speak concise feedback once, then resume listening quietly without looping
+        speak(
+          isHindi
+            ? 'कमांड समझ नहीं आया। कृपया विकल्प ए, बी, सी, डी या अगला कहें।'
+            : 'Command not recognized. Please say Option A, B, C, D, Next, or Repeat.',
+          () => startListening()
+        );
         break;
     }
-  };
+  }, [language, state.currentQuestionIndex, state.timeRemaining, totalQuestions, currentQuestion, actions, speak, startListening, readCurrentQuestion]);
 
+  // Handle recognized transcript
+  const handleCommand = useCallback((transcript: string) => {
+    const isHindi = language === 'hi';
+    const cmd = parseVoiceCommand(transcript);
+
+    // If confirmation is pending (e.g. submit confirmation)
+    if (pendingAction) {
+      if (cmd.type === 'YES') {
+        const actionToRun = pendingAction;
+        setPendingAction(null);
+        executeCommand(actionToRun);
+      } else if (cmd.type === 'NO') {
+        setPendingAction(null);
+        speak(isHindi ? 'कार्रवाई रद्द की गई।' : 'Action cancelled.', () => startListening());
+      } else {
+        speak(isHindi ? 'कृपया हाँ या नहीं कहें।' : 'Please say yes or no.', () => startListening());
+      }
+      return;
+    }
+
+    // Direct submit action requires confirmation safeguard
+    if (cmd.type === 'SUBMIT') {
+      const unanswered = totalQuestions - Object.keys(state.answers).length;
+      setPendingAction(cmd);
+      const confirmPrompt = isHindi
+        ? `आपके ${unanswered} अनुत्तरित प्रश्न हैं। क्या आप परीक्षा सबमिट करना चाहते हैं? हाँ या नहीं कहें।`
+        : `You have ${unanswered} unanswered questions. Are you sure you want to submit the exam? Say yes or no.`;
+      speak(confirmPrompt, () => startListening());
+      return;
+    }
+
+    // Direct option selection
+    if (cmd.type === 'SELECT_OPTION') {
+      const option = currentQuestion.options[cmd.letterIndex];
+      if (option) {
+        const letter = String.fromCharCode(65 + cmd.letterIndex);
+        actions.selectAnswer(currentQuestion.id, option.id);
+        const confirmMsg = isHindi ? `विकल्प ${letter} चुना गया।` : `Option ${letter} selected.`;
+        speak(confirmMsg, () => startListening());
+      } else {
+        speak(isHindi ? 'वह विकल्प उपलब्ध नहीं है।' : 'That option is not available.', () => startListening());
+      }
+      return;
+    }
+
+    // Execute other standard navigation and query commands
+    executeCommand(cmd);
+  }, [language, pendingAction, totalQuestions, state.answers, currentQuestion, actions, speak, startListening, executeCommand]);
+
+  // Bind speech recognition event handlers
+  useEffect(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (!transcript) {
+        if (isActiveRef.current && !isSpeakingRef.current) {
+          startListening();
+        }
+        return;
+      }
+
+      setLastCommand(transcript);
+      setStatus('Processing');
+      handleCommand(transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      const error = event.error;
+
+      if (error === 'not-allowed' || error === 'service-not-allowed') {
+        setStatus('Error');
+        const isHindi = language === 'hi';
+        speak(isHindi ? 'माइक्रोफोन की अनुमति अस्वीकार कर दी गई।' : 'Microphone permission denied. You can continue using keyboard controls.');
+        setIsActive(false);
+        return;
+      }
+
+      // CRITICAL FIX: 'no-speech' is normal when user is thinking quietly.
+      // Silently resume listening if still active. NEVER say "I didn't catch that".
+      if (error === 'no-speech') {
+        if (isActiveRef.current && !isSpeakingRef.current) {
+          setStatus('Listening');
+          startListening();
+        }
+        return;
+      }
+
+      // 'aborted' happens normally during speech synthesis interruptions or toggles
+      if (error === 'aborted') {
+        return;
+      }
+
+      // Other non-fatal errors: recover to listening state silently without loop
+      if (isActiveRef.current && !isSpeakingRef.current) {
+        setStatus('Listening');
+        startListening();
+      }
+    };
+
+    recognition.onend = () => {
+      // Only restart if active, not speaking, and status is Listening
+      if (isActiveRef.current && !isSpeakingRef.current && statusRef.current === 'Listening') {
+        clearRestartTimer();
+        restartTimerRef.current = setTimeout(() => {
+          if (isActiveRef.current && !isSpeakingRef.current) {
+            try {
+              recognition.start();
+            } catch (e) {}
+          }
+        }, 150);
+      }
+    };
+  }, [language, handleCommand, speak, startListening]);
+
+  // Auto-read question when candidate navigates to a new question
+  useEffect(() => {
+    if (isActive && lastReadQuestionIndexRef.current !== state.currentQuestionIndex) {
+      lastReadQuestionIndexRef.current = state.currentQuestionIndex;
+      readCurrentQuestion();
+    }
+  }, [isActive, state.currentQuestionIndex, readCurrentQuestion]);
+
+  // Toggle voice mode on/off
   const toggleVoiceMode = useCallback(() => {
-    if (status === 'Unsupported') return;
+    if (statusRef.current === 'Unsupported') return;
 
     if (isActive) {
       setIsActive(false);
-      synthesisRef.current?.cancel();
+      isActiveRef.current = false;
+      lastReadQuestionIndexRef.current = null;
+      clearRestartTimer();
+      try { synthesisRef.current?.cancel(); } catch (e) {}
       stopListening();
       setStatus('Ready');
     } else {
       setIsActive(true);
-      speak("Voice Mode enabled.", () => {
-        // Initial auto-read when turned on will trigger via the useEffect if dependencies are set up right, 
-        // or we just manually trigger a read here for the current question
-        const textToRead = `Question ${state.currentQuestionIndex + 1} of ${totalQuestions}. ${currentQuestion.text}. ` + 
-          currentQuestion.options.map((opt, i) => `Option ${String.fromCharCode(65 + i)}: ${opt.text}.`).join(' ');
-        speak(textToRead + " Listening for your answer.", () => startListening());
+      isActiveRef.current = true;
+      lastReadQuestionIndexRef.current = state.currentQuestionIndex;
+      
+      const isHindi = language === 'hi';
+      const welcome = isHindi ? 'आवाज परीक्षा मोड सक्षम किया गया।' : 'Voice Mode enabled.';
+      
+      speak(welcome, () => {
+        readCurrentQuestion();
       });
     }
-  }, [isActive, status, stopListening, speak, state.currentQuestionIndex, totalQuestions, currentQuestion, startListening]);
+  }, [isActive, language, speak, stopListening, readCurrentQuestion, state.currentQuestionIndex]);
 
   return {
     isActive,

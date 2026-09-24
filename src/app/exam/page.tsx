@@ -17,6 +17,7 @@ import { SubmitDialog } from '@/components/exam/SubmitDialog';
 
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
+import { useTranslation } from '@/lib/i18n';
 
 // Define the live region component outside so it mounts once
 function LiveRegion() {
@@ -32,6 +33,7 @@ function LiveRegion() {
 
 export default function ExamPage() {
   const router = useRouter();
+  const { t, language } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
 
   const { state, actions, currentQuestion } = useExamEngine(
@@ -83,7 +85,7 @@ export default function ExamPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Full Mock Examination
+              {t('examName')}
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground">
               SSC CGL Tier 1 Practice · General Competitive Pattern
@@ -100,7 +102,7 @@ export default function ExamPage() {
               onClick={() => setIsSubmitDialogOpen(true)}
               className="hidden md:flex font-medium h-10 px-4 shadow-xs"
             >
-              <span>Submit Exam</span>
+              <span>{t('submitExam')}</span>
               <Send className="ml-2 size-4" aria-hidden="true" />
             </Button>
           </div>
@@ -109,8 +111,8 @@ export default function ExamPage() {
         {/* Textual & Visual Progress Bar */}
         <div className="pt-2 border-t border-border/40 space-y-1.5">
           <div className="flex justify-between items-center text-xs font-semibold text-muted-foreground">
-            <span>Progress: Question {state.currentQuestionIndex + 1} of {totalQuestions}</span>
-            <span>{answeredCount} of {totalQuestions} answered ({progressPercent}%)</span>
+            <span>{t('progress')}: {t('question')} {state.currentQuestionIndex + 1} {t('of')} {totalQuestions}</span>
+            <span>{answeredCount} {t('of')} {totalQuestions} {t('answered')} ({progressPercent}%)</span>
           </div>
           <Progress 
             value={progressPercent} 
@@ -156,7 +158,7 @@ export default function ExamPage() {
                 className="h-11 px-4 font-medium border-border"
               >
                 <ChevronLeft className="mr-1.5 size-5" aria-hidden="true" />
-                <span>Previous</span>
+                <span>{t('previous')}</span>
               </Button>
               <Button 
                 variant="default" 
@@ -166,7 +168,7 @@ export default function ExamPage() {
                 aria-label="Go to next question"
                 className="h-11 px-5 font-medium shadow-xs"
               >
-                <span>Next</span>
+                <span>{t('next')}</span>
                 <ChevronRight className="ml-1.5 size-5" aria-hidden="true" />
               </Button>
             </div>
@@ -190,7 +192,7 @@ export default function ExamPage() {
                   }`} 
                   aria-hidden="true"
                 /> 
-                <span>{isFlagged ? 'Flagged for Review' : 'Flag for Review'}</span>
+                <span>{isFlagged ? t('flaggedForReview') : t('flagForReview')}</span>
               </Button>
 
               <Button 
@@ -199,7 +201,7 @@ export default function ExamPage() {
                 onClick={() => setIsSubmitDialogOpen(true)}
                 className="md:hidden h-11 px-4 font-medium shadow-xs"
               >
-                <span>Submit</span>
+                <span>{t('submit')}</span>
                 <Send className="ml-1.5 size-4" aria-hidden="true" />
               </Button>
             </div>
@@ -225,7 +227,7 @@ export default function ExamPage() {
             <CardHeader className="p-4 sm:p-5 border-b border-border/50 bg-muted/20">
               <div className="flex items-center justify-between">
                 <CardTitle className="font-bold text-lg text-foreground">
-                  Question Palette
+                  {t('questionPalette')}
                 </CardTitle>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border">
                   {answeredCount}/{totalQuestions}
@@ -233,7 +235,7 @@ export default function ExamPage() {
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1">
                 <CheckCircle2 className="size-3.5 text-primary" aria-hidden="true" />
-                <span>{answeredCount} Answered · {totalQuestions - answeredCount} Remaining</span>
+                <span>{answeredCount} {t('answered')} · {totalQuestions - answeredCount} {t('remaining')}</span>
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-4">
@@ -251,7 +253,7 @@ export default function ExamPage() {
                   className="w-full h-11 font-medium shadow-xs"
                 >
                   <Send className="mr-2 size-4" aria-hidden="true" />
-                  <span>Submit Final Examination</span>
+                  <span>{t('submitFinalExam')}</span>
                 </Button>
               </div>
             </CardContent>

@@ -32,6 +32,7 @@ import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
 import { PerformanceProfile, Recommendation } from '@/lib/personalization/types';
+import { useTranslation } from '@/lib/i18n';
 
 interface WeakTopicItem {
   subject: string;
@@ -50,6 +51,7 @@ export default function ResultsPage() {
   const [profile, setProfile] = useState<PerformanceProfile | null>(null);
   const [previousAttempt, setPreviousAttempt] = useState<PerformanceProfile | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -180,11 +182,11 @@ export default function ResultsPage() {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md p-1"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          <span>Back to Dashboard</span>
+          <span>{t('backToDashboard')}</span>
         </Link>
         <Badge variant="outline" className="gap-1 font-semibold text-xs py-1">
           <History className="h-3 w-3" aria-hidden="true" />
-          <span>Evaluated Session</span>
+          <span>{t('evalSession')}</span>
         </Badge>
       </nav>
 
@@ -193,11 +195,11 @@ export default function ResultsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="gap-1 px-2.5 py-1 text-xs font-semibold">
             <CheckCircle2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span>Exam Complete</span>
+            <span>{t('examComplete')}</span>
           </Badge>
           <span className="text-xs text-muted-foreground" aria-hidden="true">•</span>
           <span className="text-xs text-muted-foreground font-medium">
-            {results.totalQuestions} Questions Evaluated
+            {t('questionsEvaluated', { count: results.totalQuestions })}
           </span>
           <span className="text-xs text-muted-foreground" aria-hidden="true">•</span>
           <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
@@ -207,17 +209,17 @@ export default function ResultsPage() {
         </div>
 
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
-          Examination Results
+          {t('examinationResults')}
         </h1>
         <p className="text-base text-muted-foreground font-medium">
-          SSC CGL Tier 1 Mock Examination
+          {t('examName')}
         </p>
       </header>
 
       {/* SECTION B — OVERALL PERFORMANCE */}
       <section aria-labelledby="overall-performance-heading" className="space-y-4">
         <h2 id="overall-performance-heading" className="sr-only">
-          Overall Performance
+          {t('performanceSummary')}
         </h2>
 
         <div className="grid gap-6 md:grid-cols-12 items-stretch">
@@ -227,14 +229,14 @@ export default function ResultsPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Overall Score
+                  {t('overallScore')}
                 </span>
                 <Badge variant={overallStatus.variant} className="gap-1 text-xs font-medium">
                   <StatusIcon className="h-3 w-3" aria-hidden="true" />
                   <span>{overallStatus.label}</span>
                 </Badge>
               </div>
-              <CardTitle className="text-lg font-bold">Performance Summary</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('performanceSummary')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 pt-2">
               <div className="flex flex-col sm:flex-row items-baseline sm:items-center justify-between gap-4">
@@ -254,7 +256,7 @@ export default function ResultsPage() {
 
                 <div className="text-right sm:text-right">
                   <span className="text-xs font-medium uppercase text-muted-foreground">
-                    Accuracy Rate
+                    {t('accuracyRate')}
                   </span>
                   <div className="text-2xl sm:text-3xl font-bold text-foreground">
                     {results.accuracy}%
@@ -283,15 +285,15 @@ export default function ResultsPage() {
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Question Breakdown
               </span>
-              <CardTitle className="text-lg font-bold">Attempt Outcomes</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('attemptOutcomes')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="h-5 w-5 text-primary" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-semibold text-foreground">Correct Answers</div>
-                    <div className="text-xs text-muted-foreground">Accurately resolved</div>
+                    <div className="text-sm font-semibold text-foreground">{t('correctAnswers')}</div>
+                    <div className="text-xs text-muted-foreground">{t('correctDesc')}</div>
                   </div>
                 </div>
                 <span className="text-xl font-bold text-foreground">{results.correct}</span>
@@ -301,8 +303,8 @@ export default function ResultsPage() {
                 <div className="flex items-center gap-2.5">
                   <XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-semibold text-foreground">Incorrect Answers</div>
-                    <div className="text-xs text-muted-foreground">Mistakes to review</div>
+                    <div className="text-sm font-semibold text-foreground">{t('incorrectAnswers')}</div>
+                    <div className="text-xs text-muted-foreground">{t('incorrectDesc')}</div>
                   </div>
                 </div>
                 <span className="text-xl font-bold text-foreground">{results.incorrect}</span>
@@ -312,8 +314,8 @@ export default function ResultsPage() {
                 <div className="flex items-center gap-2.5">
                   <MinusCircle className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-semibold text-foreground">Unanswered</div>
-                    <div className="text-xs text-muted-foreground">Skipped or ran out of time</div>
+                    <div className="text-sm font-semibold text-foreground">{t('unansweredQuestions')}</div>
+                    <div className="text-xs text-muted-foreground">{t('unansweredDesc')}</div>
                   </div>
                 </div>
                 <span className="text-xl font-bold text-foreground">{results.unanswered}</span>
@@ -327,7 +329,7 @@ export default function ResultsPage() {
       {/* SECTION C — SUBJECT PERFORMANCE */}
       <section aria-labelledby="subject-performance-heading" className="space-y-3">
         <h2 id="subject-performance-heading" className="text-xl font-bold tracking-tight">
-          Subject Performance Analysis
+          {t('subjectAnalysis')}
         </h2>
         <SubjectPerformance metrics={results.subjectMetrics} />
       </section>
@@ -336,10 +338,10 @@ export default function ResultsPage() {
       <section aria-labelledby="areas-to-improve-heading" className="space-y-4">
         <div className="space-y-1">
           <h2 id="areas-to-improve-heading" className="text-xl font-bold tracking-tight">
-            Areas to Improve
+            {t('areasToImprove')}
           </h2>
           <p className="text-sm text-muted-foreground">
-            These topics need more practice based on your recent performance.
+            {t('areasToImproveDesc')}
           </p>
         </div>
 
@@ -580,7 +582,7 @@ export default function ResultsPage() {
           className="gap-2 font-semibold"
         >
           <Target className="h-4 w-4" aria-hidden="true" />
-          <span>Practice Recommended Topics</span>
+          <span>{t('practiceRecommended')}</span>
         </Button>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -591,7 +593,7 @@ export default function ResultsPage() {
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            <span>Back to Dashboard</span>
+            <span>{t('backToDashboard')}</span>
           </Button>
 
           <Button 
@@ -601,7 +603,7 @@ export default function ResultsPage() {
             className="gap-2"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            <span>Take Another Mock Exam</span>
+            <span>{t('takeAnotherMock')}</span>
           </Button>
         </div>
       </footer>

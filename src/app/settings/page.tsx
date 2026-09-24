@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe } from 'lucide-react';
 import { useAccessibilityStore, TextSize, Contrast, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
 import { useTheme } from "next-themes";
+import { useTranslation } from "@/lib/i18n";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   } = useAccessibilityStore();
   
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
 
   useEffect(() => {
     setMounted(true);
@@ -37,7 +39,7 @@ export default function SettingsPage() {
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-4" role="status" aria-live="polite">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-          <p className="text-muted-foreground text-sm font-medium">Loading accessibility preferences...</p>
+          <p className="text-muted-foreground text-sm font-medium">Loading preferences...</p>
         </div>
       </div>
     );
@@ -53,7 +55,7 @@ export default function SettingsPage() {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md p-1"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          <span>Back to Dashboard</span>
+          <span>{t('backToDashboard')}</span>
         </Link>
         <Badge variant="outline" className="gap-1 font-semibold text-xs py-1">
           <Sliders className="h-3 w-3" aria-hidden="true" />
@@ -65,13 +67,13 @@ export default function SettingsPage() {
       <header className="space-y-2 border-b border-border/80 pb-6">
         <div className="flex items-center gap-2 text-primary font-semibold text-sm">
           <Settings2 className="h-4 w-4" aria-hidden="true" />
-          <span>Accessibility System</span>
+          <span>{t('accessibilitySettings')}</span>
         </div>
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
-          Accessibility & Display Settings
+          {t('settingsTitle')}
         </h1>
         <p className="text-base text-muted-foreground">
-          Customize typography, contrast, assistive voice controls, and visual motion to suit your needs. Preferences are saved automatically.
+          {t('settingsSubtitle')}
         </p>
       </header>
 
@@ -82,10 +84,10 @@ export default function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Eye className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">Text Size & Scaling</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('textSizeHeading')}</CardTitle>
             </div>
             <CardDescription>
-              Adjust reading font size across the entire examination and dashboard platform.
+              {t('textSizeDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -97,19 +99,19 @@ export default function SettingsPage() {
               <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="default" id="settings-ts-default" />
                 <Label htmlFor="settings-ts-default" className="cursor-pointer font-medium">
-                  Default (16px)
+                  {t('defaultSize')}
                 </Label>
               </div>
               <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="large" id="settings-ts-large" />
                 <Label htmlFor="settings-ts-large" className="cursor-pointer font-medium">
-                  Large (18px)
+                  {t('largeSize')}
                 </Label>
               </div>
               <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="xlarge" id="settings-ts-xlarge" />
                 <Label htmlFor="settings-ts-xlarge" className="cursor-pointer font-medium">
-                  Extra Large (20px)
+                  {t('extraLargeSize')}
                 </Label>
               </div>
             </RadioGroup>
@@ -121,10 +123,10 @@ export default function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <SunMoon className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">Theme & Contrast</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('themeContrastHeading')}</CardTitle>
             </div>
             <CardDescription>
-              Select light, dark, or system color themes and toggle high-contrast borders and text.
+              {t('themeContrastDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -138,15 +140,15 @@ export default function SettingsPage() {
               >
                 <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="light" id="settings-theme-light" />
-                  <Label htmlFor="settings-theme-light" className="cursor-pointer font-medium">Light Mode</Label>
+                  <Label htmlFor="settings-theme-light" className="cursor-pointer font-medium">{t('lightMode')}</Label>
                 </div>
                 <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="dark" id="settings-theme-dark" />
-                  <Label htmlFor="settings-theme-dark" className="cursor-pointer font-medium">Dark Mode</Label>
+                  <Label htmlFor="settings-theme-dark" className="cursor-pointer font-medium">{t('darkMode')}</Label>
                 </div>
                 <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="system" id="settings-theme-system" />
-                  <Label htmlFor="settings-theme-system" className="cursor-pointer font-medium">System Default</Label>
+                  <Label htmlFor="settings-theme-system" className="cursor-pointer font-medium">{t('systemMode')}</Label>
                 </div>
               </RadioGroup>
             </div>
@@ -160,11 +162,11 @@ export default function SettingsPage() {
               >
                 <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="default" id="settings-c-default" />
-                  <Label htmlFor="settings-c-default" className="cursor-pointer font-medium">Standard Contrast</Label>
+                  <Label htmlFor="settings-c-default" className="cursor-pointer font-medium">{t('standardContrast')}</Label>
                 </div>
                 <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="high" id="settings-c-high" />
-                  <Label htmlFor="settings-c-high" className="cursor-pointer font-medium">High Contrast (Enhanced Borders)</Label>
+                  <Label htmlFor="settings-c-high" className="cursor-pointer font-medium">{t('highContrast')}</Label>
                 </div>
               </RadioGroup>
             </div>
@@ -177,20 +179,20 @@ export default function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Move className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">Motion & Transitions</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('motionHeading')}</CardTitle>
             </div>
             <CardDescription>
-              Control interface animations for vestibular sensitivity and distraction-free testing.
+              {t('motionDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="settings-reduced-motion" className="text-base font-semibold cursor-pointer">
-                  Reduced Motion
+                  {t('reducedMotionLabel')}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Suppresses pulsating indicators, transitions, and dynamic page movements.
+                  {t('reducedMotionDesc')}
                 </p>
               </div>
               <Switch 
@@ -208,20 +210,20 @@ export default function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">Audio & Speech Assistance</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('audioVoiceHeading')}</CardTitle>
             </div>
             <CardDescription>
-              Configure browser speech synthesis and voice navigation preferences during examinations.
+              {t('audioVoiceDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="settings-audio-assistance" className="text-base font-semibold cursor-pointer">
-                  Audio Assistance
+                  {t('audioAssistanceLabel')}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Enables speech readout for exam prompts, question states, and timer milestones.
+                  {t('audioAssistanceDesc')}
                 </p>
               </div>
               <Switch 
@@ -233,7 +235,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-3 pt-2">
-              <Label className="text-sm font-semibold">Voice Speed</Label>
+              <Label className="text-sm font-semibold">{t('voiceSpeedLabel')}</Label>
               <RadioGroup 
                 value={voiceSpeed} 
                 onValueChange={(val) => setVoiceSpeed(val as VoiceSpeed)}
@@ -262,21 +264,21 @@ export default function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">Language Preferences</CardTitle>
+              <CardTitle className="text-lg font-bold">{t('languageHeading')}</CardTitle>
             </div>
             <CardDescription>
-              Select platform interface language for examination instructions and practice materials.
+              {t('languageDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-w-xs space-y-2">
-              <Label htmlFor="settings-language-select">Interface Language</Label>
+              <Label htmlFor="settings-language-select">{t('language')}</Label>
               <Select 
                 value={language} 
                 onValueChange={(val) => setLanguage(val as Language)}
               >
                 <SelectTrigger id="settings-language-select" aria-label="Interface Language Selection">
-                  <SelectValue placeholder="Select Language" />
+                  <SelectValue placeholder={t('selectLanguage')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="en">English (Default)</SelectItem>
@@ -293,10 +295,10 @@ export default function SettingsPage() {
       <footer className="pt-6 border-t border-border flex items-center justify-between">
         <Button variant="outline" render={<Link href="/dashboard" />}>
           <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
-          <span>Return to Dashboard</span>
+          <span>{t('returnToDashboard')}</span>
         </Button>
         <Button render={<Link href="/exam" />}>
-          <span>Start Mock Examination</span>
+          <span>{t('startMockExam')}</span>
         </Button>
       </footer>
 

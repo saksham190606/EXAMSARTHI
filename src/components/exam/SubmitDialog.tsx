@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertCircle, Send, ArrowLeft } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
 
 interface SubmitDialogProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export function SubmitDialog({
   answeredCount, 
   onConfirmSubmit 
 }: SubmitDialogProps) {
+  const { t } = useTranslation();
   const unansweredCount = totalQuestions - answeredCount;
 
   return (
@@ -32,10 +34,10 @@ export function SubmitDialog({
       <DialogContent className="sm:max-w-[440px] p-6 space-y-4">
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-2xl font-bold tracking-tight text-foreground">
-            Submit Examination
+            {t('examSubmissionConfirmation')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Please review your question completion summary before finalizing your submission.
+            {t('submissionWarning')}
           </DialogDescription>
         </DialogHeader>
 
@@ -45,7 +47,7 @@ export function SubmitDialog({
             <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <CheckCircle2 className="size-3.5" aria-hidden="true" />
-                <span>Answered</span>
+                <span>{t('answered')}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {answeredCount}
@@ -58,7 +60,7 @@ export function SubmitDialog({
             <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                 <AlertCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                <span>Unanswered</span>
+                <span>{t('unanswered')}</span>
               </div>
               <div className="text-2xl font-bold text-foreground">
                 {unansweredCount}
@@ -70,7 +72,7 @@ export function SubmitDialog({
           </div>
 
           <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-xs text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">Note:</span> Once submitted, your answers will be finalized and evaluated. You will be redirected to your detailed performance analytics.
+            <span className="font-semibold text-foreground">Note:</span> {t('irreversibleNotice')}
           </div>
         </div>
 
@@ -81,7 +83,7 @@ export function SubmitDialog({
             className="font-medium"
           >
             <ArrowLeft className="mr-2 size-4" aria-hidden="true" />
-            Return to Exam
+            {t('returnToExam')}
           </Button>
           <Button 
             onClick={() => {
@@ -91,7 +93,7 @@ export function SubmitDialog({
             className="font-medium shadow-xs"
           >
             <Send className="mr-2 size-4" aria-hidden="true" />
-            Confirm & Submit
+            {t('confirmAndSubmit')}
           </Button>
         </DialogFooter>
       </DialogContent>

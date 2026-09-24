@@ -15,19 +15,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useAccessibilityStore, Language } from "@/store/useAccessibilityStore"
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/practice", label: "Practice" },
-  { href: "/exam", label: "Exams" },
-  { href: "/results", label: "Results" },
-  { href: "/settings", label: "Settings" },
-]
+import { Language } from "@/store/useAccessibilityStore"
+import { useTranslation } from "@/lib/i18n"
 
 export function Header() {
   const pathname = usePathname()
-  const { language, setLanguage } = useAccessibilityStore()
+  const { t, language, setLanguage } = useTranslation()
+
+  const navItems = [
+    { href: "/dashboard", label: t('navDashboard') },
+    { href: "/practice", label: t('navPractice') },
+    { href: "/exam", label: t('navExams') },
+    { href: "/results", label: t('navResults') },
+    { href: "/settings", label: t('navSettings') },
+  ]
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -62,8 +63,8 @@ export function Header() {
               value={language} 
               onValueChange={(val) => setLanguage(val as Language)}
             >
-              <SelectTrigger className="w-[110px]" aria-label="Select Language">
-                <SelectValue placeholder="Language" />
+              <SelectTrigger className="w-[125px]" aria-label={t('selectLanguage')}>
+                <SelectValue placeholder={t('language')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="en">English</SelectItem>
@@ -76,7 +77,7 @@ export function Header() {
           <AccessibilityPanel />
           
           {/* User Profile Placeholder */}
-          <Button variant="ghost" size="icon" aria-label="User Profile">
+          <Button variant="ghost" size="icon" aria-label={t('userProfile')}>
             <UserCircle className="h-6 w-6" />
           </Button>
         </div>

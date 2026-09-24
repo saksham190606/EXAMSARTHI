@@ -14,18 +14,20 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/practice", label: "Practice" },
-  { href: "/exam", label: "Exams" },
-  { href: "/results", label: "Results" },
-  { href: "/settings", label: "Settings" },
-]
+import { useTranslation } from "@/lib/i18n"
 
 export function MobileNav() {
   const [open, setOpen] = React.useState(false)
   const pathname = usePathname()
+  const { t } = useTranslation()
+
+  const navItems = [
+    { href: "/dashboard", label: t('navDashboard') },
+    { href: "/practice", label: t('navPractice') },
+    { href: "/exam", label: t('navExams') },
+    { href: "/results", label: t('navResults') },
+    { href: "/settings", label: t('navSettings') },
+  ]
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
