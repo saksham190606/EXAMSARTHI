@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
 import React, { useEffect, useState } from 'react';
@@ -24,7 +25,8 @@ export default function SettingsPage() {
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
     voiceSpeed, setVoiceSpeed,
-    language, setLanguage
+    language, setLanguage,
+    screenReaderMode, setScreenReaderMode
   } = useAccessibilityStore();
   
   const { theme, setTheme } = useTheme();
@@ -231,6 +233,23 @@ export default function SettingsPage() {
                 checked={audioAssistance}
                 onCheckedChange={setAudioAssistance}
                 aria-label="Toggle audio assistance"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="settings-screen-reader" className="text-base font-semibold cursor-pointer">
+                  {t('screenReaderHarmonyLabel')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('screenReaderHarmonyDesc')}
+                </p>
+              </div>
+              <Switch 
+                id="settings-screen-reader"
+                checked={screenReaderMode}
+                onCheckedChange={setScreenReaderMode}
+                aria-label="Toggle screen reader harmony mode"
               />
             </div>
 

@@ -63,6 +63,7 @@ export const translations = {
     voiceNavigateLabel: 'Navigate:',
     voiceAudioLabel: 'Audio:',
     voiceTimeSubmitLabel: 'Time & Submit:',
+    pushToTalkLabel: 'Push-to-Talk (Barge-in):',
 
     // Spoken feedback strings
     voiceEnabledPrompt: 'Voice Mode enabled. Question {number} of {total}. {text}. {options}. Listening for your answer.',
@@ -135,6 +136,8 @@ export const translations = {
     reducedMotionDesc: 'Suppresses pulsating indicators, transitions, and dynamic page movements.',
     audioAssistanceLabel: 'Audio Assistance',
     audioAssistanceDesc: 'Enables speech readout for exam prompts, question states, and timer milestones.',
+    screenReaderHarmonyLabel: 'Screen-Reader Harmony Mode',
+    screenReaderHarmonyDesc: 'Mutes internal text-to-speech to avoid clashing with NVDA/JAWS/VoiceOver while keeping voice commands active.',
     voiceSpeedLabel: 'Voice Speed',
     returnToDashboard: 'Return to Dashboard',
     startMockExam: 'Start Mock Examination',
@@ -230,6 +233,7 @@ export const translations = {
     voiceNavigateLabel: 'नेविगेट:',
     voiceAudioLabel: 'ऑडियो:',
     voiceTimeSubmitLabel: 'समय व सबमिट:',
+    pushToTalkLabel: 'पुश-टू-टॉक (बार्ज-इन):',
 
     // Spoken feedback strings
     voiceEnabledPrompt: 'आवाज मोड सक्षम किया गया। प्रश्न संख्या {number} का {total}। {text}। {options}। आपका उत्तर सुन रहे हैं।',
@@ -302,6 +306,8 @@ export const translations = {
     reducedMotionDesc: 'एनिमेशन और झिलमिलाहट को रोकता है।',
     audioAssistanceLabel: 'ऑडियो सहायता',
     audioAssistanceDesc: 'प्रश्नों और टाइमर संदेशों को बोलकर सुनाने की सुविधा सक्षम करता है।',
+    screenReaderHarmonyLabel: 'स्क्रीन-रीडर हार्मनी मोड',
+    screenReaderHarmonyDesc: 'आंतरिक टेक्स्ट-टू-स्पीच को म्यूट करता है ताकि स्क्रीन रीडर्स के साथ टकराव न हो।',
     voiceSpeedLabel: 'आवाज की गति',
     returnToDashboard: 'डैशबोर्ड पर वापस जाएं',
     startMockExam: 'मॉक टेस्ट शुरू करें',

@@ -1,6 +1,6 @@
 import { ExamResults } from '@/lib/resultsUtils';
 import { Question } from '@/lib/examData';
-import { PerformanceProfile, Recommendation, SubjectPerformanceProfile, TopicMetrics } from './types';
+import { PerformanceProfile, Recommendation, SubjectPerformanceProfile } from './types';
 
 export const WEAK_THRESHOLD = 70;
 export const PRIORITY_THRESHOLD = 50;

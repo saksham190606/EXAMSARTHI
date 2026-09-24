@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import React, { useEffect, useState } from "react"
@@ -15,6 +17,7 @@ import {
   Sliders,
   Sparkles,
   CheckCircle2,
+  Volume2,
 } from "lucide-react"
 
 import { AvailableExams, UserProfile } from "@/lib/mockData"
@@ -96,6 +99,20 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            size="lg"
+            className="h-11 px-5 font-medium gap-2"
+            onClick={() => {
+              if (typeof window !== "undefined" && 'speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(`Welcome back, ${UserProfile.name}. You have an average accuracy of ${averageAccuracy} percent across ${examsCompleted} exams. Your latest score is ${latestAccuracy} percent.`);
+                window.speechSynthesis.speak(utterance);
+              }
+            }}
+          >
+            <Sparkles className="size-4" aria-hidden="true" />
+            <span>Spoken Summary</span>
+          </Button>
           <Button
             size="lg"
             className="h-11 px-6 font-medium shadow-xs"
@@ -283,12 +300,31 @@ export default function DashboardPage() {
 
       {/* SECTION D — Progress / Learning Trend */}
       <section aria-labelledby="trend-heading" className="space-y-4">
-        <h2
-          id="trend-heading"
-          className="text-2xl font-bold tracking-tight text-foreground"
-        >
-          Learning Trend
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h2
+            id="trend-heading"
+            className="text-2xl font-bold tracking-tight text-foreground"
+          >
+            Learning Trend & Subject Mastery
+          </h2>
+          {history.length >= 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const { sonifyData } = await import('@/lib/voice/sonifyData');
+                // Extract accuracy array from oldest to newest for sonification
+                const dataPoints = [...history].reverse().map(h => h.accuracy);
+                sonifyData(dataPoints);
+              }}
+              className="gap-2"
+              aria-label="Play audio sonification of your learning trend"
+            >
+              <Volume2 className="size-4" aria-hidden="true" />
+              <span>Listen to Trend</span>
+            </Button>
+          )}
+        </div>
 
         {history.length >= 2 && trendDiff !== null ? (
           <Card className="border shadow-xs p-6 space-y-6">
@@ -355,6 +391,44 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground">
                     {previousProfile!.correct} / {previousProfile!.totalQuestions} questions correct
                   </p>
+                </div>
+              </div>
+              {/* Subject Mastery Over Time (Analytics v2) */}
+              <div className="pt-6 border-t border-border mt-6">
+                <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider text-xs mb-4">
+                  Subject Mastery (Latest)
+                </h4>
+                <div className="space-y-4">
+                  {latestProfile?.subjects.map((sub) => {
+                    const prevSub = previousProfile?.subjects.find(s => s.subject === sub.subject);
+                    const subTrend = prevSub ? sub.accuracy - prevSub.accuracy : 0;
+                    return (
+                      <div key={sub.subject} className="space-y-2">
+                        <div className="flex justify-between items-center text-sm font-medium">
+                          <span>{sub.subject}</span>
+                          <div className="flex items-center gap-2">
+                            {subTrend !== 0 && (
+                              <span className={`text-xs ${subTrend > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {subTrend > 0 ? '▲' : '▼'} {Math.abs(subTrend)}%
+                              </span>
+                            )}
+                            <span>{sub.accuracy}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary rounded-full transition-all duration-1000" 
+                            style={{ width: `${sub.accuracy}%` }} 
+                            role="progressbar" 
+                            aria-valuenow={sub.accuracy} 
+                            aria-valuemin={0} 
+                            aria-valuemax={100}
+                            aria-label={`${sub.subject} accuracy: ${sub.accuracy}%`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>

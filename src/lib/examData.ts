@@ -133,6 +133,21 @@ export const MockExamQuestions: Question[] = [
     difficulty: "Intermediate",
     explanation: "Total work = LCM(10,15) = 30 units. A's efficiency = 3, B's efficiency = 2. Total efficiency = 5. Time = 30/5 = 6 days.",
   },
+  {
+    id: "q8_math",
+    text: "Calculate the value of \\frac{1}{2} + \\frac{1}{4} + \\sqrt{16}",
+    options: [
+      { id: "o1", text: "4.75" },
+      { id: "o2", text: "4.5" },
+      { id: "o3", text: "5.25" },
+      { id: "o4", text: "5.0" },
+    ],
+    correctAnswerId: "o1",
+    subject: "Quantitative Aptitude",
+    topic: "Algebra",
+    difficulty: "Intermediate",
+    explanation: "1/2 + 1/4 = 0.75. \\sqrt{16} = 4. Total = 4.75",
+  },
 
   // Reasoning
   {

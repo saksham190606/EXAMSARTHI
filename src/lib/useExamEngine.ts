@@ -1,15 +1,15 @@
 import { useState, useCallback } from 'react';
 import { Question } from './examData';
+import { submitAnswerAction } from '@/app/actions/examActions';
 
 export interface ExamState {
   currentQuestionIndex: number;
-  answers: Record<string, string>; // questionId -> optionId
-  flagged: Set<string>; // Set of flagged questionIds
-  timeRemaining: number; // in seconds
+  answers: Record<string, string>;
+  flagged: Set<string>;
+  timeRemaining: number;
   isSubmitted: boolean;
 }
 
-// Voice abstraction actions interface
 export interface ExamActions {
   readQuestion: (questionId: string) => void;
   readOptions: (questionId: string) => void;
@@ -21,14 +21,15 @@ export interface ExamActions {
 }
 
 export function useExamEngine(
+  sessionId: string,
   questions: Question[],
-  initialDurationSeconds: number,
+  initialState: { timeRemaining: number; answers: Record<string, string>; flagged: string[] },
   onExamComplete: (finalState: ExamState) => void
 ) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [flagged, setFlagged] = useState<Set<string>>(new Set());
-  const [timeRemaining, setTimeRemaining] = useState(initialDurationSeconds);
+  const [answers, setAnswers] = useState<Record<string, string>>(initialState.answers || {});
+  const [flagged, setFlagged] = useState<Set<string>>(new Set(initialState.flagged || []));
+  const [timeRemaining, setTimeRemaining] = useState(initialState.timeRemaining || 1200);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const toggleFlag = useCallback((questionId: string) => {
@@ -46,7 +47,10 @@ export function useExamEngine(
   const selectAnswer = useCallback((questionId: string, optionId: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: optionId }));
     announceToScreenReader("Option selected.");
-  }, []);
+    
+    // Server-Authoritative Autosave
+    submitAnswerAction(sessionId, questionId, optionId).catch(console.error);
+  }, [sessionId]);
 
   const goToNext = useCallback(() => {
     if (currentQuestionIndex < questions.length - 1) {
@@ -92,7 +96,6 @@ export function useExamEngine(
     });
   }, [isSubmitted, submitExam]);
 
-  // Voice actions abstraction
   const voiceActions: ExamActions = {
     readQuestion: (id) => console.log("Voice: Read question", id),
     readOptions: (id) => console.log("Voice: Read options", id),
@@ -125,13 +128,11 @@ export function useExamEngine(
   };
 }
 
-// Utility for imperative screen reader announcements using the live region
 export function announceToScreenReader(message: string) {
   const liveRegion = document.getElementById("exam-live-region");
   if (liveRegion) {
     liveRegion.textContent = message;
     
-    // Clear it out after a short delay so the same message can be announced again if needed
     setTimeout(() => {
       if (liveRegion.textContent === message) {
         liveRegion.textContent = "";

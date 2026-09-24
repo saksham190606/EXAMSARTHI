@@ -15,6 +15,7 @@ interface AccessibilityState {
   enableVoiceCommands: boolean;
   voiceSpeed: VoiceSpeed;
   language: Language;
+  screenReaderMode: boolean;
 
   // Actions
   setTextSize: (size: TextSize) => void;
@@ -25,6 +26,7 @@ interface AccessibilityState {
   setEnableVoiceCommands: (enabled: boolean) => void;
   setVoiceSpeed: (speed: VoiceSpeed) => void;
   setLanguage: (lang: Language) => void;
+  setScreenReaderMode: (enabled: boolean) => void;
 }
 
 export const useAccessibilityStore = create<AccessibilityState>()(
@@ -38,6 +40,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       enableVoiceCommands: false,
       voiceSpeed: 'normal',
       language: 'en',
+      screenReaderMode: false,
 
       setTextSize: (size) => set({ textSize: size }),
       setContrast: (contrast) => set({ contrast: contrast }),
@@ -47,6 +50,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       setEnableVoiceCommands: (enabled) => set({ enableVoiceCommands: enabled }),
       setVoiceSpeed: (speed) => set({ voiceSpeed: speed }),
       setLanguage: (lang) => set({ language: lang }),
+      setScreenReaderMode: (enabled) => set({ screenReaderMode: enabled }),
     }),
     {
       name: 'examsarthi-accessibility', // unique name for localStorage key

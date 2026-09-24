@@ -169,6 +169,13 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
                 {isHindi ? '"सबमिट करो"' : '"Submit Exam"'}
               </kbd>
             </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground mt-2 pt-2 border-t border-border/20">
+              <span className="mr-1 font-semibold">{t('pushToTalkLabel')}</span>
+              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+                {isHindi ? 'Spacebar दबाएँ' : 'Hold Spacebar'}
+              </kbd>
+              <span>{isHindi ? 'बीच में टोकने और तुरंत बोलने के लिए' : 'to interrupt and speak instantly.'}</span>
+            </div>
           </div>
         )}
       </CardContent>

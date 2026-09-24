@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccessibilityStore, VoiceSpeed } from '@/store/useAccessibilityStore';
 
+import { parseMathToSpeech } from '@/lib/voice/mathParser';
+
 export type SpeechStatus = 'Speech stopped' | 'Reading question' | 'Reading options' | 'Voice feedback' | 'Unsupported';
 
 export function useSpeech() {
@@ -26,7 +28,9 @@ export function useSpeech() {
       // Stop any current speech
       stop();
 
-      const utterance = new SpeechSynthesisUtterance(text);
+      // Process text for MathML/LaTeX accessible reading
+      const processedText = parseMathToSpeech(text);
+      const utterance = new SpeechSynthesisUtterance(processedText);
 
       // Map speed
       const speedMap: Record<VoiceSpeed, number> = {

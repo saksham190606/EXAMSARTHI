@@ -3,7 +3,7 @@ import Link from "next/link"
 import { ArrowRight, type LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 
 export interface BentoGridProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode

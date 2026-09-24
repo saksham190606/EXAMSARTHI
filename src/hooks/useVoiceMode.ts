@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseVoiceCommand, ParsedCommand } from '@/lib/voice/voiceParser';
-import { ExamActions, ExamState } from '@/lib/useExamEngine';
+import { ExamState } from '@/lib/useExamEngine';
 import { Question } from '@/lib/examData';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { getTranslation } from '@/lib/i18n';
+
 
 export type VoiceStatus = 'Ready' | 'Listening' | 'Processing' | 'Speaking' | 'Error' | 'Unsupported';
 
@@ -23,6 +23,7 @@ interface UseVoiceModeProps {
 export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }: UseVoiceModeProps) {
   const language = useAccessibilityStore((s) => s.language);
   const voiceSpeed = useAccessibilityStore((s) => s.voiceSpeed);
+  const screenReaderMode = useAccessibilityStore((s) => s.screenReaderMode);
 
   const [isActive, setIsActive] = useState(false);
   const [status, setStatus] = useState<VoiceStatus>('Unsupported');
@@ -31,6 +32,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
   // Pending action for two-step confirmation (e.g., submit)
   const [pendingAction, setPendingAction] = useState<ParsedCommand | null>(null);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const isSpeakingRef = useRef(false);
@@ -81,7 +83,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
-      } catch (e) {
+      } catch {
         // Ignore errors when aborting idle recognition
       }
     }
@@ -97,6 +99,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     try {
       recognitionRef.current.start();
       setStatus('Listening');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       // If already started, ensure status reflects Listening
       if (e?.name === 'InvalidStateError' || e?.message?.includes('already started')) {
@@ -107,7 +110,18 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
 
   // Speech synthesis wrapper that cleanly suppresses microphone collision
   const speak = useCallback((text: string, onEnd?: () => void) => {
-    if (!synthesisRef.current || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+
+    if (screenReaderMode) {
+      // In Screen-Reader Harmony Mode, we do NOT use web speech API TTS.
+      // We rely on the screen reader reading the DOM or LiveRegion.
+      // Immediately invoke callback.
+      if (onEnd) onEnd();
+      else startListening();
+      return;
+    }
+
+    if (!synthesisRef.current) return;
 
     // Immediately stop recognition before audio output begins
     stopListening();
@@ -116,7 +130,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
 
     try {
       synthesisRef.current.cancel(); // Stop any pending utterances
-    } catch (e) {}
+    } catch {}
 
     const utterance = new SpeechSynthesisUtterance(text);
     
@@ -147,7 +161,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     };
 
     utterance.onend = handleSpeechEnd;
-    utterance.onerror = (e) => {
+    utterance.onerror = () => {
       // If speech was canceled manually (e.g. by stopListening), do not trigger errors
       isSpeakingRef.current = false;
       if (isActiveRef.current && !isSpeakingRef.current) {
@@ -157,13 +171,13 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
 
     try {
       synthesisRef.current.speak(utterance);
-    } catch (e) {
+    } catch {
       isSpeakingRef.current = false;
       if (isActiveRef.current) {
         startListening();
       }
     }
-  }, [voiceSpeed, language, getPreferredVoice, stopListening, startListening]);
+  }, [voiceSpeed, language, getPreferredVoice, stopListening, startListening, screenReaderMode]);
 
   // Read current question out loud
   const readCurrentQuestion = useCallback(() => {
@@ -187,6 +201,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     if (typeof window === 'undefined') return;
 
     synthesisRef.current = window.speechSynthesis;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (SpeechRecognition) {
@@ -200,17 +215,15 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
       if (statusRef.current === 'Unsupported') {
         setStatus('Ready');
       }
-    } else {
-      setStatus('Unsupported');
     }
 
     return () => {
       clearRestartTimer();
       if (synthesisRef.current) {
-        try { synthesisRef.current.cancel(); } catch (e) {}
+        try { synthesisRef.current.cancel(); } catch {}
       }
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (e) {}
+        try { recognitionRef.current.abort(); } catch {}
       }
     };
   }, [language]);
@@ -357,6 +370,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     const recognition = recognitionRef.current;
     if (!recognition) return;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       const transcript = event.results?.[0]?.[0]?.transcript?.trim();
       if (!transcript) {
@@ -371,6 +385,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
       handleCommand(transcript);
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       const error = event.error;
 
@@ -412,7 +427,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
           if (isActiveRef.current && !isSpeakingRef.current) {
             try {
               recognition.start();
-            } catch (e) {}
+            } catch {}
           }
         }, 150);
       }
@@ -427,6 +442,49 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
     }
   }, [isActive, state.currentQuestionIndex, readCurrentQuestion]);
 
+  // Push-to-Talk & Barge-in (Spacebar)
+  useEffect(() => {
+    if (!isActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault(); // Prevent page scroll
+        // Barge-in: Stop speaking immediately and listen
+        if (synthesisRef.current && isSpeakingRef.current) {
+          synthesisRef.current.cancel();
+          isSpeakingRef.current = false;
+        }
+        
+        if (statusRef.current !== 'Listening') {
+          startListening();
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        // Option: stop listening on keyup (Strict Push-to-Talk)
+        // Or just let the natural silence timeout handle it. 
+        // We'll let silence handle it for a smoother experience, but PTT is activated on keydown.
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isActive, startListening]);
+
   // Toggle voice mode on/off
   const toggleVoiceMode = useCallback(() => {
     if (statusRef.current === 'Unsupported') return;
@@ -436,7 +494,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
       isActiveRef.current = false;
       lastReadQuestionIndexRef.current = null;
       clearRestartTimer();
-      try { synthesisRef.current?.cancel(); } catch (e) {}
+      try { synthesisRef.current?.cancel(); } catch {}
       stopListening();
       setStatus('Ready');
     } else {

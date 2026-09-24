@@ -18,6 +18,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "EXAMSARTHI — Accessible Online Examination Platform",
   description: "Accessibility-first examination and practice platform designed to empower visually impaired candidates to independently prepare for and participate in competitive examinations.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ExamSarthi",
+  },
+};
+
+export const viewport = {
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
