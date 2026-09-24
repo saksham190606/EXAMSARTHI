@@ -101,14 +101,14 @@ Verification performed on the EXAMSARTHI Personalized Learning Engine.
 ## Fixes Applied
 
 1. **Subject Slug Normalization**:
-   * Added `getSubjectSlug` helper to [engine.ts](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/lib/personalization/engine.ts) to map subject names to standard slugs (`'gk'`, `'quant'`, `'reasoning'`, `'english'`).
+   * Added `getSubjectSlug` helper to [`src/lib/personalization/engine.ts`](../src/lib/personalization/engine.ts) to map subject names to standard slugs (`'gk'`, `'quant'`, `'reasoning'`, `'english'`).
 2. **Bidirectional Subject Filtering**:
-   * Updated `PracticeContent` filter in [practice/page.tsx](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/app/practice/page.tsx) with a subject dictionary mapping `"gk"` to `"general"`, `"quant"` to `"quant"`, etc.
-   * Enriched practice set descriptions in [mockData.ts](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/lib/mockData.ts) so topic queries consistently find relevant exercises.
+   * Updated `PracticeContent` filter in [`src/app/practice/page.tsx`](../src/app/practice/page.tsx) with a subject dictionary mapping `"gk"` to `"general"`, `"quant"` to `"quant"`, etc.
+   * Enriched practice set descriptions in [`src/lib/mockData.ts`](../src/lib/mockData.ts) so topic queries consistently find relevant exercises.
 3. **Weighted Priority Scoring**:
-   * Updated `priorityScore` calculation in [engine.ts](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/lib/personalization/engine.ts) to `(isRecurring ? 100 : 0) + (100 - topic.accuracy) + (100 - sub.accuracy)`, ensuring topics within weaker subjects are prioritized first.
+   * Updated `priorityScore` calculation in [`src/lib/personalization/engine.ts`](../src/lib/personalization/engine.ts) to `(isRecurring ? 100 : 0) + (100 - topic.accuracy) + (100 - sub.accuracy)`, ensuring topics within weaker subjects are prioritized first.
 4. **Empty State Label & Icon Fix**:
-   * Updated [dashboard/page.tsx](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/app/dashboard/page.tsx) and [results/page.tsx](file:///c:/Users/saksh/OneDrive/Documents/EXAMSARTHI/src/app/results/page.tsx) to label `no-data` recommendations as "Getting Started" with appropriate `aria-hidden` attributes on decorative icons.
+   * Updated [`src/app/dashboard/page.tsx`](../src/app/dashboard/page.tsx) and [`src/app/results/page.tsx`](../src/app/results/page.tsx) to label `no-data` recommendations as "Getting Started" with appropriate `aria-hidden` attributes on decorative icons.
 
 ---
 
