@@ -39,7 +39,7 @@ export function MobileNav() {
             Navigation menu
           </SheetDescription>
         </SheetHeader>
-        <nav className="flex flex-col gap-4 mt-8">
+        <nav aria-label="Mobile navigation" className="flex flex-col gap-4 mt-8">
           {navItems.map((item) => (
             <Link
               key={item.href}
