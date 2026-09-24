@@ -1,6 +1,7 @@
 {
-  "name": "temp-app",
+  "name": "examsarthi",
   "version": "0.1.0",
+  "description": "Accessibility-first examination and practice platform for visually impaired candidates",
   "private": true,
   "scripts": {
     "dev": "next dev",

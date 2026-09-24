@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EXAMSARTHI
 
-## Getting Started
+An accessibility-first online examination and practice platform designed to empower visually impaired candidates to independently prepare for and participate in competitive examinations.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Problem
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Most digital examination portals and test-prep applications are built without genuine accessibility considerations:
+- Screen readers encounter inaccessible custom widgets, broken reading orders, and unannounced dynamic countdown timers.
+- Keyboard-only navigation is frequently trapped, lacks visible focus indicators, or requires pointer/mouse interaction.
+- Fast-paced timed exams induce high cognitive load when candidate accommodations (e.g. text scaling, high-contrast borders, audio assistance) are missing or fragmented.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Solution
 
-## Learn More
+EXAMSARTHI provides a standardized, distraction-free environment that prioritizes accessibility from the ground up:
+- Complete end-to-end independence: candidates can discover topics, practice filtered question sets, take realistic mock exams, and review diagnostic performance analytics entirely via keyboard, screen reader, or speech.
+- Zero external dependencies on third-party cloud AI APIs or authentication barriers, ensuring deterministic and reliable offline/client performance.
+- Seamless compatibility across light, dark, and high-contrast environments with granular text scaling.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Core Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Accessible Examination Engine**: Clean question layout with semantic `<fieldset>`/`<legend>` options, multi-modal status indicators, non-spamming timer milestone announcements, and confirmation safeguards.
+- **Keyboard-First Navigation**: 100% of workflows operate via standard keyboard navigation (`Tab`, `Shift+Tab`, `Arrow` keys, `Enter`, `Space`, `Escape`) with prominent focus rings.
+- **Screen-Reader-Oriented Interface**: Semantic HTML5 landmarks (`<header>`, `<nav>`, `<main>`, `<section>`, `<footer>`), structured heading levels (`h1` → `h2` → `h3`), and accessible table semantics (`<th scope="col">`, `<th scope="row">`).
+- **Voice Examination Mode**: Native hands-free exam participation utilizing browser Web Speech API for voice command recognition and audio question readout, with instant keyboard fallback.
+- **Accessibility Customization**: Real-time preference controls for Text Size (16px, 18px, 20px), Theme (Light, Dark, System), High-Contrast Borders, Reduced Motion, Audio Assistance, and Voice Speed.
+- **Personalized Learning**: Deterministic algorithmic recommendation engine identifying subject and topic weak areas (<70% accuracy) and linking directly to filtered practice sets.
+- **Performance Analytics**: Factual, non-judgmental results reporting with subject-level metrics, accuracy evaluation, and historical progress comparisons.
+- **Multilingual Foundation**: Platform language switching foundation (English & Hindi) for exam instructions and interface controls.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Technology Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Framework**: [Next.js](https://nextjs.org/) (App Router, Turbopack)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **UI & Styling**: [Tailwind CSS](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/) (Base UI primitives), [Lucide React](https://lucide.dev/)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand) (with local storage persistence)
+- **Theme Support**: [next-themes](https://github.com/pacocoursey/next-themes)
+- **Speech & Audio**: Browser Web Speech API (`SpeechRecognition`, `speechSynthesis`)
+
+---
+
+## Running Locally
+
+### Prerequisites
+- Node.js (v18.17+ or v20+)
+- npm, yarn, or pnpm
+
+### Installation
+
+1. Clone or navigate to the repository directory:
+   ```bash
+   git clone <repository-url>
+   cd EXAMSARTHI
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the local development server:
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+4. Run the production build:
+   ```bash
+   npm run build
+   ```
+
+5. Start the production server:
+   ```bash
+   npm run start
+   ```
+
+---
+
+## Accessibility Principles
+
+EXAMSARTHI is designed to align with **WCAG 2.1 AA** accessibility principles, focusing on perceivability, operability, understandability, and robust cross-device compatibility.

@@ -2,6 +2,7 @@ import Link from "next/link"
 import { ArrowRight, BookOpen, CheckCircle, Ear, Eye, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { BentoFeatureSection } from "@/components/marketing/BentoFeatureSection"
 
 export default function LandingPage() {
   return (
@@ -68,6 +69,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Accessible Bento Feature Grid */}
+      <BentoFeatureSection />
 
       {/* How EXAMSARTHI Works & Capabilities */}
       <section className="py-24 bg-muted/50 px-4 md:px-8">

@@ -22,6 +22,7 @@ const navItems = [
   { href: "/practice", label: "Practice" },
   { href: "/exam", label: "Exams" },
   { href: "/results", label: "Results" },
+  { href: "/settings", label: "Settings" },
 ]
 
 export function Header() {
