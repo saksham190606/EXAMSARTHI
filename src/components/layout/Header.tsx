@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { UserCircle } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { UserCircle, LogOut } from "lucide-react"
 
 import { AccessibilityPanel } from "@/components/accessibility/AccessibilityPanel"
 import { MobileNav } from "@/components/layout/MobileNav"
@@ -17,10 +17,42 @@ import {
 } from "@/components/ui/select"
 import { Language } from "@/store/useAccessibilityStore"
 import { useTranslation } from "@/lib/i18n"
+import { createClient } from "@/lib/supabase/client"
+import { User } from "@supabase/supabase-js"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function Header() {
   const pathname = usePathname()
+  const router = useRouter()
   const { t, language, setLanguage } = useTranslation()
+  const [user, setUser] = React.useState<User | null>(null)
+  
+  React.useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user)
+    })
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null)
+      }
+    )
+    
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+    router.refresh()
+  }
 
   const navItems = [
     { href: "/dashboard", label: t('navDashboard') },
@@ -77,9 +109,23 @@ export function Header() {
           <AccessibilityPanel />
           
           {/* User Profile Placeholder */}
-          <Button variant="ghost" size="icon" aria-label={t('userProfile')}>
-            <UserCircle className="h-6 w-6" />
-          </Button>
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring h-9 w-9">
+                <UserCircle className="h-6 w-6" aria-label={t('userProfile')} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => router.push('/auth/login')}>
+              Sign in
+            </Button>
+          )}
         </div>
       </div>
     </header>

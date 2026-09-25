@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off analysis/build scripts (CommonJS, not part of app)
+    "scripts/**",
+    // Playwright tests (separate tsconfig scope)
+    "e2e/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 

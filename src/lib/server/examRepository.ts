@@ -2,6 +2,7 @@
 import { Question } from '@/lib/examData';
 import { MockExamQuestions } from '@/lib/examData';
 import crypto from 'crypto';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface ExamSession {
   id: string;
@@ -41,6 +42,41 @@ export class ExamRepository {
   }
 
   async getSession(sessionId: string): Promise<ExamSession | null> {
+    try {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+        
+      if (data && !error) {
+        // Hydrate from DB
+        const answersRes = await supabase.from('answers').select('*').eq('session_id', sessionId);
+        const answersData = answersRes.data || [];
+        const answers: Record<string, string> = {};
+        answersData.forEach((a: { question_id: string; answer_data?: { answerId?: string } }) => {
+          if (a.answer_data?.answerId) {
+             answers[a.question_id] = a.answer_data.answerId;
+          }
+        });
+        
+        return {
+          id: data.id,
+          candidateId: data.candidate_id,
+          examId: data.exam_id,
+          startTime: data.started_at,
+          timeRemainingSeconds: data.time_remaining_seconds,
+          bonusTimeSeconds: 0, // In full DB, could track via audit
+          status: data.status,
+          answers,
+          flagged: [], // Could be part of a flagged table
+          questionOrder: data.seed_value ? JSON.parse(data.seed_value) : []
+        };
+      }
+    } catch (e) {
+      // Fallback
+    }
     return sessionStore.get(sessionId) || null;
   }
 
@@ -67,7 +103,22 @@ export class ExamRepository {
   }
 
   async createSession(candidateId: string, examId: string): Promise<ExamSession> {
-    // 1. Single Active Session Lock
+    const supabase = createAdminClient();
+    
+    try {
+      // 1. Single Active Session Lock via DB
+      const existing = await supabase.from('exam_sessions')
+        .select('*')
+        .eq('candidate_id', candidateId)
+        .eq('status', 'active')
+        .maybeSingle();
+        
+      if (existing.data) {
+        return this.getSession(existing.data.id) as Promise<ExamSession>;
+      }
+    } catch (e) {}
+
+    // In-memory lock fallback
     for (const s of sessionStore.values()) {
       if (s.candidateId === candidateId && s.status === 'active') {
         return s; // Resume existing
@@ -92,6 +143,19 @@ export class ExamRepository {
       flagged: [],
       questionOrder,
     };
+    
+    try {
+      // Attempt DB Insert
+      await supabase.from('exam_sessions').insert({
+        id: sessionId,
+        exam_id: examId,
+        candidate_id: candidateId,
+        status: 'active',
+        time_remaining_seconds: 1200,
+        seed_value: JSON.stringify(questionOrder)
+      });
+    } catch (e) {}
+
     sessionStore.set(sessionId, session);
     
     // Log start event
@@ -105,6 +169,15 @@ export class ExamRepository {
   }
 
   async updateAnswer(sessionId: string, questionId: string, answerId: string): Promise<void> {
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('answers').upsert({
+        session_id: sessionId,
+        question_id: questionId,
+        answer_data: { answerId }
+      }, { onConflict: 'session_id, question_id' });
+    } catch (e) {}
+
     const session = sessionStore.get(sessionId);
     if (session && session.status === 'active') {
       session.answers[questionId] = answerId;
@@ -139,12 +212,28 @@ export class ExamRepository {
       ...event
     };
     
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('audit_logs').insert({
+        id,
+        session_id: sessionId,
+        event_type: event.eventType,
+        details: event.details,
+        previous_hash: previousHash
+      });
+    } catch (e) {}
+
     logs.push(fullEvent);
     auditStore.set(sessionId, logs);
     console.log(`[AUDIT LOG] ${sessionId}: ${event.eventType} (Hash: ${id.substring(0, 8)}...)`);
   }
 
   async submitExam(sessionId: string): Promise<void> {
+    try {
+      const supabase = createAdminClient();
+      await supabase.from('exam_sessions').update({ status: 'completed' }).eq('id', sessionId);
+    } catch(e) {}
+
     const session = sessionStore.get(sessionId);
     if (session) {
       session.status = 'completed';

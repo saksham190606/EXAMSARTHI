@@ -5,7 +5,7 @@ export async function sonifyData(dataPoints: number[], min: number = 0, max: num
   }
 
   // Use standard AudioContext or webkitAudioContext for Safari
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   const audioCtx = new AudioContextClass();
 
   const playTone = (frequency: number, duration: number, startTime: number) => {

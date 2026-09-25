@@ -148,6 +148,16 @@ export const MockExamQuestions: Question[] = [
     difficulty: "Intermediate",
     explanation: "1/2 + 1/4 = 0.75. \\sqrt{16} = 4. Total = 4.75",
   },
+  {
+    id: "q_subj_1",
+    text: "Explain the main differences between a democracy and a republic in under 50 words.",
+    options: [],
+    correctAnswerId: "", // subjective
+    subject: "General Knowledge",
+    topic: "Civics",
+    difficulty: "Advanced",
+    explanation: "A democracy is ruled by the majority, while a republic is ruled by law and representatives.",
+  },
 
   // Reasoning
   {

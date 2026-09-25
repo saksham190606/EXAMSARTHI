@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useState } from "react";
@@ -54,8 +55,9 @@ export default function AdminPage() {
       } else {
         setError(result.error || "Failed to generate AI description");
       }
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(message);
     } finally {
       setIsGenerating(false);
     }

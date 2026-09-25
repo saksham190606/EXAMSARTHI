@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Sparkles, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
 import { Question } from '@/lib/examData'; // Wait, Exam is from mockData, Question is from examData
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
-import { useTranslation } from '@/lib/i18n';
+// import { useTranslation } from '@/lib/i18n';
 import { generateHintAction } from '@/app/actions/aiActions';
 
 interface PracticeClientProps {
@@ -19,7 +19,8 @@ interface PracticeClientProps {
 
 export function PracticeClient({ practiceSet, questions }: PracticeClientProps) {
   const router = useRouter();
-  const { t } = useTranslation();
+  // useTranslation is not used here but could be in the future, remove for now to clear lint warning
+  // const { t } = useTranslation();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>();
@@ -76,7 +77,7 @@ export function PracticeClient({ practiceSet, questions }: PracticeClientProps) 
       } else {
         setAiHint("Could not generate a hint at this time.");
       }
-    } catch (e) {
+    } catch {
       setAiHint("An error occurred while generating hint.");
     } finally {
       setIsGeneratingHint(false);

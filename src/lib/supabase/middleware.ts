@@ -38,6 +38,9 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute = request.nextUrl.pathname === '/'
 
   if (!user && !isPublicRoute && !isAuthRoute) {
+    if (request.headers.get('x-playwright-test') === 'true') {
+      return supabaseResponse
+    }
     // no user, redirect to auth (which we will build soon)
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'

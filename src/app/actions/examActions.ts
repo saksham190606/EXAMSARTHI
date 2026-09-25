@@ -1,16 +1,26 @@
 "use server"
 
 import { examRepository, AuditEvent } from '@/lib/server/examRepository';
+import { createClient } from '@/lib/supabase/server';
 
-
-// Mock user ID for demo purposes until auth is wired in the UI
-const MOCK_USER_ID = "user_demo_123";
-const MOCK_EXAM_ID = "exam_demo_1";
+const FALLBACK_USER_ID = "user_demo_123";
+const DEMO_EXAM_ID = "exam_demo_1";
 
 export async function startOrResumeExam() {
-  // In a real app, we'd check cookies/session for an existing exam_session
-  const session = await examRepository.createSession(MOCK_USER_ID, MOCK_EXAM_ID);
-  
+  // Get the real authenticated user from Supabase session
+  let userId = FALLBACK_USER_ID;
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      userId = user.id;
+    }
+  } catch {
+    // Server-action context may not have cookies in some edge cases;
+    // fall back to demo user to avoid crashing the exam page.
+  }
+
+  const session = await examRepository.createSession(userId, DEMO_EXAM_ID);
   const questions = await examRepository.getExamQuestions(session.id);
   
   return {

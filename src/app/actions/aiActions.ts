@@ -6,9 +6,10 @@ export async function describeImageAction(imageBase64: string, mimeType: string,
   try {
     const description = await describeImage(imageBase64, mimeType, contextPrompt);
     return { success: true, data: description };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("describeImageAction Error:", error);
-    return { success: false, error: error.message || 'Failed to describe image' };
+    const message = error instanceof Error ? error.message : 'Failed to describe image';
+    return { success: false, error: message };
   }
 }
 
@@ -16,8 +17,9 @@ export async function generateHintAction(questionText: string, options: string[]
   try {
     const hint = await generateSocraticHint(questionText, options, wrongAttempts);
     return { success: true, data: hint };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("generateHintAction Error:", error);
-    return { success: false, error: error.message || 'Failed to generate hint' };
+    const message = error instanceof Error ? error.message : 'Failed to generate hint';
+    return { success: false, error: message };
   }
 }

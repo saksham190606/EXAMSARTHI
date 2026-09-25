@@ -40,3 +40,13 @@ This document records the architectural and technical decisions made during the 
 ## 9. Testing & Accessibility Passes
 - **Decision:** Relied on `shadcn/ui` components (which are built on Radix UI primitives) and rigorous semantic HTML (`<fieldset>`, `<legend>`, ARIA Live Regions) during development. Marked formal NVDA/JAWS passes as "Needs Human Testing."
 - **Reasoning:** Automated tools (like `axe-core` and Lighthouse) catch ~30% of accessibility issues. As an AI system, I have structured the DOM to the highest semantic standards (WCAG 2.2 AA). True screen-reader first validation inherently requires real human users with their preferred SR configurations (e.g., speech rate, verbosity) to provide the final sign-off.
+
+## 10. Tailwind CSS Conflict Resolution
+- **Context:** IDE tooling reported ~22 `cssConflict` warnings across the codebase.
+- **Decision:** After AST-based analysis, only 2 were genuine conflicts (`text-sm` + `text-xs` on the same element without responsive breakpoints, in `dashboard/page.tsx`). The remaining ~20 were false positives: responsive variants (`text-xs md:text-sm`), orthogonal axis utilities (`px-3` + `py-1`), or shadcn/base-ui component internals.
+- **Action:** Fixed the 2 real conflicts. Left responsive and orthogonal combinations as-is since they are intentional.
+
+## 11. STATUS.md Audit Methodology
+- **Context:** The `ROADMAP.md` marked all phases as `[x]` (complete). An honest status audit was requested.
+- **Decision:** Created `docs/STATUS.md` with per-item verdicts: `REAL`, `PARTIAL`, `STUB`, or `NOT STARTED`. Used file-path evidence and described manual test steps.
+- **Finding:** Many features marked as complete in the roadmap are actually `PARTIAL` (e.g., exam persistence is in-memory, admin portal is limited to image descriptions, PWA has no offline sync). Auth is `REAL`. Voice engine is `PARTIAL` (no LLM fallback, no scribe dictation).

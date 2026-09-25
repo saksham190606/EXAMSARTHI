@@ -364,7 +364,7 @@ export default function DashboardPage() {
 
             {/* Semantic comparison breakdown */}
             <div className="space-y-3" role="region" aria-label="Attempt comparison details">
-              <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider text-xs">
+              <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                 Attempt Comparison
               </h4>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -395,7 +395,7 @@ export default function DashboardPage() {
               </div>
               {/* Subject Mastery Over Time (Analytics v2) */}
               <div className="pt-6 border-t border-border mt-6">
-                <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider text-xs mb-4">
+                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-4">
                   Subject Mastery (Latest)
                 </h4>
                 <div className="space-y-4">
