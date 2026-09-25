@@ -9,7 +9,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+
 import { VoiceStatus } from '@/hooks/useVoiceMode';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -27,19 +27,17 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
 
   if (status === 'Unsupported') {
     return (
-      <Card className="border border-border/80 bg-muted/20 shadow-none">
-        <CardContent className="p-4 flex items-center gap-3">
-          <AlertCircle className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
-          <div className="space-y-0.5">
-            <p className="text-sm font-semibold text-foreground">
-              {t('statusUnavailable')}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t('statusUnavailableDesc')}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="border-b border-border/50 bg-muted/20 p-4 flex items-center gap-3">
+        <AlertCircle className="size-5 text-muted-foreground shrink-0" aria-hidden="true" />
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">
+            {t('statusUnavailable')}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('statusUnavailableDesc')}
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -94,11 +92,11 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
   };
 
   return (
-    <Card className={cn(
-      "border transition-colors shadow-xs",
-      isActive ? "border-primary/40 bg-card" : "border-border bg-card"
+    <div className={cn(
+      "border-b border-border/50 transition-colors",
+      isActive ? "bg-primary/5" : "bg-card"
     )}>
-      <CardContent className="p-4 sm:p-5 space-y-4">
+      <div className="p-4 sm:px-6 sm:py-4 flex flex-col gap-3">
         {/* Top Control & Status Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -130,48 +128,32 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
           )}
         </div>
 
-        {/* Supported Commands Guide */}
+        {/* Compact Supported Commands Guide */}
         {isActive && (
-          <div className="pt-3 border-t border-border/40 space-y-2 text-xs">
-            <span className="font-semibold text-foreground uppercase tracking-wider text-2xs block">
-              {t('supportedVoiceCommands')}
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-              <span className="mr-1">{t('voiceSelectLabel')}</span>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"विकल्प ए" / "1"' : '"Option A" / "1"'}
-              </kbd>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"विकल्प बी" / "2"' : '"Option B" / "2"'}
-              </kbd>
-              <span className="mx-1">·</span>
-              <span className="mr-1">{t('voiceNavigateLabel')}</span>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"अगला"' : '"Next"'}
-              </kbd>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"पिछला"' : '"Previous"'}
-              </kbd>
-              <span className="mx-1">·</span>
-              <span className="mr-1">{t('voiceAudioLabel')}</span>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"प्रश्न पढ़ो"' : '"Read Question"'}
-              </kbd>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"दोहराओ"' : '"Repeat"'}
-              </kbd>
-              <span className="mx-1">·</span>
-              <span className="mr-1">{t('voiceTimeSubmitLabel')}</span>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"समय"' : '"How much time is left?"'}
-              </kbd>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"सबमिट करो"' : '"Submit Exam"'}
-              </kbd>
-            </div>
+          <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-foreground">Say:</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+              {isHindi ? 'अगला' : 'Next'}
+            </kbd>
+            <span>·</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+              {isHindi ? 'पिछला' : 'Previous'}
+            </kbd>
+            <span>·</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+              {isHindi ? 'विकल्प ए-डी' : 'Option A-D'}
+            </kbd>
+            <span>·</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+              {isHindi ? 'प्रश्न पढ़ो' : 'Read Question'}
+            </kbd>
+            <span>·</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+              {isHindi ? 'रुको' : 'Stop'}
+            </kbd>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

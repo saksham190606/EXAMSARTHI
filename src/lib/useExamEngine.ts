@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Question } from './examData';
+import { useVoiceFeedback } from '@/hooks/useVoiceFeedback';
+import { useTranslation } from './i18n';
 
 export interface ExamState {
   currentQuestionIndex: number;
@@ -30,18 +32,23 @@ export function useExamEngine(
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [timeRemaining, setTimeRemaining] = useState(initialDurationSeconds);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  
+  const { speakFeedback } = useVoiceFeedback();
+  const { t } = useTranslation();
 
   const toggleFlag = useCallback((questionId: string) => {
     setFlagged(prev => {
       const newFlagged = new Set(prev);
       if (newFlagged.has(questionId)) {
         newFlagged.delete(questionId);
+        speakFeedback(t('vfQuestionUnflagged'));
       } else {
         newFlagged.add(questionId);
+        speakFeedback(t('vfQuestionFlagged'));
       }
       return newFlagged;
     });
-  }, []);
+  }, [speakFeedback, t]);
 
   const selectAnswer = useCallback((questionId: string, optionId: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: optionId }));
@@ -71,6 +78,7 @@ export function useExamEngine(
 
   const submitExam = useCallback(() => {
     setIsSubmitted(true);
+    speakFeedback(t('vfSubmitExam'));
     onExamComplete({
       currentQuestionIndex,
       answers,
@@ -78,19 +86,28 @@ export function useExamEngine(
       timeRemaining,
       isSubmitted: true
     });
-  }, [answers, currentQuestionIndex, flagged, onExamComplete, timeRemaining]);
+  }, [answers, currentQuestionIndex, flagged, onExamComplete, timeRemaining, speakFeedback, t]);
 
   const tickTimer = useCallback(() => {
     if (isSubmitted) return;
     
     setTimeRemaining(prev => {
-      if (prev <= 1) {
+      const newTime = prev - 1;
+      
+      // Timer feedback
+      if (newTime === 600) speakFeedback(t('vfTimeWarning', { minutes: 10 }));
+      if (newTime === 300) speakFeedback(t('vfTimeWarning', { minutes: 5 }));
+      if (newTime === 60) speakFeedback(t('vfTimeWarning', { minutes: 1 }));
+      if (newTime === 30) speakFeedback(t('vfTimeWarningSeconds', { seconds: 30 }));
+      
+      if (newTime <= 0) {
+        speakFeedback(t('vfTimeOver'));
         submitExam();
         return 0;
       }
-      return prev - 1;
+      return newTime;
     });
-  }, [isSubmitted, submitExam]);
+  }, [isSubmitted, submitExam, speakFeedback, t]);
 
   // Voice actions abstraction
   const voiceActions: ExamActions = {

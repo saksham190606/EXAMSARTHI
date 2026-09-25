@@ -54,7 +54,7 @@ export function QuestionDisplay({
         </legend>
         
         <RadioGroup 
-          value={selectedOptionId} 
+          value={selectedOptionId ?? ''} 
           onValueChange={(val) => onSelectOption(question.id, val)}
           className="space-y-3.5"
           aria-label={`Answer options for Question ${currentIndex + 1}`}

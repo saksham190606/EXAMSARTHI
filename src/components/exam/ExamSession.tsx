@@ -21,6 +21,7 @@ import type { Exam } from "@/lib/mock-exam"
 import { useSpeech } from '@/hooks/useSpeech'
 import { useVoiceCommands } from '@/hooks/useVoiceCommands'
 import { useAccessibilityStore } from '@/store/useAccessibilityStore'
+import { useTranslation } from '@/lib/i18n'
 
 interface ExamSessionProps {
   exam: Exam;
@@ -35,11 +36,14 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const questionTitleRef = useRef<HTMLHeadingElement>(null);
 
   const { speak, stop, status, isSupported } = useSpeech();
-  const { audioAssistance, autoReadQuestions } = useAccessibilityStore();
+  const { audioAssistance, autoReadQuestions, autoReadOptions } = useAccessibilityStore();
+  const { t } = useTranslation();
   
   const currentQuestion = exam.questions[currentIndex];
   const totalQuestions = exam.questions.length;
   const progress = ((currentIndex + 1) / totalQuestions) * 100;
+  
+  const lastSpokenQuestionId = useRef<string | null>(null);
 
   // Manage focus when switching questions so screen readers announce the new context
   useEffect(() => {
@@ -47,13 +51,27 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
       questionTitleRef.current.focus();
     }
 
-    if (audioAssistance && autoReadQuestions) {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    if (audioAssistance && autoReadQuestions && lastSpokenQuestionId.current !== currentQuestion.id) {
       // Small timeout to allow DOM update before speaking
-      setTimeout(() => {
-        speak(`Question ${currentIndex + 1}: ${exam.questions[currentIndex].text}`, 'Reading question');
+      timeoutId = setTimeout(() => {
+        let textToSpeak = `${t('question')} ${currentIndex + 1}: ${currentQuestion.text}`;
+        
+        if (autoReadOptions) {
+          const optionsText = currentQuestion.options.map((opt, i) => `${t('option')} ${i + 1}: ${opt.text}`).join('. ');
+          textToSpeak += `. ${optionsText}`;
+        }
+        
+        speak(textToSpeak, 'Reading question');
+        lastSpokenQuestionId.current = currentQuestion.id;
       }, 300);
     }
-  }, [currentIndex, audioAssistance, autoReadQuestions, speak, exam.questions]);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [currentIndex, currentQuestion, audioAssistance, autoReadQuestions, autoReadOptions, speak, t]);
 
   const handleOptionChange = (value: string) => {
     setAnswers(prev => ({
@@ -96,10 +114,10 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
         setCurrentIndex(index);
       }
     },
-    onReadQuestion: () => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question'),
+    onReadQuestion: () => speak(`${t('question')} ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question'),
     onReadOptions: () => {
-      const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
-      speak(`Options: ${optionsText}`, 'Reading options');
+      const optionsText = currentQuestion.options.map((opt, i) => `${t('option')} ${i + 1}: ${opt.text}`).join('. ');
+      speak(optionsText, 'Reading options');
     },
     onStopSpeaking: stop,
     onSubmitExam: () => setIsSubmitDialogOpen(true),
@@ -149,7 +167,7 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
+              onClick={() => speak(`${t('question')} ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question')}
               className={status === 'Reading question' ? 'bg-primary/10 border-primary font-bold ring-1 ring-primary' : ''}
               disabled={!isSupported}
             >
@@ -160,8 +178,8 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
               variant="outline"
               size="sm"
               onClick={() => {
-                const optionsText = currentQuestion.options.map((opt, i) => `Option ${i + 1}: ${opt.text}`).join('. ');
-                speak(`Options: ${optionsText}`, 'Reading options');
+                const optionsText = currentQuestion.options.map((opt, i) => `${t('option')} ${i + 1}: ${opt.text}`).join('. ');
+                speak(optionsText, 'Reading options');
               }}
               className={status === 'Reading options' ? 'bg-primary/10 border-primary font-bold ring-1 ring-primary' : ''}
               disabled={!isSupported}

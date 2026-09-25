@@ -23,8 +23,10 @@ interface UseVoiceModeProps {
 export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }: UseVoiceModeProps) {
   const language = useAccessibilityStore((s) => s.language);
   const voiceSpeed = useAccessibilityStore((s) => s.voiceSpeed);
+  const enableVoiceCommands = useAccessibilityStore((s) => s.enableVoiceCommands);
+  const setEnableVoiceCommands = useAccessibilityStore((s) => s.setEnableVoiceCommands);
 
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(enableVoiceCommands);
   const [status, setStatus] = useState<VoiceStatus>('Unsupported');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   
@@ -38,6 +40,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
   const statusRef = useRef<VoiceStatus>('Unsupported');
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastReadQuestionIndexRef = useRef<number | null>(null);
+  const hasAnnouncedStartRef = useRef(false);
 
   // Keep refs in sync with state for lifecycle callbacks
   useEffect(() => {
@@ -169,18 +172,55 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
   const readCurrentQuestion = useCallback(() => {
     const isHindi = language === 'hi';
     const qNum = state.currentQuestionIndex + 1;
+    
+    let startAnnouncement = '';
+    // Only build announcement if it hasn't actually been fully announced yet
+    if (!hasAnnouncedStartRef.current) {
+      const minutes = Math.floor(state.timeRemaining / 60);
+      startAnnouncement = isHindi
+        ? `परीक्षा शुरू हो गई है। आपके पास ${minutes} मिनट हैं। `
+        : `Exam started. You have ${minutes} minutes. `;
+    }
+
+    const questionPrefix = isHindi 
+      ? `प्रश्न ${qNum} का ${totalQuestions}। ` 
+      : `Question ${qNum} of ${totalQuestions}. `;
+    
+    const questionText = `${currentQuestion.text}.`;
+
     const optionsText = currentQuestion.options
       .map((opt, i) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
       .join(' ');
 
     const promptText = isHindi
-      ? `प्रश्न ${qNum} का ${totalQuestions}। ${currentQuestion.text}। ${optionsText}। आपका उत्तर सुन रहे हैं।`
-      : `Question ${qNum} of ${totalQuestions}. ${currentQuestion.text}. ${optionsText}. Listening for your answer.`;
+      ? `आपका उत्तर सुन रहे हैं।`
+      : `Listening for your answer.`;
 
-    speak(promptText, () => {
-      startListening();
-    });
-  }, [language, state.currentQuestionIndex, totalQuestions, currentQuestion, speak, startListening]);
+    // Chain the speech utterances to ensure no overlap and everything is fully read
+    const playPrompt = () => {
+      speak(promptText, () => {
+        startListening();
+      });
+    };
+    const playOptions = () => {
+      speak(optionsText, playPrompt);
+    };
+    const playQuestion = () => {
+      // Mark as announced so we don't repeat the start announcement on next question
+      hasAnnouncedStartRef.current = true;
+      speak(`${questionPrefix} ${questionText}`, playOptions);
+    };
+    
+    const playStart = () => {
+      if (startAnnouncement) {
+        speak(startAnnouncement, playQuestion);
+      } else {
+        playQuestion();
+      }
+    };
+
+    playStart();
+  }, [language, state.currentQuestionIndex, state.timeRemaining, totalQuestions, currentQuestion, speak, startListening]);
 
   // Initialize Speech APIs once on mount and update language when preference changes
   useEffect(() => {
@@ -433,6 +473,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
 
     if (isActive) {
       setIsActive(false);
+      setEnableVoiceCommands(false);
       isActiveRef.current = false;
       lastReadQuestionIndexRef.current = null;
       clearRestartTimer();
@@ -441,6 +482,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
       setStatus('Ready');
     } else {
       setIsActive(true);
+      setEnableVoiceCommands(true);
       isActiveRef.current = true;
       lastReadQuestionIndexRef.current = state.currentQuestionIndex;
       
@@ -451,7 +493,7 @@ export function useVoiceMode({ actions, state, currentQuestion, totalQuestions }
         readCurrentQuestion();
       });
     }
-  }, [isActive, language, speak, stopListening, readCurrentQuestion, state.currentQuestionIndex]);
+  }, [isActive, language, speak, stopListening, readCurrentQuestion, state.currentQuestionIndex, setEnableVoiceCommands]);
 
   return {
     isActive,

@@ -33,7 +33,9 @@ export function AccessibilityPanel() {
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
     autoReadQuestions, setAutoReadQuestions,
+    autoReadOptions, setAutoReadOptions,
     enableVoiceCommands, setEnableVoiceCommands,
+    voiceFeedback, setVoiceFeedback,
     voiceSpeed, setVoiceSpeed
   } = useAccessibilityStore()
 
@@ -193,6 +195,54 @@ export function AccessibilityPanel() {
                   onCheckedChange={setAutoReadQuestions}
                   aria-label="Toggle auto read questions"
                   aria-describedby="auto-read-desc"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Auto Read Options */}
+          {audioAssistance && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="auto-read-options-switch" className="text-base font-semibold">Auto Read Options</Label>
+                <p id="auto-read-options-desc" className="text-sm text-muted-foreground">
+                  Automatically read answer options after the question
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                  {autoReadOptions ? 'On' : 'Off'}
+                </span>
+                <Switch
+                  id="auto-read-options-switch"
+                  checked={autoReadOptions}
+                  onCheckedChange={setAutoReadOptions}
+                  aria-label="Toggle auto read options"
+                  aria-describedby="auto-read-options-desc"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Voice Feedback */}
+          {audioAssistance && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="voice-feedback-switch" className="text-base font-semibold">Voice Feedback</Label>
+                <p id="voice-feedback-desc" className="text-sm text-muted-foreground">
+                  Provide spoken feedback for navigation and actions
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                  {voiceFeedback ? 'On' : 'Off'}
+                </span>
+                <Switch
+                  id="voice-feedback-switch"
+                  checked={voiceFeedback}
+                  onCheckedChange={setVoiceFeedback}
+                  aria-label="Toggle voice feedback"
+                  aria-describedby="voice-feedback-desc"
                 />
               </div>
             </div>

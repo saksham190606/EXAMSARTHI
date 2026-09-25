@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2 } from 'lucide-react';
 
 import { MockExamQuestions } from '@/lib/examData';
+import { PracticeSets } from '@/lib/mockData';
 import { useExamEngine } from '@/lib/useExamEngine';
 
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ function LiveRegion() {
   );
 }
 
-export default function ExamPage() {
+export default function PracticeExamPage() {
   const [hasStarted, setHasStarted] = useState(false);
   const startBtnRef = useRef<HTMLButtonElement>(null);
   const { t } = useTranslation();
@@ -47,11 +48,11 @@ export default function ExamPage() {
       <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full p-4 md:p-8 items-center justify-center min-h-[80vh]">
         <Card className="w-full max-w-md p-6 text-center shadow-lg border-2">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold">{t('examName') || 'Exam'}</CardTitle>
+            <CardTitle className="text-2xl font-bold">{t('examName') || 'Practice Session'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <p className="text-muted-foreground">
-              Please click the button below or press Enter to begin the exam. This will also enable audio features if Voice Mode is active.
+              Please click the button below or press Enter to begin the practice session. This will also enable audio features if Voice Mode is active.
             </p>
             <Button 
               ref={startBtnRef}
@@ -61,7 +62,7 @@ export default function ExamPage() {
               onClick={() => setHasStarted(true)} 
               autoFocus
             >
-              Start Exam
+              Start Practice
             </Button>
           </CardContent>
         </Card>
@@ -69,19 +70,30 @@ export default function ExamPage() {
     );
   }
 
-  return <ExamContent />;
+  return <PracticeExamContent />;
 }
 
-function ExamContent() {
+function PracticeExamContent() {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const params = useParams();
+  const { t } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  
+  const practiceId = params?.id as string;
+  const practiceSet = PracticeSets.find(p => p.id === practiceId);
+  
+  // Memoize filtered questions so it doesn't change on every render
+  const questions = useMemo(() => {
+    if (!practiceSet) return [];
+    const filtered = MockExamQuestions.filter(q => q.subject === practiceSet.subject);
+    // Fallback to all questions if none match (shouldn't happen with our mock data, but just in case)
+    return filtered.length > 0 ? filtered : MockExamQuestions;
+  }, [practiceSet]);
 
   const { state, actions, currentQuestion } = useExamEngine(
-    MockExamQuestions,
-    1200, // 20 minutes
+    questions.length > 0 ? questions : MockExamQuestions, // safety fallback for initialization
+    (practiceSet?.duration || 20) * 60, // convert minutes to seconds
     (finalState) => {
-      // Pass the final state to the results page via sessionStorage
       if (typeof window !== 'undefined') {
         const stateToSave = {
           ...finalState,
@@ -93,7 +105,7 @@ function ExamContent() {
     }
   );
 
-  const totalQuestions = MockExamQuestions.length;
+  const totalQuestions = questions.length > 0 ? questions.length : MockExamQuestions.length;
 
   const { isActive, status, lastCommand, toggleVoiceMode } = useVoiceMode({
     actions,
@@ -101,6 +113,27 @@ function ExamContent() {
     currentQuestion,
     totalQuestions,
   });
+
+  if (!practiceSet) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center space-y-4">
+        <h1 className="text-2xl font-bold">Practice Set Not Found</h1>
+        <p className="text-muted-foreground">The practice set you are looking for does not exist.</p>
+        <Button onClick={() => router.push('/practice')}>Return to Practice</Button>
+      </div>
+    );
+  }
+
+  if (!currentQuestion) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-48 bg-muted rounded"></div>
+          <div className="h-4 w-32 bg-muted rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   const isFlagged = state.flagged.has(currentQuestion.id);
   const answeredCount = Object.keys(state.answers).length;
@@ -126,10 +159,10 @@ function ExamContent() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              {t('examName')}
+              {practiceSet.title}
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground">
-              SSC CGL Tier 1 Practice · General Competitive Pattern
+              {practiceSet.subject} · {practiceSet.difficulty}
             </p>
           </div>
 
@@ -170,7 +203,7 @@ function ExamContent() {
         <div className="lg:col-span-8 flex flex-col space-y-6 w-full">
           
           {/* Main Question Card */}
-          <Card className="border border-border bg-card shadow-xs overflow-hidden">
+          <Card className="border border-border bg-card shadow-xs">
             {/* Voice Examination Mode Assistive Panel */}
             <section aria-label="Voice examination controls">
               <VoiceExamPanel 
@@ -281,7 +314,7 @@ function ExamContent() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-4">
               <QuestionPalette 
-                questions={MockExamQuestions}
+                questions={questions}
                 currentQuestionIndex={state.currentQuestionIndex}
                 answers={state.answers}
                 flagged={state.flagged}

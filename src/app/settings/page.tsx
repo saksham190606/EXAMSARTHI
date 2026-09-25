@@ -23,6 +23,9 @@ export default function SettingsPage() {
     contrast, setContrast,
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
+    autoReadQuestions, setAutoReadQuestions,
+    autoReadOptions, setAutoReadOptions,
+    voiceFeedback, setVoiceFeedback,
     voiceSpeed, setVoiceSpeed,
     language, setLanguage
   } = useAccessibilityStore();
@@ -231,6 +234,61 @@ export default function SettingsPage() {
                 checked={audioAssistance}
                 onCheckedChange={setAudioAssistance}
                 aria-label="Toggle audio assistance"
+              />
+            </div>
+
+            {audioAssistance && (
+              <>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 mt-4">
+                  <div className="space-y-0.5 pr-4">
+                    <Label htmlFor="settings-auto-read-questions" className="text-base font-semibold cursor-pointer">
+                      Auto Read Questions
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically read questions out loud when they appear
+                    </p>
+                  </div>
+                  <Switch 
+                    id="settings-auto-read-questions"
+                    checked={autoReadQuestions}
+                    onCheckedChange={setAutoReadQuestions}
+                    aria-label="Toggle auto read questions"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 mt-4">
+                  <div className="space-y-0.5 pr-4">
+                    <Label htmlFor="settings-auto-read-options" className="text-base font-semibold cursor-pointer">
+                      Auto Read Options
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically read answer options after the question
+                    </p>
+                  </div>
+                  <Switch 
+                    id="settings-auto-read-options"
+                    checked={autoReadOptions}
+                    onCheckedChange={setAutoReadOptions}
+                    aria-label="Toggle auto read options"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 mt-4">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="settings-voice-feedback" className="text-base font-semibold cursor-pointer">
+                  {t('vfVoiceFeedbackLabel')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('vfVoiceFeedbackDesc')}
+                </p>
+              </div>
+              <Switch 
+                id="settings-voice-feedback"
+                checked={voiceFeedback}
+                onCheckedChange={setVoiceFeedback}
+                aria-label="Toggle voice feedback"
               />
             </div>
 

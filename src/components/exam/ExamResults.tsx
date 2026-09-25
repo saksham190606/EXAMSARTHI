@@ -1,11 +1,13 @@
 "use client"
 
 import React from 'react'
-import { CheckCircle2, XCircle, ArrowRight } from "lucide-react"
+import { CheckCircle2, XCircle, ArrowRight, Volume2 } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Exam } from "@/lib/mock-exam"
 import Link from 'next/link'
+import { useVoiceFeedback } from "@/hooks/useVoiceFeedback"
+import { useTranslation } from "@/lib/i18n"
 
 interface ExamResultsProps {
   exam: Exam;
@@ -23,6 +25,14 @@ export function ExamResults({ exam, answers, onRetry }: ExamResultsProps) {
 
   const percentage = Math.round((score / exam.questions.length) * 100);
 
+  const { speakFeedback } = useVoiceFeedback();
+  const { t } = useTranslation();
+
+  React.useEffect(() => {
+    speakFeedback(t('vfResultsSummary', { score, total: exam.questions.length, accuracy: percentage }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [score, exam.questions.length, percentage]);
+
   return (
     <div className="max-w-3xl mx-auto space-y-8" aria-live="polite">
       <div className="text-center space-y-4">
@@ -30,6 +40,15 @@ export function ExamResults({ exam, answers, onRetry }: ExamResultsProps) {
         <p className="text-xl text-muted-foreground">
           You scored <span className="font-bold text-foreground">{score}</span> out of <span className="font-bold text-foreground">{exam.questions.length}</span> ({percentage}%)
         </p>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => speakFeedback(t('vfResultsSummary', { score, total: exam.questions.length, accuracy: percentage }))}
+          className="gap-2"
+        >
+          <Volume2 className="h-4 w-4" aria-hidden="true" />
+          {t('vfReadResults') || "Read Results Aloud"}
+        </Button>
       </div>
 
       <div className="space-y-6">

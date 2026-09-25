@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertCircle, Send, ArrowLeft } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { useVoiceFeedback } from "@/hooks/useVoiceFeedback";
+import { useEffect } from "react";
 
 interface SubmitDialogProps {
   isOpen: boolean;
@@ -27,7 +29,15 @@ export function SubmitDialog({
   onConfirmSubmit 
 }: SubmitDialogProps) {
   const { t } = useTranslation();
+  const { speakFeedback } = useVoiceFeedback();
   const unansweredCount = totalQuestions - answeredCount;
+
+  useEffect(() => {
+    if (isOpen) {
+      speakFeedback(t('vfSubmitConfirm'));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

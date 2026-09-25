@@ -41,6 +41,7 @@ import { getPerformanceHistory } from "@/lib/personalization/history"
 import { generateRecommendations } from "@/lib/personalization/engine"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n"
+import { useVoiceFeedback } from "@/hooks/useVoiceFeedback"
 
 const SUBJECT_CATEGORIES = [
   { id: "all", label: "All Subjects" },
@@ -58,6 +59,7 @@ function getSubjectDisplayName(slug: string): string {
 function PracticeContent() {
   const searchParams = useSearchParams()
   const { t } = useTranslation()
+  const { speakFeedback: speak } = useVoiceFeedback()
 
   const urlSubject = searchParams?.get("subject") || "all"
   const urlTopic = searchParams?.get("topic") || ""
@@ -70,20 +72,12 @@ function PracticeContent() {
   const [topRecommendation, setTopRecommendation] = React.useState<Recommendation | null>(null)
   const [hasExamHistory, setHasExamHistory] = React.useState(false)
 
-  // Keep state synchronized with URL search params (e.g. from recommendation clicks)
+  // Initialize state once and update only when the search parameters actually change
   React.useEffect(() => {
-    const s = searchParams?.get("subject") || "all"
-    const t = searchParams?.get("topic") || ""
-    const d = searchParams?.get("difficulty") || "all"
-
-    setSubjectFilter(s)
-    if (t) {
-      setSearchQuery(t.replace(/-/g, " "))
-    }
-    if (d) {
-      setDifficultyFilter(d)
-    }
-  }, [searchParams])
+    setSubjectFilter(urlSubject)
+    if (urlTopic) setSearchQuery(urlTopic.replace(/-/g, " "))
+    if (urlDifficulty) setDifficultyFilter(urlDifficulty)
+  }, [urlSubject, urlTopic, urlDifficulty])
 
   // Load real personalization engine data
   React.useEffect(() => {
@@ -99,40 +93,62 @@ function PracticeContent() {
     }
   }, [])
 
-  // Filter practice sets based on search, subject, and difficulty
-  const filteredSets = PracticeSets.filter((set) => {
-    const query = searchQuery.toLowerCase().trim()
-    const matchesSearch =
-      !query ||
-      set.title.toLowerCase().includes(query) ||
-      set.subject.toLowerCase().includes(query) ||
-      set.description.toLowerCase().includes(query)
-
-    const subjectMap: Record<string, string> = {
-      quant: "quant",
-      gk: "general",
-      reasoning: "reason",
-      english: "english",
+  const handleSubjectChange = (val: string) => {
+    setSubjectFilter(val)
+    if (val !== subjectFilter) {
+      speak(`Subject set to ${getSubjectDisplayName(val)}`)
     }
-    const target = subjectMap[subjectFilter] || subjectFilter
-    const matchesSubject =
-      subjectFilter === "all" || set.subject.toLowerCase().includes(target.toLowerCase())
+  }
 
-    const matchesDifficulty =
-      difficultyFilter === "all" ||
-      set.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
+  const handleDifficultyChange = (val: string) => {
+    setDifficultyFilter(val)
+    if (val !== difficultyFilter) {
+      speak(`Difficulty set to ${val === "all" ? "All Difficulties" : val}`)
+    }
+  }
 
-    return matchesSearch && matchesSubject && matchesDifficulty
-  })
-
-  const hasActiveFilters =
-    searchQuery.trim() !== "" || subjectFilter !== "all" || difficultyFilter !== "all"
+  const handleSearchClear = () => {
+    setSearchQuery("")
+    speak("Search cleared")
+  }
 
   const handleClearAllFilters = () => {
     setSearchQuery("")
     setSubjectFilter("all")
     setDifficultyFilter("all")
+    speak("Filters cleared")
   }
+
+  // Filter practice sets based on search, subject, and difficulty
+  const filteredSets = React.useMemo(() => {
+    return PracticeSets.filter((set) => {
+      const query = searchQuery.toLowerCase().trim()
+      const matchesSearch =
+        !query ||
+        set.title.toLowerCase().includes(query) ||
+        set.subject.toLowerCase().includes(query) ||
+        set.description.toLowerCase().includes(query)
+
+      const subjectMap: Record<string, string> = {
+        quant: "quant",
+        gk: "general",
+        reasoning: "reason",
+        english: "english",
+      }
+      const target = subjectMap[subjectFilter] || subjectFilter
+      const matchesSubject =
+        subjectFilter === "all" || set.subject.toLowerCase().includes(target.toLowerCase())
+
+      const matchesDifficulty =
+        difficultyFilter === "all" ||
+        set.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
+
+      return matchesSearch && matchesSubject && matchesDifficulty
+    })
+  }, [searchQuery, subjectFilter, difficultyFilter])
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" || subjectFilter !== "all" || difficultyFilter !== "all"
 
   return (
     <div className="flex-1 space-y-10 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full">
@@ -157,6 +173,7 @@ function PracticeContent() {
             size="lg"
             className="h-11 px-6 font-medium shadow-xs"
             render={<Link href="/exam" />}
+            nativeButton={false}
           >
             <span>{t('takeMockExam')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -188,6 +205,7 @@ function PracticeContent() {
                 <Button
                   className="font-medium h-10 px-5 shadow-xs"
                   render={<Link href={topRecommendation.actionUrl} />}
+                  nativeButton={false}
                 >
                   <span>{topRecommendation.actionLabel}</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -215,6 +233,7 @@ function PracticeContent() {
                   variant="outline"
                   className="font-medium h-10 px-5 border-border"
                   render={<Link href="/exam" />}
+                  nativeButton={false}
                 >
                   <span>Start Practicing</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -271,7 +290,7 @@ function PracticeContent() {
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={handleSearchClear}
                   className="absolute right-3 top-3 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                   aria-label="Clear search input"
                 >
@@ -288,7 +307,7 @@ function PracticeContent() {
             </Label>
             <Select
               value={subjectFilter}
-              onValueChange={(val) => setSubjectFilter(val || "all")}
+              onValueChange={(val) => handleSubjectChange(val || "all")}
             >
               <SelectTrigger id="filter-subject" className="h-10 text-sm border-border bg-background">
                 <SelectValue placeholder="All Subjects" />
@@ -310,7 +329,7 @@ function PracticeContent() {
             </Label>
             <Select
               value={difficultyFilter}
-              onValueChange={(val) => setDifficultyFilter(val || "all")}
+              onValueChange={(val) => handleDifficultyChange(val || "all")}
             >
               <SelectTrigger id="filter-difficulty" className="h-10 text-sm border-border bg-background">
                 <SelectValue placeholder="All Difficulties" />
@@ -341,7 +360,7 @@ function PracticeContent() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setSubjectFilter(cat.id)}
+                  onClick={() => handleSubjectChange(cat.id)}
                   aria-pressed={isSelected}
                   className={cn(
                     "inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors border outline-none focus-visible:ring-2 focus-visible:ring-primary",
@@ -376,7 +395,7 @@ function PracticeContent() {
                 <span>Subject: {getSubjectDisplayName(subjectFilter)}</span>
                 <button
                   type="button"
-                  onClick={() => setSubjectFilter("all")}
+                  onClick={() => handleSubjectChange("all")}
                   aria-label={`Remove ${getSubjectDisplayName(subjectFilter)} filter`}
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
@@ -393,7 +412,7 @@ function PracticeContent() {
                 <span>Topic: &quot;{searchQuery}&quot;</span>
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={handleSearchClear}
                   aria-label="Remove topic search filter"
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
@@ -410,7 +429,7 @@ function PracticeContent() {
                 <span>Difficulty: {difficultyFilter}</span>
                 <button
                   type="button"
-                  onClick={() => setDifficultyFilter("all")}
+                  onClick={() => handleDifficultyChange("all")}
                   aria-label={`Remove ${difficultyFilter} difficulty filter`}
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
@@ -482,6 +501,7 @@ function PracticeContent() {
                   <Button
                     className="w-full h-11 text-base font-medium shadow-xs"
                     render={<Link href={`/practice/${practice.id}`} />}
+                    nativeButton={false}
                   >
                     <PlayCircle className="mr-2 size-5" aria-hidden="true" />
                     <span>{t('startPractice')}</span>

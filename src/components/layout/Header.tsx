@@ -7,6 +7,7 @@ import { UserCircle } from "lucide-react"
 
 import { AccessibilityPanel } from "@/components/accessibility/AccessibilityPanel"
 import { MobileNav } from "@/components/layout/MobileNav"
+import { useVoiceFeedback } from "@/hooks/useVoiceFeedback"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -21,14 +22,28 @@ import { useTranslation } from "@/lib/i18n"
 export function Header() {
   const pathname = usePathname()
   const { t, language, setLanguage } = useTranslation()
+  const { speakFeedback } = useVoiceFeedback()
+  const [prevPath, setPrevPath] = React.useState(pathname)
 
-  const navItems = [
+  const navItems = React.useMemo(() => [
     { href: "/dashboard", label: t('navDashboard') },
     { href: "/practice", label: t('navPractice') },
     { href: "/exam", label: t('navExams') },
     { href: "/results", label: t('navResults') },
     { href: "/settings", label: t('navSettings') },
-  ]
+  ], [t]);
+
+  React.useEffect(() => {
+    if (pathname !== prevPath) {
+      setPrevPath(pathname);
+      const item = navItems.find(i => i.href === pathname);
+      if (item) {
+        speakFeedback(item.label);
+      } else if (pathname === '/') {
+        speakFeedback('Home');
+      }
+    }
+  }, [pathname, prevPath, speakFeedback, navItems]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -61,7 +76,10 @@ export function Header() {
           <div className="hidden sm:block">
             <Select 
               value={language} 
-              onValueChange={(val) => setLanguage(val as Language)}
+              onValueChange={(val) => {
+                setLanguage(val as Language)
+                speakFeedback(val === 'en' ? 'Language changed to English' : 'भाषा बदलकर हिंदी कर दी गई')
+              }}
             >
               <SelectTrigger className="w-[125px]" aria-label={t('selectLanguage')}>
                 <SelectValue placeholder={t('language')} />
