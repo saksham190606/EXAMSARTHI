@@ -1,138 +1,15 @@
-import { 
-  CandidateQuestion, 
-  QuestionOption, 
-  QuestionType, 
-  UserAnswer, 
-  ExamAnswers,
-  normalizeText as safeNormalizeText,
-  isQuestionAnswered as safeIsQuestionAnswered,
-  getQuestionType as safeGetQuestionType
-} from '@/types/question';
-
-export type { UserAnswer, ExamAnswers, QuestionOption, QuestionType };
-
-export interface BaseQuestion extends CandidateQuestion {
-  id: string;
-  text: string;
-  subject: string;
-  topic?: string;
-  difficulty?: 'Beginner' | 'Intermediate' | 'Advanced' | string;
-  explanation?: string;
-}
-
-export interface SingleChoiceQuestion extends Omit<BaseQuestion, 'type'> {
-  type?: 'single-choice';
-  options: QuestionOption[];
-  correctAnswerId?: string;
-}
-
-export interface MultipleChoiceQuestion extends BaseQuestion {
-  type: 'multiple-choice';
-  options: QuestionOption[];
-  correctAnswerIds?: string[];
-}
-
-export interface TrueFalseQuestion extends BaseQuestion {
-  type: 'true-false';
-  correctAnswer?: boolean;
-  options?: QuestionOption[];
-}
-
-export interface ShortAnswerQuestion extends BaseQuestion {
-  type: 'short-answer';
-  correctAnswer?: string;
-  acceptableAnswers?: string[];
-  placeholder?: string;
-}
-
-export interface FillBlankQuestion extends BaseQuestion {
-  type: 'fill-blank';
-  correctAnswer?: string;
-  acceptableAnswers?: string[];
-  placeholder?: string;
-}
-
-export type Question =
-  | SingleChoiceQuestion
-  | MultipleChoiceQuestion
-  | TrueFalseQuestion
-  | ShortAnswerQuestion
-  | FillBlankQuestion
-  | CandidateQuestion;
-
 /**
- * Returns the effective question type with fallback to 'single-choice' for backward compatibility.
+ * EXAMSARTHI — Candidate-Safe Question Bank
+ * 
+ * Provides local candidate-safe fallback question sets with strictly ZERO answer keys.
+ * Used when offline or if remote Supabase connection is unreachable.
+ * Guaranteed to omit correctAnswerId, correctAnswerIds, correctAnswer, and acceptableAnswers.
  */
-export function getQuestionType(question: Question | CandidateQuestion): QuestionType {
-  return safeGetQuestionType(question as CandidateQuestion);
-}
 
-/**
- * Normalizes text for deterministic, case-insensitive comparison with whitespace collapsing.
- */
-export function normalizeText(text: string): string {
-  return safeNormalizeText(text);
-}
+import { CandidateQuestion } from '@/types/question';
 
-/**
- * Checks whether the user has provided a non-empty, valid answer for the question.
- */
-export function isQuestionAnswered(question: Question | CandidateQuestion, answer: UserAnswer | undefined): boolean {
-  return safeIsQuestionAnswered(question as CandidateQuestion, answer);
-}
-
-/**
- * Evaluates the user's answer against the correct answer definition.
- * Safely returns false if the question has no answer key (e.g. remote candidate-safe question).
- */
-export function evaluateAnswer(question: Question | CandidateQuestion, answer: UserAnswer | undefined): boolean {
-  if (!isQuestionAnswered(question, answer)) return false;
-  const qType = getQuestionType(question);
-
-  switch (qType) {
-    case 'single-choice': {
-      const sc = question as SingleChoiceQuestion;
-      if (!sc.correctAnswerId) return false;
-      return typeof answer === 'string' && answer === sc.correctAnswerId;
-    }
-    case 'multiple-choice': {
-      const mc = question as MultipleChoiceQuestion;
-      if (!mc.correctAnswerIds || !Array.isArray(mc.correctAnswerIds)) return false;
-      if (!Array.isArray(answer)) return false;
-      const userSet = new Set(answer);
-      const correctSet = new Set(mc.correctAnswerIds);
-      if (userSet.size !== correctSet.size) return false;
-      for (const id of userSet) {
-        if (!correctSet.has(id)) return false;
-      }
-      return true;
-    }
-    case 'true-false': {
-      const tf = question as TrueFalseQuestion;
-      if (tf.correctAnswer === undefined) return false;
-      const userBool = typeof answer === 'boolean' ? answer : answer === 'true';
-      return userBool === tf.correctAnswer;
-    }
-    case 'short-answer':
-    case 'fill-blank': {
-      const textQ = question as ShortAnswerQuestion | FillBlankQuestion;
-      if (!textQ.correctAnswer) return false;
-      if (typeof answer !== 'string') return false;
-      const normalizedUser = normalizeText(answer);
-      const acceptable = [textQ.correctAnswer, ...(textQ.acceptableAnswers || [])].map(normalizeText);
-      return acceptable.includes(normalizedUser);
-    }
-    default:
-      return false;
-  }
-}
-
-/* ==========================================================================
-   MASTER QUESTION BANK BY SUBJECT (REALISTIC COMPETITIVE EXAM STANDARDS)
-   ========================================================================== */
-
-// --- 1. QUANTITATIVE APTITUDE ---
-export const QuantitativeQuestions: Question[] = [
+// --- 1. QUANTITATIVE APTITUDE (SAFE) ---
+export const SafeQuantitativeQuestions: CandidateQuestion[] = [
   {
     id: "quant-1",
     type: "single-choice",
@@ -143,7 +20,6 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-3", text: "5% increase" },
       { id: "qo-4", text: "2% decrease" },
     ],
-    correctAnswerId: "qo-1",
     subject: "Quantitative Aptitude",
     topic: "Percentages",
     difficulty: "Intermediate",
@@ -159,7 +35,6 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-7", text: "180 metres" },
       { id: "qo-8", text: "200 metres" },
     ],
-    correctAnswerId: "qo-6",
     subject: "Quantitative Aptitude",
     topic: "Time and Distance",
     difficulty: "Beginner",
@@ -175,7 +50,6 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-11", text: "36" },
       { id: "qo-12", text: "48" },
     ],
-    correctAnswerId: "qo-12",
     subject: "Quantitative Aptitude",
     topic: "Ratio and Proportion",
     difficulty: "Intermediate",
@@ -191,7 +65,6 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-15", text: "Rs. 698" },
       { id: "qo-16", text: "Rs. 700" },
     ],
-    correctAnswerId: "qo-15",
     subject: "Quantitative Aptitude",
     topic: "Simple Interest",
     difficulty: "Advanced",
@@ -207,7 +80,6 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-19", text: "37" },
       { id: "qo-20", text: "49" },
     ],
-    correctAnswerIds: ["qo-17", "qo-19"],
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Beginner",
@@ -223,17 +95,15 @@ export const QuantitativeQuestions: Question[] = [
       { id: "qo-23", text: "Zero is an odd integer" },
       { id: "qo-24", text: "The sum of any two odd integers is always an even integer" },
     ],
-    correctAnswerIds: ["qo-21", "qo-22", "qo-24"],
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Intermediate",
-    explanation: "Product of negative integers is positive. Whole numbers include all natural numbers plus 0. Zero is an even number. Sum of two odd integers (2a+1 + 2b+1 = 2(a+b+1)) is always even.",
+    explanation: "Product of negative integers is positive. Whole numbers include all natural numbers plus 0. Zero is an even number. Sum of two odd integers is always even.",
   },
   {
     id: "quant-7",
     type: "true-false",
     text: "In standard arithmetic and real analysis, zero (0) is classified as a positive integer.",
-    correctAnswer: false,
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Beginner",
@@ -243,7 +113,6 @@ export const QuantitativeQuestions: Question[] = [
     id: "quant-8",
     type: "true-false",
     text: "In Euclidean planar geometry, the sum of all three interior angles of any triangle is always strictly equal to 180 degrees.",
-    correctAnswer: true,
     subject: "Quantitative Aptitude",
     topic: "Geometry",
     difficulty: "Beginner",
@@ -253,8 +122,6 @@ export const QuantitativeQuestions: Question[] = [
     id: "quant-9",
     type: "short-answer",
     text: "What is the square root of 625?",
-    correctAnswer: "25",
-    acceptableAnswers: ["25", "twenty five", "twenty-five"],
     placeholder: "Enter numerical value",
     subject: "Quantitative Aptitude",
     topic: "Arithmetic",
@@ -265,8 +132,6 @@ export const QuantitativeQuestions: Question[] = [
     id: "quant-10",
     type: "fill-blank",
     text: "A triangle in which all three sides are of equal length and all interior angles measure 60 degrees is called an ___ triangle.",
-    correctAnswer: "Equilateral",
-    acceptableAnswers: ["Equilateral", "equilateral triangle", "equilateral"],
     placeholder: "e.g. Equilateral",
     subject: "Quantitative Aptitude",
     topic: "Geometry",
@@ -275,8 +140,8 @@ export const QuantitativeQuestions: Question[] = [
   },
 ];
 
-// --- 2. REASONING (LOGICAL REASONING & GENERAL INTELLIGENCE) ---
-export const ReasoningQuestions: Question[] = [
+// --- 2. REASONING (SAFE) ---
+export const SafeReasoningQuestions: CandidateQuestion[] = [
   {
     id: "reason-1",
     type: "single-choice",
@@ -287,7 +152,6 @@ export const ReasoningQuestions: Question[] = [
       { id: "ro-3", text: "Cave" },
       { id: "ro-4", text: "River" },
     ],
-    correctAnswerId: "ro-2",
     subject: "Reasoning",
     topic: "Analogy",
     difficulty: "Beginner",
@@ -303,7 +167,6 @@ export const ReasoningQuestions: Question[] = [
       { id: "ro-7", text: "50" },
       { id: "ro-8", text: "52" },
     ],
-    correctAnswerId: "ro-6",
     subject: "Reasoning",
     topic: "Series",
     difficulty: "Intermediate",
@@ -319,7 +182,6 @@ export const ReasoningQuestions: Question[] = [
       { id: "ro-11", text: "His father's" },
       { id: "ro-12", text: "His nephew's" },
     ],
-    correctAnswerId: "ro-10",
     subject: "Reasoning",
     topic: "Blood Relations",
     difficulty: "Intermediate",
@@ -335,7 +197,6 @@ export const ReasoningQuestions: Question[] = [
       { id: "ro-15", text: "8251896" },
       { id: "ro-16", text: "8543261" },
     ],
-    correctAnswerId: "ro-15",
     subject: "Reasoning",
     topic: "Coding and Decoding",
     difficulty: "Beginner",
@@ -351,17 +212,15 @@ export const ReasoningQuestions: Question[] = [
       { id: "ro-19", text: "All plants are roses" },
       { id: "ro-20", text: "Some flowers are roses" },
     ],
-    correctAnswerIds: ["ro-17", "ro-18", "ro-20"],
     subject: "Reasoning",
     topic: "Syllogisms",
     difficulty: "Intermediate",
-    explanation: "By transitivity, All roses are plants. By conversion, Some plants are flowers, and Some flowers are roses. 'All plants are roses' is an invalid universal deduction.",
+    explanation: "By transitivity, All roses are plants. By conversion, Some plants are flowers, and Some flowers are roses.",
   },
   {
     id: "reason-6",
     type: "true-false",
     text: "In deductive logic: If all squares are rectangles, and all rectangles are polygons, then every square is necessarily a polygon.",
-    correctAnswer: true,
     subject: "Reasoning",
     topic: "Deductive Logic",
     difficulty: "Beginner",
@@ -371,8 +230,6 @@ export const ReasoningQuestions: Question[] = [
     id: "reason-7",
     type: "short-answer",
     text: "In a class of 40 students, Rohan's rank is 15th from the top. What is his rank from the bottom?",
-    correctAnswer: "26",
-    acceptableAnswers: ["26", "26th", "twenty six", "twenty-sixth"],
     placeholder: "Enter numerical rank",
     subject: "Reasoning",
     topic: "Ranking and Order",
@@ -383,8 +240,6 @@ export const ReasoningQuestions: Question[] = [
     id: "reason-8",
     type: "fill-blank",
     text: "Complete the alphabet letter series: A, C, F, J, ___ (Difference increments by +2, +3, +4, +5).",
-    correctAnswer: "O",
-    acceptableAnswers: ["O", "o"],
     placeholder: "Enter next letter",
     subject: "Reasoning",
     topic: "Series",
@@ -393,8 +248,8 @@ export const ReasoningQuestions: Question[] = [
   },
 ];
 
-// --- 3. ENGLISH LANGUAGE & COMPREHENSION ---
-export const EnglishQuestions: Question[] = [
+// --- 3. ENGLISH LANGUAGE (SAFE) ---
+export const SafeEnglishQuestions: CandidateQuestion[] = [
   {
     id: "eng-1",
     type: "single-choice",
@@ -405,7 +260,6 @@ export const EnglishQuestions: Question[] = [
       { id: "eo-3", text: "Rare" },
       { id: "eo-4", text: "Limited" },
     ],
-    correctAnswerId: "eo-2",
     subject: "English",
     topic: "Vocabulary",
     difficulty: "Beginner",
@@ -421,7 +275,6 @@ export const EnglishQuestions: Question[] = [
       { id: "eo-7", text: "have submitted" },
       { id: "eo-8", text: "their verification documents" },
     ],
-    correctAnswerId: "eo-7",
     subject: "English",
     topic: "Grammar",
     difficulty: "Intermediate",
@@ -437,7 +290,6 @@ export const EnglishQuestions: Question[] = [
       { id: "eo-11", text: "Accomodate" },
       { id: "eo-12", text: "Acomodate" },
     ],
-    correctAnswerId: "eo-9",
     subject: "English",
     topic: "Spelling",
     difficulty: "Advanced",
@@ -453,7 +305,6 @@ export const EnglishQuestions: Question[] = [
       { id: "eo-15", text: "Detailed" },
       { id: "eo-16", text: "Diligent" },
     ],
-    correctAnswerId: "eo-13",
     subject: "English",
     topic: "Vocabulary",
     difficulty: "Intermediate",
@@ -469,17 +320,15 @@ export const EnglishQuestions: Question[] = [
       { id: "eo-19", text: "The ship was held fast in the thick polar ice" },
       { id: "eo-20", text: "They observed a strict dawn-to-dusk fast" },
     ],
-    correctAnswerIds: ["eo-17", "eo-19"],
     subject: "English",
     topic: "Parts of Speech",
     difficulty: "Advanced",
-    explanation: "In 'ran fast' and 'held fast', 'fast' modifies verbs ('ran' and 'held') as an adverb. In 'fast runner' it is an adjective, and in 'observed a fast' it is a noun.",
+    explanation: "In 'ran fast' and 'held fast', 'fast' modifies verbs ('ran' and 'held') as an adverb.",
   },
   {
     id: "eng-6",
     type: "true-false",
     text: "In English grammar, a sentence formed in the passive voice must always contain the past participle (V3) form of the main verb.",
-    correctAnswer: true,
     subject: "English",
     topic: "Grammar",
     difficulty: "Beginner",
@@ -489,8 +338,6 @@ export const EnglishQuestions: Question[] = [
     id: "eng-7",
     type: "short-answer",
     text: "Provide the one-word substitution for: 'A person who collects or has a great love for books'.",
-    correctAnswer: "Bibliophile",
-    acceptableAnswers: ["Bibliophile", "bibliophile", "book lover"],
     placeholder: "e.g. Bibliophile",
     subject: "English",
     topic: "Vocabulary",
@@ -501,8 +348,6 @@ export const EnglishQuestions: Question[] = [
     id: "eng-8",
     type: "fill-blank",
     text: "The executive committee unanimously agreed ___ the new accessibility recommendations submitted by the panel.",
-    correctAnswer: "to",
-    acceptableAnswers: ["to", "upon", "with"],
     placeholder: "Enter preposition (e.g. to)",
     subject: "English",
     topic: "Prepositions",
@@ -511,8 +356,8 @@ export const EnglishQuestions: Question[] = [
   },
 ];
 
-// --- 4. GENERAL KNOWLEDGE (GENERAL AWARENESS & STUDIES) ---
-export const GeneralKnowledgeQuestions: Question[] = [
+// --- 4. GENERAL KNOWLEDGE (SAFE) ---
+export const SafeGKQuestions: CandidateQuestion[] = [
   {
     id: "gk-1",
     type: "single-choice",
@@ -523,7 +368,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-3", text: "Jabalpur" },
       { id: "go-4", text: "Gwalior" },
     ],
-    correctAnswerId: "go-2",
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Beginner",
@@ -539,7 +383,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-7", text: "B. R. Ambedkar" },
       { id: "go-8", text: "Sardar Vallabhbhai Patel" },
     ],
-    correctAnswerId: "go-7",
     subject: "General Knowledge",
     topic: "Polity",
     difficulty: "Beginner",
@@ -555,7 +398,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-11", text: "Saturn" },
       { id: "go-12", text: "Mars" },
     ],
-    correctAnswerId: "go-12",
     subject: "General Knowledge",
     topic: "Science",
     difficulty: "Beginner",
@@ -571,7 +413,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-15", text: "1950" },
       { id: "go-16", text: "1955" },
     ],
-    correctAnswerId: "go-13",
     subject: "General Knowledge",
     topic: "Economy",
     difficulty: "Intermediate",
@@ -587,7 +428,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-19", text: "Right to Property" },
       { id: "go-20", text: "Right against Exploitation" },
     ],
-    correctAnswerIds: ["go-17", "go-18", "go-20"],
     subject: "General Knowledge",
     topic: "Polity",
     difficulty: "Intermediate",
@@ -603,7 +443,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
       { id: "go-23", text: "Brahmaputra" },
       { id: "go-24", text: "Narmada" },
     ],
-    correctAnswerIds: ["go-21", "go-23"],
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Intermediate",
@@ -613,7 +452,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
     id: "gk-7",
     type: "true-false",
     text: "The Tropic of Cancer (23.5° N latitude) passes through exactly eight states across India.",
-    correctAnswer: true,
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Beginner",
@@ -623,18 +461,15 @@ export const GeneralKnowledgeQuestions: Question[] = [
     id: "gk-8",
     type: "true-false",
     text: "Sound waves are able to propagate through a complete physical vacuum without requiring any material medium.",
-    correctAnswer: false,
     subject: "General Knowledge",
     topic: "Science",
     difficulty: "Intermediate",
-    explanation: "False. Sound is a mechanical longitudinal wave requiring a material medium (solid, liquid, or gas) to travel.",
+    explanation: "False. Sound is a mechanical longitudinal wave requiring a material medium to travel.",
   },
   {
     id: "gk-9",
     type: "short-answer",
     text: "What is the official currency of the United Kingdom?",
-    correctAnswer: "Pound Sterling",
-    acceptableAnswers: ["Pound", "Pound Sterling", "British Pound", "GBP"],
     placeholder: "e.g. Pound Sterling",
     subject: "General Knowledge",
     topic: "Economy",
@@ -645,8 +480,6 @@ export const GeneralKnowledgeQuestions: Question[] = [
     id: "gk-10",
     type: "fill-blank",
     text: "The chemical symbol for Gold in the periodic table of elements is ___.",
-    correctAnswer: "Au",
-    acceptableAnswers: ["Au", "AU", "aurum"],
     placeholder: "Enter chemical symbol",
     subject: "General Knowledge",
     topic: "Science",
@@ -655,217 +488,177 @@ export const GeneralKnowledgeQuestions: Question[] = [
   },
 ];
 
-/* ==========================================================================
-   ALL QUESTIONS MASTER POOL
-   ========================================================================== */
-export const MasterQuestionBank: Question[] = [
-  ...QuantitativeQuestions,
-  ...ReasoningQuestions,
-  ...EnglishQuestions,
-  ...GeneralKnowledgeQuestions,
+// --- MASTER SAFE POOL & MAP ---
+export const SafeMasterQuestionBank: CandidateQuestion[] = [
+  ...SafeQuantitativeQuestions,
+  ...SafeReasoningQuestions,
+  ...SafeEnglishQuestions,
+  ...SafeGKQuestions,
 ];
 
-/**
- * Fast lookup map by question ID
- */
-export const QuestionMap: Record<string, Question> = Object.fromEntries(
-  MasterQuestionBank.map((q) => [q.id, q])
+export const SafeQuestionMap: Record<string, CandidateQuestion> = Object.fromEntries(
+  SafeMasterQuestionBank.map((q) => [q.id, q])
 );
 
-export function getQuestionsByIds(ids: string[]): Question[] {
-  return ids.map((id) => QuestionMap[id]).filter(Boolean);
-}
-
-/* ==========================================================================
-   EXAM-SPECIFIC QUESTION BANKS (CLEAN MAPPING WITH ZERO CONTAMINATION)
-   ========================================================================== */
+// --- COHORT BANKS (PRECISE REPLICA OF DATABASE COHORTS) ---
 
 /**
- * 1. SSC CGL Tier 1 Mock:
- * 4 Sections: Reasoning (3), General Knowledge (3), Quantitative Aptitude (3), English (3)
- * Demonstrates all 5 accessible question types in realistic competitive exam balance.
+ * SSC CGL Tier 1 Mock (e1) - 12 questions (3 Reasoning, 3 GK, 3 Quant, 3 English)
  */
-export const SscCglMockQuestions: Question[] = [
-  // Section 1: Reasoning
-  QuestionMap["reason-3"], // Blood Relations (Single Choice)
-  QuestionMap["reason-4"], // Coding-Decoding (Single Choice)
-  QuestionMap["reason-6"], // Deductive Logic (True/False)
-  // Section 2: General Knowledge / GA
-  QuestionMap["gk-1"],     // Capital of MP (Single Choice)
-  QuestionMap["gk-5"],     // Fundamental Rights (Multiple Choice)
-  QuestionMap["gk-10"],    // Chemical symbol for Gold (Fill in Blank)
-  // Section 3: Quantitative Aptitude
-  QuestionMap["quant-3"],  // Ratio & HCF/LCM (Single Choice)
-  QuestionMap["quant-4"],  // Simple Interest (Single Choice)
-  QuestionMap["quant-8"],  // Geometry Triangle Angle Sum (True/False)
-  // Section 4: English Language
-  QuestionMap["eng-3"],    // Spelling (Single Choice)
-  QuestionMap["eng-4"],    // Vocabulary Antonym (Single Choice)
-  QuestionMap["eng-7"],    // Bibliophile One-Word (Short Answer)
+export const SafeSscCglMockQuestions: CandidateQuestion[] = [
+  // 1. Reasoning
+  SafeQuestionMap["reason-3"],
+  SafeQuestionMap["reason-4"],
+  SafeQuestionMap["reason-7"],
+  // 2. General Knowledge
+  SafeQuestionMap["gk-2"],
+  SafeQuestionMap["gk-4"],
+  SafeQuestionMap["gk-9"],
+  // 3. Quantitative Aptitude
+  SafeQuestionMap["quant-2"],
+  SafeQuestionMap["quant-3"],
+  SafeQuestionMap["quant-9"],
+  // 4. English
+  SafeQuestionMap["eng-2"],
+  SafeQuestionMap["eng-3"],
+  SafeQuestionMap["eng-4"],
 ].filter(Boolean);
 
 /**
- * 2. Banking Prelims (IBPS PO/Clerk, SBI PO/Clerk Prelims):
- * 3 Sections: Quantitative Aptitude (4), Reasoning Ability (4), English Language (4)
- * STRICTLY NO General Knowledge / GA (GK belongs to Mains, never Prelims!).
+ * Banking Prelims Mock (e2) - 12 questions (4 Quant, 4 Reasoning, 4 English, ZERO GK)
  */
-export const BankingPrelimsMockQuestions: Question[] = [
-  // Section 1: Quantitative Aptitude
-  QuestionMap["quant-1"],  // Percentages & Expenditure (Single Choice)
-  QuestionMap["quant-2"],  // Speed, Time & Distance (Single Choice)
-  QuestionMap["quant-5"],  // Prime numbers (Multiple Choice)
-  QuestionMap["quant-9"],  // Square root calculation (Short Answer)
-  // Section 2: Reasoning Ability
-  QuestionMap["reason-1"], // Analogy (Single Choice)
-  QuestionMap["reason-2"], // Number series (Single Choice)
-  QuestionMap["reason-5"], // Syllogisms deduction (Multiple Choice)
-  QuestionMap["reason-7"], // Ranking from bottom (Short Answer)
-  // Section 3: English Language
-  QuestionMap["eng-1"],    // Vocabulary Synonym (Single Choice)
-  QuestionMap["eng-2"],    // Grammar Subject-Verb error (Single Choice)
-  QuestionMap["eng-5"],    // Adverb usage (Multiple Choice)
-  QuestionMap["eng-8"],    // Preposition agreement (Fill in Blank)
+export const SafeBankingPrelimsMockQuestions: CandidateQuestion[] = [
+  // 1. Quantitative Aptitude
+  SafeQuestionMap["quant-1"],
+  SafeQuestionMap["quant-4"],
+  SafeQuestionMap["quant-5"],
+  SafeQuestionMap["quant-7"],
+  // 2. Reasoning Ability
+  SafeQuestionMap["reason-1"],
+  SafeQuestionMap["reason-2"],
+  SafeQuestionMap["reason-5"],
+  SafeQuestionMap["reason-8"],
+  // 3. English Language
+  SafeQuestionMap["eng-1"],
+  SafeQuestionMap["eng-5"],
+  SafeQuestionMap["eng-7"],
+  SafeQuestionMap["eng-8"],
 ].filter(Boolean);
 
 /**
- * 3. UPSC CSAT Foundation (Civil Services Aptitude Test - Paper II):
- * 3 Sections: Logical Reasoning (3), Quantitative Aptitude / Basic Numeracy (3), English Comprehension (3)
- * STRICTLY NO Static General Knowledge (CSAT tests analytical aptitude & comprehension).
+ * UPSC CSAT Paper-II Mock (e3) - 9 questions (3 Reasoning, 3 Quant, 3 English, ZERO GK)
  */
-export const UpscCsatMockQuestions: Question[] = [
-  // Logical Reasoning & Analytical Ability
-  QuestionMap["reason-2"], // Number series (Single Choice)
-  QuestionMap["reason-5"], // Syllogisms deduction (Multiple Choice)
-  QuestionMap["reason-6"], // Transitive deductive logic (True/False)
-  // Basic Numeracy & Quantitative Aptitude
-  QuestionMap["quant-1"],  // Percentages & Consumption (Single Choice)
-  QuestionMap["quant-6"],  // Real number properties (Multiple Choice)
-  QuestionMap["quant-10"], // Equilateral triangle definition (Fill in Blank)
-  // Reading Comprehension & English
-  QuestionMap["eng-1"],    // Vocabulary Comprehension (Single Choice)
-  QuestionMap["eng-6"],    // Grammar passive voice rule (True/False)
-  QuestionMap["eng-8"],    // Contextual Preposition (Fill in Blank)
-].filter(Boolean);
-
-/* ==========================================================================
-   PRACTICE SET QUESTION BANKS (SUBJECT-SPECIFIC FOCUS)
-   ========================================================================== */
-
-/**
- * p1: Quantitative Aptitude (8 questions covering all 5 formats)
- */
-export const PracticeQuantQuestions: Question[] = [
-  QuestionMap["quant-1"],  // Single Choice
-  QuestionMap["quant-2"],  // Single Choice
-  QuestionMap["quant-3"],  // Single Choice
-  QuestionMap["quant-4"],  // Single Choice
-  QuestionMap["quant-5"],  // Multiple Choice
-  QuestionMap["quant-7"],  // True / False
-  QuestionMap["quant-9"],  // Short Answer
-  QuestionMap["quant-10"], // Fill in the Blank
+export const SafeUpscCsatMockQuestions: CandidateQuestion[] = [
+  // 1. Reasoning
+  SafeQuestionMap["reason-2"],
+  SafeQuestionMap["reason-5"],
+  SafeQuestionMap["reason-6"],
+  // 2. Quantitative Aptitude
+  SafeQuestionMap["quant-1"],
+  SafeQuestionMap["quant-6"],
+  SafeQuestionMap["quant-10"],
+  // 3. English
+  SafeQuestionMap["eng-1"],
+  SafeQuestionMap["eng-6"],
+  SafeQuestionMap["eng-8"],
 ].filter(Boolean);
 
 /**
- * p2: General Knowledge (8 questions covering all 5 formats)
+ * Practice Set 1 (p1): Quantitative Aptitude (8 questions)
  */
-export const PracticeGKQuestions: Question[] = [
-  QuestionMap["gk-1"],     // Single Choice
-  QuestionMap["gk-2"],     // Single Choice
-  QuestionMap["gk-3"],     // Single Choice
-  QuestionMap["gk-4"],     // Single Choice
-  QuestionMap["gk-5"],     // Multiple Choice
-  QuestionMap["gk-7"],     // True / False
-  QuestionMap["gk-9"],     // Short Answer
-  QuestionMap["gk-10"],    // Fill in the Blank
+export const SafePracticeQuantQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["quant-1"],
+  SafeQuestionMap["quant-2"],
+  SafeQuestionMap["quant-3"],
+  SafeQuestionMap["quant-4"],
+  SafeQuestionMap["quant-5"],
+  SafeQuestionMap["quant-7"],
+  SafeQuestionMap["quant-9"],
+  SafeQuestionMap["quant-10"],
 ].filter(Boolean);
 
 /**
- * p3: Reasoning (8 questions covering all 5 formats)
+ * Practice Set 2 (p2): General Knowledge (8 questions)
  */
-export const PracticeReasoningQuestions: Question[] = [
-  QuestionMap["reason-1"], // Single Choice
-  QuestionMap["reason-2"], // Single Choice
-  QuestionMap["reason-3"], // Single Choice
-  QuestionMap["reason-4"], // Single Choice
-  QuestionMap["reason-5"], // Multiple Choice
-  QuestionMap["reason-6"], // True / False
-  QuestionMap["reason-7"], // Short Answer
-  QuestionMap["reason-8"], // Fill in the Blank
+export const SafePracticeGKQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["gk-1"],
+  SafeQuestionMap["gk-2"],
+  SafeQuestionMap["gk-3"],
+  SafeQuestionMap["gk-4"],
+  SafeQuestionMap["gk-5"],
+  SafeQuestionMap["gk-7"],
+  SafeQuestionMap["gk-9"],
+  SafeQuestionMap["gk-10"],
 ].filter(Boolean);
 
 /**
- * p4: English (8 questions covering all 5 formats)
+ * Practice Set 3 (p3): Reasoning (8 questions)
  */
-export const PracticeEnglishQuestions: Question[] = [
-  QuestionMap["eng-1"],    // Single Choice
-  QuestionMap["eng-2"],    // Single Choice
-  QuestionMap["eng-3"],    // Single Choice
-  QuestionMap["eng-4"],    // Single Choice
-  QuestionMap["eng-5"],    // Multiple Choice
-  QuestionMap["eng-6"],    // True / False
-  QuestionMap["eng-7"],    // Short Answer
-  QuestionMap["eng-8"],    // Fill in the Blank
+export const SafePracticeReasoningQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["reason-1"],
+  SafeQuestionMap["reason-2"],
+  SafeQuestionMap["reason-3"],
+  SafeQuestionMap["reason-4"],
+  SafeQuestionMap["reason-5"],
+  SafeQuestionMap["reason-6"],
+  SafeQuestionMap["reason-7"],
+  SafeQuestionMap["reason-8"],
 ].filter(Boolean);
 
 /**
- * p5: Multi-Format Accessible Engine Showcase (Exactly 1 of each of the 5 question formats)
+ * Practice Set 4 (p4): English (8 questions)
  */
-export const PracticeShowcaseQuestions: Question[] = [
-  QuestionMap["quant-1"],  // 1. Single Choice
-  QuestionMap["gk-5"],     // 2. Multiple Choice
-  QuestionMap["reason-6"], // 3. True / False
-  QuestionMap["eng-7"],    // 4. Short Answer
-  QuestionMap["quant-10"], // 5. Fill in the Blank
+export const SafePracticeEnglishQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["eng-1"],
+  SafeQuestionMap["eng-2"],
+  SafeQuestionMap["eng-3"],
+  SafeQuestionMap["eng-4"],
+  SafeQuestionMap["eng-5"],
+  SafeQuestionMap["eng-6"],
+  SafeQuestionMap["eng-7"],
+  SafeQuestionMap["eng-8"],
 ].filter(Boolean);
 
-/* ==========================================================================
-   CONTEXT RESOLVER: EXAM / PRACTICE SELECTION PIPELINE
-   ========================================================================== */
+/**
+ * Practice Set 5 (p5): Multi-Format Showcase (5 questions containing all 5 formats)
+ */
+export const SafePracticeShowcaseQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["quant-1"],  // Single Choice
+  SafeQuestionMap["gk-5"],     // Multiple Choice
+  SafeQuestionMap["reason-6"], // True / False
+  SafeQuestionMap["eng-7"],    // Short Answer
+  SafeQuestionMap["quant-10"], // Fill in the Blank
+].filter(Boolean);
 
-export interface ExamContextParams {
+export interface SafeExamContextParams {
   setId?: string | null;
   examId?: string | null;
 }
 
-/**
- * Resolves the exact questions appropriate for the selected Practice Set or Mock Exam.
- * Guarantees zero category contamination and full subject/topic integrity.
- */
-export function getQuestionsForContext(params: ExamContextParams): Question[] {
+export function getSafeQuestionsForContext(params: SafeExamContextParams): CandidateQuestion[] {
   const { setId, examId } = params;
 
-  // 1. Practice Sets
   if (setId) {
     const s = setId.toLowerCase().trim();
-    if (s === "p1" || s.includes("quant")) return PracticeQuantQuestions;
-    if (s === "p2" || s.includes("gk") || s.includes("general")) return PracticeGKQuestions;
-    if (s === "p3" || s.includes("reason")) return PracticeReasoningQuestions;
-    if (s === "p4" || s.includes("english")) return PracticeEnglishQuestions;
-    if (s === "p5" || s.includes("showcase") || s.includes("multi")) return PracticeShowcaseQuestions;
+    if (s === "p1" || s.includes("quant")) return SafePracticeQuantQuestions;
+    if (s === "p2" || s.includes("gk") || s.includes("general")) return SafePracticeGKQuestions;
+    if (s === "p3" || s.includes("reason")) return SafePracticeReasoningQuestions;
+    if (s === "p4" || s.includes("english")) return SafePracticeEnglishQuestions;
+    if (s === "p5" || s.includes("showcase") || s.includes("multi")) return SafePracticeShowcaseQuestions;
   }
 
-  // 2. Mock Exams
   if (examId) {
     const e = examId.toLowerCase().trim();
-    // Banking Prelims (IBPS / SBI) -> Quant, Reasoning, English ONLY
     if (e === "e2" || e.includes("bank") || e.includes("ibps") || e.includes("sbi")) {
-      return BankingPrelimsMockQuestions;
+      return SafeBankingPrelimsMockQuestions;
     }
-    // UPSC CSAT -> Reasoning, Quant, English Comprehension ONLY
     if (e === "e3" || e.includes("csat") || e.includes("upsc")) {
-      return UpscCsatMockQuestions;
+      return SafeUpscCsatMockQuestions;
     }
-    // SSC CGL -> Reasoning, GA, Quant, English
     if (e === "e1" || e.includes("ssc") || e.includes("cgl")) {
-      return SscCglMockQuestions;
+      return SafeSscCglMockQuestions;
     }
   }
 
-  // 3. Fallback / Default: SSC CGL Comprehensive Mock
-  return SscCglMockQuestions;
+  return SafeSscCglMockQuestions;
 }
-
-/**
- * Backward compatibility export
- */
-export const MockExamQuestions: Question[] = SscCglMockQuestions;

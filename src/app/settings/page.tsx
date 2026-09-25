@@ -2,14 +2,17 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe } from 'lucide-react';
+import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAccessibilityStore, TextSize, Contrast, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/lib/i18n";
+import { useAuth } from "@/hooks/useAuth";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,10 +32,47 @@ export default function SettingsPage() {
   
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  const { user, profile, updateProfile } = useAuth();
+
+  const [fullNameInput, setFullNameInput] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (profile?.full_name) {
+      setFullNameInput(profile.full_name);
+    } else if (user?.user_metadata?.full_name) {
+      setFullNameInput(user.user_metadata.full_name);
+    }
+  }, [profile, user]);
+
+  const handleProfileSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileSuccess(null);
+    setProfileError(null);
+    setProfileSaving(true);
+
+    try {
+      const { data, error } = await updateProfile({ full_name: fullNameInput });
+      if (error) {
+        setProfileError(error.message || 'Failed to update profile.');
+      } else {
+        setProfileSuccess('Profile updated successfully.');
+        if (data?.full_name) {
+          setFullNameInput(data.full_name);
+        }
+      }
+    } catch (err: any) {
+      setProfileError(err?.message || 'An unexpected error occurred while saving profile.');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   if (!mounted) {
     return (
@@ -78,6 +118,94 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid gap-6">
+
+        {/* Candidate Profile Section */}
+        <Card className="border border-border/80 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-primary" aria-hidden="true" />
+                <CardTitle className="text-lg font-bold">Candidate Profile</CardTitle>
+              </div>
+              <Badge variant="outline" className="gap-1 font-semibold text-xs py-0.5 border-primary/30 text-primary">
+                Cloud Synchronized
+              </Badge>
+            </div>
+            <CardDescription>
+              Manage your candidate identity details synchronized with your EXAMSARTHI account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleProfileSave} className="space-y-4">
+              {profileSuccess && (
+                <Alert role="status" aria-live="polite" className="text-sm border-emerald-500/50 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <AlertTitle>Profile Updated</AlertTitle>
+                  <AlertDescription>{profileSuccess}</AlertDescription>
+                </Alert>
+              )}
+
+              {profileError && (
+                <Alert variant="destructive" role="alert" aria-live="assertive" className="text-sm">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Update Failed</AlertTitle>
+                  <AlertDescription>{profileError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="settings-candidate-name">Full Name</Label>
+                  <Input
+                    id="settings-candidate-name"
+                    name="fullName"
+                    type="text"
+                    autoComplete="name"
+                    value={fullNameInput}
+                    onChange={(e) => setFullNameInput(e.target.value)}
+                    placeholder="Candidate Name"
+                    disabled={profileSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="settings-candidate-email">Registered Email</Label>
+                  <Input
+                    id="settings-candidate-email"
+                    type="email"
+                    value={user?.email || ''}
+                    readOnly
+                    disabled
+                    className="bg-muted/50 cursor-not-allowed opacity-80"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between flex-wrap gap-3">
+                <Button 
+                  type="submit" 
+                  disabled={profileSaving}
+                  aria-busy={profileSaving}
+                  className="font-medium px-5 h-10"
+                >
+                  {profileSaving ? (
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
+                      Saving Profile...
+                    </span>
+                  ) : (
+                    'Save Profile'
+                  )}
+                </Button>
+                {profile?.updated_at && (
+                  <span className="text-xs text-muted-foreground">
+                    Last updated: {new Date(profile.updated_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
 
         {/* 1. Typography & Text Scaling */}
         <Card className="border border-border/80 shadow-sm">
@@ -293,11 +421,11 @@ export default function SettingsPage() {
 
       {/* Footer navigation */}
       <footer className="pt-6 border-t border-border flex items-center justify-between">
-        <Button variant="outline" render={<Link href="/dashboard" />}>
+        <Button variant="outline" render={<Link href="/dashboard" />} nativeButton={false}>
           <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
           <span>{t('returnToDashboard')}</span>
         </Button>
-        <Button render={<Link href="/exam" />}>
+        <Button render={<Link href="/exam" />} nativeButton={false}>
           <span>{t('startMockExam')}</span>
         </Button>
       </footer>

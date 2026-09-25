@@ -1,5 +1,5 @@
 import { ExamResults } from '@/lib/resultsUtils';
-import { Question } from '@/lib/examData';
+import { Question, ExamAnswers, isQuestionAnswered, evaluateAnswer } from '@/lib/examData';
 import { PerformanceProfile, Recommendation, SubjectPerformanceProfile, TopicMetrics } from './types';
 
 export const WEAK_THRESHOLD = 70;
@@ -9,7 +9,7 @@ export const STRONG_THRESHOLD = 80;
 export function analyzePerformance(
   result: ExamResults,
   questions: Question[],
-  rawAnswers: Record<string, string>
+  rawAnswers: ExamAnswers | Record<string, any>
 ): PerformanceProfile {
   const subjectMap = new Map<string, SubjectPerformanceProfile>();
 
@@ -30,10 +30,11 @@ export function analyzePerformance(
     const subProfile = subjectMap.get(q.subject)!;
     subProfile.totalQuestions++;
 
-    let topicProfile = subProfile.topics.find((t) => t.topic === q.topic);
+    const topicName = q.topic || 'General';
+    let topicProfile = subProfile.topics.find((t) => t.topic === topicName);
     if (!topicProfile) {
       topicProfile = {
-        topic: q.topic,
+        topic: topicName,
         totalQuestions: 0,
         attempted: 0,
         correct: 0,
@@ -44,13 +45,13 @@ export function analyzePerformance(
     }
     topicProfile.totalQuestions++;
 
-    // Calculate answers
+    // Calculate answers using universal evaluator
     const answer = rawAnswers[q.id];
-    if (answer) {
+    if (isQuestionAnswered(q, answer)) {
       subProfile.attempted++;
       topicProfile.attempted++;
 
-      if (answer === q.correctAnswerId) {
+      if (evaluateAnswer(q, answer)) {
         subProfile.correct++;
         topicProfile.correct++;
       } else {

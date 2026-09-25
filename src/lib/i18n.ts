@@ -52,6 +52,7 @@ export const translations = {
     statusListening: 'Listening...',
     statusProcessing: 'Processing...',
     statusSpeaking: 'Speaking...',
+    statusRequestingPermission: 'Allow microphone access...',
     statusReady: 'Ready',
     statusError: 'Voice Error',
     statusOff: 'OFF',
@@ -63,9 +64,15 @@ export const translations = {
     voiceNavigateLabel: 'Navigate:',
     voiceAudioLabel: 'Audio:',
     voiceTimeSubmitLabel: 'Time & Submit:',
+    voiceFlagLabel: 'Flag:',
+    voicePrivacyInactive: 'Voice recognition is inactive until you enable Voice Mode and grant microphone permission.',
+    voicePrivacyActive: 'Voice recognition is currently active.',
+    voiceMicDeniedError: 'Microphone permission denied. Please allow microphone access in your browser settings to use Voice Mode.',
 
     // Spoken feedback strings
     voiceEnabledPrompt: 'Voice Mode enabled. Question {number} of {total}. {text}. {options}. Listening for your answer.',
+    voiceModeEnabledAnnouncement: 'Voice mode enabled.',
+    voiceModeDisabledAnnouncement: 'Voice mode disabled.',
     voiceQuestionPrompt: 'Question {number} of {total}. {text}. {options}. Listening for your answer.',
     voiceOptionSelected: 'Option {letter} selected.',
     voiceOptionUnavailable: 'That option is not available.',
@@ -79,6 +86,12 @@ export const translations = {
     voiceExamSubmitted: 'Exam submitted.',
     voiceMicDenied: 'Microphone permission denied. You can continue using keyboard controls.',
     voiceUnknownCommand: 'Command not recognized. Please say Option A, B, C, D, Next, or Repeat.',
+    voiceUnknownCommandShort: "I didn't understand that command.",
+    voiceExamAlreadyInProgress: 'The exam is already in progress.',
+    voiceSelectExamFirst: 'Please select an exam first.',
+    voiceQuestionFlagged: 'Question flagged for review.',
+    voiceFlagRemoved: 'Review flag removed.',
+    voiceListeningPrompt: 'Listening.',
 
     // Dashboard Page
     welcomeBack: 'Welcome back',
@@ -219,6 +232,7 @@ export const translations = {
     statusListening: 'सुन रहा है...',
     statusProcessing: 'प्रक्रिया जारी...',
     statusSpeaking: 'बोल रहा है...',
+    statusRequestingPermission: 'माइक्रोफ़ोन अनुमति दें...',
     statusReady: 'तैयार',
     statusError: 'आवाज त्रुटि',
     statusOff: 'बंद',
@@ -230,9 +244,15 @@ export const translations = {
     voiceNavigateLabel: 'नेविगेट:',
     voiceAudioLabel: 'ऑडियो:',
     voiceTimeSubmitLabel: 'समय व सबमिट:',
+    voiceFlagLabel: 'चिह्नित:',
+    voicePrivacyInactive: 'वॉइस पहचान तब तक निष्क्रिय रहती है जब तक आप वॉइस मोड चालू करके माइक्रोफ़ोन की अनुमति नहीं देते।',
+    voicePrivacyActive: 'वॉइस पहचान वर्तमान में सक्रिय है।',
+    voiceMicDeniedError: 'माइक्रोफ़ोन अनुमति अस्वीकृत। वॉइस मोड का उपयोग करने के लिए कृपया ब्राउज़र सेटिंग्स में माइक्रोफ़ोन अनुमति दें।',
 
     // Spoken feedback strings
     voiceEnabledPrompt: 'आवाज मोड सक्षम किया गया। प्रश्न संख्या {number} का {total}। {text}। {options}। आपका उत्तर सुन रहे हैं।',
+    voiceModeEnabledAnnouncement: 'वॉइस मोड सक्षम किया गया।',
+    voiceModeDisabledAnnouncement: 'वॉइस मोड बंद किया गया।',
     voiceQuestionPrompt: 'प्रश्न संख्या {number} का {total}। {text}। {options}। आपका उत्तर सुन रहे हैं।',
     voiceOptionSelected: 'विकल्प {letter} चुना गया।',
     voiceOptionUnavailable: 'वह विकल्प उपलब्ध नहीं है।',
@@ -246,6 +266,12 @@ export const translations = {
     voiceExamSubmitted: 'परीक्षा सबमिट कर दी गई है।',
     voiceMicDenied: 'माइक्रोफोन की अनुमति अस्वीकार कर दी गई। आप कीबोर्ड का उपयोग कर सकते हैं।',
     voiceUnknownCommand: 'कमांड समझ नहीं आया। कृपया विकल्प ए, बी, सी, डी या अगला कहें।',
+    voiceUnknownCommandShort: 'मैं इस कमांड को समझ नहीं पाया।',
+    voiceExamAlreadyInProgress: 'परीक्षा पहले से चल रही है।',
+    voiceSelectExamFirst: 'कृपया पहले एक परीक्षा चुनें।',
+    voiceQuestionFlagged: 'प्रश्न समीक्षा के लिए चिह्नित किया गया।',
+    voiceFlagRemoved: 'समीक्षा चिह्न हटा दिया गया।',
+    voiceListeningPrompt: 'सुन रहा हूँ।',
 
     // Dashboard Page
     welcomeBack: 'वापसी पर स्वागत है',

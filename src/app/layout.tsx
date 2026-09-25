@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AccessibilityProvider } from "@/components/providers/AccessibilityProvider";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Header } from "@/components/layout/Header";
 
 const geistSans = Geist({
@@ -46,12 +47,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AccessibilityProvider>
-            <Header />
-            <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
-              {children}
-            </main>
-          </AccessibilityProvider>
+          <AuthProvider>
+            <AccessibilityProvider>
+              <Header />
+              <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
+                {children}
+              </main>
+            </AccessibilityProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

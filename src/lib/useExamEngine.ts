@@ -1,12 +1,15 @@
 import { useState, useCallback } from 'react';
-import { Question } from './examData';
+import { CandidateQuestion, UserAnswer, ExamAnswers } from '@/types/question';
 
 export interface ExamState {
   currentQuestionIndex: number;
-  answers: Record<string, string>; // questionId -> optionId
+  answers: ExamAnswers; // questionId -> UserAnswer (string | string[] | boolean)
   flagged: Set<string>; // Set of flagged questionIds
   timeRemaining: number; // in seconds
   isSubmitted: boolean;
+  setId?: string;
+  examId?: string;
+  isRemote?: boolean;
 }
 
 // Voice abstraction actions interface
@@ -14,6 +17,8 @@ export interface ExamActions {
   readQuestion: (questionId: string) => void;
   readOptions: (questionId: string) => void;
   selectOption: (questionId: string, optionId: string) => void;
+  setAnswer: (questionId: string, answer: UserAnswer) => void;
+  toggleOption: (questionId: string, optionId: string) => void;
   nextQuestion: () => void;
   previousQuestion: () => void;
   repeatQuestion: () => void;
@@ -21,12 +26,16 @@ export interface ExamActions {
 }
 
 export function useExamEngine(
-  questions: Question[],
+  questions: CandidateQuestion[],
   initialDurationSeconds: number,
-  onExamComplete: (finalState: ExamState) => void
+  onExamComplete: (finalState: ExamState) => void,
+  initialQuestionIndex = 0,
+  setId?: string,
+  examId?: string,
+  isRemote = true
 ) {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialQuestionIndex);
+  const [answers, setAnswers] = useState<ExamAnswers>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
   const [timeRemaining, setTimeRemaining] = useState(initialDurationSeconds);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -43,9 +52,30 @@ export function useExamEngine(
     });
   }, []);
 
+  const setAnswer = useCallback((questionId: string, answer: UserAnswer) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answer }));
+    announceToScreenReader("Answer updated.");
+  }, []);
+
+  // Backward-compatible single option selector
   const selectAnswer = useCallback((questionId: string, optionId: string) => {
-    setAnswers(prev => ({ ...prev, [questionId]: optionId }));
-    announceToScreenReader("Option selected.");
+    setAnswer(questionId, optionId);
+  }, [setAnswer]);
+
+  // Multiple-choice option toggler
+  const toggleOption = useCallback((questionId: string, optionId: string) => {
+    setAnswers(prev => {
+      const current = prev[questionId];
+      const arr = Array.isArray(current) ? [...current] : [];
+      const idx = arr.indexOf(optionId);
+      if (idx >= 0) {
+        arr.splice(idx, 1);
+      } else {
+        arr.push(optionId);
+      }
+      return { ...prev, [questionId]: arr };
+    });
+    announceToScreenReader("Option selection updated.");
   }, []);
 
   const goToNext = useCallback(() => {
@@ -76,9 +106,12 @@ export function useExamEngine(
       answers,
       flagged,
       timeRemaining,
-      isSubmitted: true
+      isSubmitted: true,
+      setId,
+      examId,
+      isRemote
     });
-  }, [answers, currentQuestionIndex, flagged, onExamComplete, timeRemaining]);
+  }, [answers, currentQuestionIndex, flagged, onExamComplete, timeRemaining, setId, examId, isRemote]);
 
   const tickTimer = useCallback(() => {
     if (isSubmitted) return;
@@ -97,6 +130,8 @@ export function useExamEngine(
     readQuestion: (id) => console.log("Voice: Read question", id),
     readOptions: (id) => console.log("Voice: Read options", id),
     selectOption: (qId, oId) => selectAnswer(qId, oId),
+    setAnswer: (qId, ans) => setAnswer(qId, ans),
+    toggleOption: (qId, oId) => toggleOption(qId, oId),
     nextQuestion: goToNext,
     previousQuestion: goToPrevious,
     repeatQuestion: () => console.log("Voice: Repeating current question"),
@@ -114,6 +149,8 @@ export function useExamEngine(
     actions: {
       toggleFlag,
       selectAnswer,
+      setAnswer,
+      toggleOption,
       goToNext,
       goToPrevious,
       goToQuestion,
@@ -131,7 +168,7 @@ export function announceToScreenReader(message: string) {
   if (liveRegion) {
     liveRegion.textContent = message;
     
-    // Clear it out after a short delay so the same message can be announced again if needed
+    // Clear out after a short delay so the same message can be re-announced
     setTimeout(() => {
       if (liveRegion.textContent === message) {
         liveRegion.textContent = "";

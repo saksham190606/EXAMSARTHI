@@ -3,7 +3,8 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu } from "lucide-react"
+import { Menu, LogIn, LogOut } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -15,11 +16,15 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { useTranslation } from "@/lib/i18n"
+import { useAuth } from "@/hooks/useAuth"
 
 export function MobileNav() {
   const [open, setOpen] = React.useState(false)
   const pathname = usePathname()
+  const router = useRouter()
   const { t } = useTranslation()
+  const { user, profile, signOut } = useAuth()
+  const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email
 
   const navItems = [
     { href: "/dashboard", label: t('navDashboard') },
@@ -28,6 +33,13 @@ export function MobileNav() {
     { href: "/results", label: t('navResults') },
     { href: "/settings", label: t('navSettings') },
   ]
+
+  const handleSignOut = async () => {
+    setOpen(false)
+    await signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -54,6 +66,34 @@ export function MobileNav() {
               {item.label}
             </Link>
           ))}
+
+          <div className="border-t border-border/50 pt-4 mt-2">
+            {user ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground truncate px-2">
+                  Candidate: <strong className="text-foreground">{candidateName}</strong>
+                </p>
+                <p className="text-[11px] text-muted-foreground/80 truncate px-2 -mt-1">
+                  {user.email}
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={handleSignOut}
+                  className="w-full justify-start gap-2 h-11 text-base font-medium"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Link href="/login" onClick={() => setOpen(false)}>
+                <Button className="w-full justify-start gap-2 h-11 text-base font-medium">
+                  <LogIn className="h-5 w-5" />
+                  Log In / Sign Up
+                </Button>
+              </Link>
+            )}
+          </div>
         </nav>
       </SheetContent>
     </Sheet>

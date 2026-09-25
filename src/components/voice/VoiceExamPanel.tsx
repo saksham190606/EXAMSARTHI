@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   Radio,
   Loader2,
+  ShieldCheck,
+  BookmarkCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,10 +20,19 @@ interface VoiceExamPanelProps {
   isActive: boolean;
   status: VoiceStatus;
   lastCommand: string | null;
+  lastActionFeedback?: string | null;
+  errorMessage?: string | null;
   onToggle: () => void;
 }
 
-export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: VoiceExamPanelProps) {
+export function VoiceExamPanel({ 
+  isActive, 
+  status, 
+  lastCommand, 
+  lastActionFeedback,
+  errorMessage, 
+  onToggle 
+}: VoiceExamPanelProps) {
   const { t, language } = useTranslation();
   const isHindi = language === 'hi';
 
@@ -44,6 +55,15 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
   }
 
   const renderStatusBadge = () => {
+    if (status === 'RequestingPermission') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+          <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+          <span>{t('statusRequestingPermission')}</span>
+        </span>
+      );
+    }
+
     if (!isActive) {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-muted text-muted-foreground border border-border">
@@ -106,14 +126,27 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
               variant={isActive ? "default" : "outline"} 
               size="sm"
               onClick={onToggle}
+              disabled={status === 'RequestingPermission'}
               aria-pressed={isActive}
               className={cn(
                 "h-9 px-3.5 font-medium gap-2 transition-all",
                 isActive ? "shadow-2xs" : "border-border"
               )}
             >
-              {isActive ? <Mic className="size-4" aria-hidden="true" /> : <MicOff className="size-4" aria-hidden="true" />}
-              <span>{isActive ? t('voiceModeActive') : t('enableVoiceMode')}</span>
+              {status === 'RequestingPermission' ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : isActive ? (
+                <Mic className="size-4" aria-hidden="true" />
+              ) : (
+                <MicOff className="size-4" aria-hidden="true" />
+              )}
+              <span>
+                {status === 'RequestingPermission'
+                  ? t('statusRequestingPermission')
+                  : isActive
+                  ? t('voiceModeActive')
+                  : t('enableVoiceMode')}
+              </span>
             </Button>
             
             <div className="flex items-center gap-2" aria-live="polite">
@@ -122,12 +155,47 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
           </div>
 
           {/* Last command feedback */}
-          {isActive && lastCommand && (
-            <div className="text-xs text-muted-foreground font-mono bg-muted/50 px-2.5 py-1 rounded border max-w-full sm:max-w-xs truncate">
-              <span className="font-semibold font-sans text-foreground mr-1">{t('lastCommand')}</span>
-              &quot;{lastCommand}&quot;
+          {isActive && (lastActionFeedback || lastCommand) && (
+            <div 
+              aria-live="polite"
+              className="text-xs font-mono bg-muted/60 px-3 py-1.5 rounded border max-w-full sm:max-w-xs truncate flex items-center gap-1.5"
+            >
+              {lastActionFeedback ? (
+                <span className="font-semibold font-sans text-primary flex items-center gap-1 truncate">
+                  {lastActionFeedback}
+                </span>
+              ) : (
+                <>
+                  <span className="font-semibold font-sans text-foreground mr-1 shrink-0">{t('lastCommand')}</span>
+                  <span className="text-muted-foreground truncate">&quot;{lastCommand}&quot;</span>
+                </>
+              )}
             </div>
           )}
+        </div>
+
+        {/* Error notification banner if permission was denied or microphone failed */}
+        {(status === 'Error' || errorMessage) && (
+          <div 
+            role="alert" 
+            className="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive"
+          >
+            <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="space-y-0.5">
+              <p className="font-semibold text-foreground">
+                {t('statusError')}
+              </p>
+              <p className="text-muted-foreground">
+                {errorMessage || t('voiceMicDeniedError')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Privacy & Accessibility Description Note */}
+        <div className="flex items-center gap-2 text-2xs text-muted-foreground pt-1">
+          <ShieldCheck className="size-3.5 text-primary/70 shrink-0" aria-hidden="true" />
+          <span>{isActive ? t('voicePrivacyActive') : t('voicePrivacyInactive')}</span>
         </div>
 
         {/* Supported Commands Guide */}
@@ -138,9 +206,6 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
             </span>
             <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
               <span className="mr-1">{t('voiceSelectLabel')}</span>
-              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"विकल्प ए" / "1"' : '"Option A" / "1"'}
-              </kbd>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
                 {isHindi ? '"विकल्प बी" / "2"' : '"Option B" / "2"'}
               </kbd>
@@ -155,18 +220,23 @@ export function VoiceExamPanel({ isActive, status, lastCommand, onToggle }: Voic
               <span className="mx-1">·</span>
               <span className="mr-1">{t('voiceAudioLabel')}</span>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"प्रश्न पढ़ो"' : '"Read Question"'}
+                {isHindi ? '"सवाल पढ़ो"' : '"Read Question"'}
               </kbd>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"दोहराओ"' : '"Repeat"'}
+                {isHindi ? '"सब पढ़ो"' : '"Read Everything"'}
+              </kbd>
+              <span className="mx-1">·</span>
+              <span className="mr-1">{t('voiceFlagLabel')}</span>
+              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+                {isHindi ? '"चिन्हित करो"' : '"Flag Question"'}
               </kbd>
               <span className="mx-1">·</span>
               <span className="mr-1">{t('voiceTimeSubmitLabel')}</span>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"समय"' : '"How much time is left?"'}
+                {isHindi ? '"समय"' : '"Time left"'}
               </kbd>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
-                {isHindi ? '"सबमिट करो"' : '"Submit Exam"'}
+                {isHindi ? '"परीक्षा जमा करो"' : '"Submit Exam"'}
               </kbd>
             </div>
           </div>

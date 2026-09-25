@@ -48,6 +48,7 @@ const SUBJECT_CATEGORIES = [
   { id: "reasoning", label: "Reasoning" },
   { id: "english", label: "English" },
   { id: "gk", label: "General Knowledge" },
+  { id: "showcase", label: "Multi-Format Showcase" },
 ]
 
 function getSubjectDisplayName(slug: string): string {
@@ -113,6 +114,7 @@ function PracticeContent() {
       gk: "general",
       reasoning: "reason",
       english: "english",
+      showcase: "multi",
     }
     const target = subjectMap[subjectFilter] || subjectFilter
     const matchesSubject =
@@ -157,6 +159,7 @@ function PracticeContent() {
             size="lg"
             className="h-11 px-6 font-medium shadow-xs"
             render={<Link href="/exam" />}
+            nativeButton={false}
           >
             <span>{t('takeMockExam')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -188,6 +191,7 @@ function PracticeContent() {
                 <Button
                   className="font-medium h-10 px-5 shadow-xs"
                   render={<Link href={topRecommendation.actionUrl} />}
+                  nativeButton={false}
                 >
                   <span>{topRecommendation.actionLabel}</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -215,6 +219,7 @@ function PracticeContent() {
                   variant="outline"
                   className="font-medium h-10 px-5 border-border"
                   render={<Link href="/exam" />}
+                  nativeButton={false}
                 >
                   <span>Start Practicing</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -481,7 +486,8 @@ function PracticeContent() {
                 <CardFooter className="pt-3">
                   <Button
                     className="w-full h-11 text-base font-medium shadow-xs"
-                    render={<Link href={`/practice/${practice.id}`} />}
+                    render={<Link href={`/exam?set=${practice.id}`} />}
+                    nativeButton={false}
                   >
                     <PlayCircle className="mr-2 size-5" aria-hidden="true" />
                     <span>{t('startPractice')}</span>

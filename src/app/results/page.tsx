@@ -16,7 +16,9 @@ import {
   Sparkles,
   TrendingUp,
   History,
-  Award
+  Award,
+  ShieldCheck,
+  WifiOff
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -24,7 +26,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
-import { MockExamQuestions } from '@/lib/examData';
+import { getQuestionsForContext, getQuestionsByIds, MockExamQuestions } from '@/lib/examData';
+import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
@@ -65,10 +68,10 @@ export default function ResultsPage() {
       } else {
         // Safe fallback for direct navigation
         setFinalState({
-          currentQuestionIndex: 14,
-          answers: { "q1": "o2", "q2": "o3", "q3": "o1" },
+          currentQuestionIndex: 11,
+          answers: { "quant-1": "qo-1", "reason-1": "ro-2", "eng-1": "eo-2" },
           flagged: new Set(),
-          timeRemaining: 1200,
+          timeRemaining: 900,
           isSubmitted: true,
         });
       }
@@ -83,11 +86,20 @@ export default function ResultsPage() {
       flagged: new Set(finalState.flagged || [])
     };
     
-    const calculated = calculateResults(MockExamQuestions, stateToProcess, 1200);
+    // Resolve questions specifically matching this submitted exam
+    let examQuestions = MockExamQuestions;
+    if ((finalState as any).questionIds && Array.isArray((finalState as any).questionIds)) {
+      const fromIds = getQuestionsByIds((finalState as any).questionIds);
+      if (fromIds.length > 0) examQuestions = fromIds;
+    } else if (finalState.setId || (finalState as any).examId) {
+      examQuestions = getQuestionsForContext({ setId: finalState.setId, examId: (finalState as any).examId });
+    }
+
+    const calculated = calculateResults(examQuestions, stateToProcess, 900);
     setResults(calculated);
 
     // Personalization & History Pipeline
-    const newProfile = analyzePerformance(calculated, MockExamQuestions, stateToProcess.answers);
+    const newProfile = analyzePerformance(calculated, examQuestions, stateToProcess.answers);
     setProfile(newProfile);
 
     const history = getPerformanceHistory();
@@ -172,6 +184,15 @@ export default function ResultsPage() {
     ? recommendations[0].actionUrl
     : '/practice';
 
+  const activePracticeSet = finalState?.setId ? PracticeSets.find(p => p.id === finalState.setId) : null;
+  const activeExam = (finalState as any)?.examId 
+    ? AvailableExams.find(e => 
+        e.id === (finalState as any).examId || 
+        e.title.toLowerCase().replace(/\s+/g, '-').includes(String((finalState as any).examId).toLowerCase())
+      ) 
+    : null;
+  const activeTitle = activePracticeSet?.title || activeExam?.title || t('examName');
+
   return (
     <div className="min-h-screen bg-background text-foreground py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8">
       
@@ -212,9 +233,55 @@ export default function ResultsPage() {
           {t('examinationResults')}
         </h1>
         <p className="text-base text-muted-foreground font-medium">
-          {t('examName')}
+          {activeTitle}
         </p>
       </header>
+
+      {/* SECURITY & EVALUATION ARCHITECTURE BANNER (PHASE 7E-3) */}
+      {(finalState as any)?.isRemote !== false ? (
+        <div 
+          className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-foreground flex items-start gap-3 shadow-xs"
+          role="status"
+          aria-label="Remote question security status"
+        >
+          <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                Remote Secure Mode — Candidate-Safe Architecture (Phase 7E-3)
+              </span>
+              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-emerald-600 border-emerald-500/30">
+                Answer Keys Protected
+              </Badge>
+            </div>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Questions were securely retrieved from Supabase candidate-safe views (<code className="text-primary font-mono text-xs">exam_active_questions</code>) with zero browser answer keys. 
+              Active session responses recorded safely. Official immutable server-side evaluation and persistence will be finalized in <strong>Phase 7E-4</strong>.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div 
+          className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 text-foreground flex items-start gap-3 shadow-xs"
+          role="status"
+          aria-label="Local fallback status"
+        >
+          <WifiOff className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-amber-700 dark:text-amber-300">
+                Local Fallback / Demo Mode
+              </span>
+              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-amber-600 border-amber-500/30">
+                Offline Session
+              </Badge>
+            </div>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Session operated in offline safe fallback mode. Evaluated locally against candidate practice test sets.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* SECTION B — OVERALL PERFORMANCE */}
       <section aria-labelledby="overall-performance-heading" className="space-y-4">
@@ -374,6 +441,7 @@ export default function ResultsPage() {
                     variant="outline" 
                     size="sm" 
                     render={<Link href={item.actionUrl} />} 
+                    nativeButton={false}
                     className="w-full justify-between"
                   >
                     <span>Practice Topic</span>
@@ -400,6 +468,7 @@ export default function ResultsPage() {
               <Button 
                 variant="outline" 
                 render={<Link href="/practice" />}
+                nativeButton={false}
                 className="shrink-0"
               >
                 Browse Practice Topics
@@ -473,6 +542,7 @@ export default function ResultsPage() {
                   <CardContent className="pt-2">
                     <Button 
                       render={<Link href={rec.actionUrl} />} 
+                      nativeButton={false}
                       className="w-full sm:w-auto gap-2"
                     >
                       <span>{rec.actionLabel}</span>
@@ -497,7 +567,7 @@ export default function ResultsPage() {
                   Complete more practice sessions to unlock personalized recommendations.
                 </p>
               </div>
-              <Button render={<Link href="/exam" />} className="shrink-0">
+              <Button render={<Link href="/exam" />} nativeButton={false} className="shrink-0">
                 Take a Mock Exam
               </Button>
             </CardContent>
@@ -579,6 +649,7 @@ export default function ResultsPage() {
         <Button 
           size="lg" 
           render={<Link href={primaryRecommendationUrl} />}
+          nativeButton={false}
           className="gap-2 font-semibold"
         >
           <Target className="h-4 w-4" aria-hidden="true" />
@@ -590,6 +661,7 @@ export default function ResultsPage() {
             variant="outline" 
             size="lg" 
             render={<Link href="/dashboard" />}
+            nativeButton={false}
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -599,7 +671,8 @@ export default function ResultsPage() {
           <Button 
             variant="secondary" 
             size="lg" 
-            render={<Link href="/exam" />}
+            render={<Link href={activePracticeSet ? `/exam?set=${activePracticeSet.id}` : activeExam ? `/exam?exam=${activeExam.id}` : "/exam"} />}
+            nativeButton={false}
             className="gap-2"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

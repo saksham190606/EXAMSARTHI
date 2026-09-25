@@ -1,12 +1,12 @@
 import React from 'react';
-import { Question } from '@/lib/examData';
+import { CandidateQuestion, ExamAnswers, isQuestionAnswered } from '@/types/question';
 import { Button } from '@/components/ui/button';
 import { Flag, Check } from 'lucide-react';
 
 interface QuestionPaletteProps {
-  questions: Question[];
+  questions: CandidateQuestion[];
   currentQuestionIndex: number;
-  answers: Record<string, string>;
+  answers: ExamAnswers | Record<string, any>;
   flagged: Set<string>;
   goToQuestion: (index: number) => void;
 }
@@ -29,7 +29,7 @@ export function QuestionPalette({
       >
         {questions.map((q, index) => {
           const isCurrent = currentQuestionIndex === index;
-          const isAnswered = !!answers[q.id];
+          const isAnswered = isQuestionAnswered(q, answers[q.id]);
           const isFlagged = flagged.has(q.id);
           
           let stateDescription = "unanswered";

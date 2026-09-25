@@ -1,13 +1,17 @@
 "use client"
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2, ShieldCheck, WifiOff } from 'lucide-react';
 
-import { MockExamQuestions } from '@/lib/examData';
+import { CandidateQuestion, isQuestionAnswered } from '@/types/question';
+import { resolveCandidateQuestions } from '@/lib/api/examRepository';
+import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
+import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { useExamEngine } from '@/lib/useExamEngine';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { ExamTimer } from '@/components/exam/ExamTimer';
@@ -31,39 +35,75 @@ function LiveRegion() {
   );
 }
 
-export default function ExamPage() {
+interface ActiveExamSessionProps {
+  questions: CandidateQuestion[];
+  activeConfig: any;
+  setId: string | null;
+  examId: string | null;
+  isRemote: boolean;
+}
+
+function ActiveExamSession({
+  questions,
+  activeConfig,
+  setId,
+  examId,
+  isRemote
+}: ActiveExamSessionProps) {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const examDuration = activeConfig ? activeConfig.duration * 60 : 900;
+  const { t } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
 
   const { state, actions, currentQuestion } = useExamEngine(
-    MockExamQuestions,
-    1200, // 20 minutes
+    questions,
+    examDuration,
     (finalState) => {
       // Pass the final state to the results page via sessionStorage
       if (typeof window !== 'undefined') {
         const stateToSave = {
           ...finalState,
-          flagged: Array.from(finalState.flagged)
+          flagged: Array.from(finalState.flagged),
+          setId: setId || undefined,
+          examId: examId || undefined,
+          isRemote,
+          questionIds: questions.map(q => q.id)
         };
         sessionStorage.setItem('examResultState', JSON.stringify(stateToSave));
       }
       router.push('/results');
-    }
+    },
+    0,
+    setId || undefined,
+    examId || undefined,
+    isRemote
   );
 
-  const totalQuestions = MockExamQuestions.length;
+  const totalQuestions = questions.length;
 
-  const { isActive, status, lastCommand, toggleVoiceMode } = useVoiceMode({
+  const { isActive, status, lastCommand, lastActionFeedback, errorMessage, toggleVoiceMode } = useVoiceMode({
     actions,
     state,
     currentQuestion,
     totalQuestions,
+    questions,
+    onOpenSubmitDialog: () => setIsSubmitDialogOpen(true),
+    onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
   });
 
-  const isFlagged = state.flagged.has(currentQuestion.id);
-  const answeredCount = Object.keys(state.answers).length;
-  const progressPercent = Math.round(((state.currentQuestionIndex + 1) / totalQuestions) * 100);
+  const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
+  const answeredCount = questions.filter(q => isQuestionAnswered(q, state.answers[q.id])).length;
+  const progressPercent = totalQuestions > 0 
+    ? Math.round(((state.currentQuestionIndex + 1) / totalQuestions) * 100) 
+    : 0;
+
+  if (!currentQuestion) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-medium">
+        Loading question...
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6">
@@ -84,11 +124,37 @@ export default function ExamPage() {
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              {t('examName')}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+                {activeConfig ? activeConfig.title : t('examName')}
+              </h1>
+              {activeConfig && (
+                <Badge variant="outline" className="text-xs font-semibold">
+                  {activeConfig.subject}
+                </Badge>
+              )}
+              {isRemote ? (
+                <Badge 
+                  variant="outline" 
+                  className="text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 flex items-center gap-1"
+                >
+                  <ShieldCheck className="size-3" aria-hidden="true" />
+                  <span>Secure Remote Engine</span>
+                </Badge>
+              ) : (
+                <Badge 
+                  variant="outline" 
+                  className="text-xs font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 flex items-center gap-1"
+                >
+                  <WifiOff className="size-3" aria-hidden="true" />
+                  <span>Local Safe Fallback</span>
+                </Badge>
+              )}
+            </div>
             <p className="text-xs md:text-sm text-muted-foreground">
-              SSC CGL Tier 1 Practice · General Competitive Pattern
+              {activeConfig
+                ? `${activeConfig.description} · ${setId ? 'Practice Mode' : 'Full Exam Simulation'} (${activeConfig.difficulty})`
+                : 'SSC CGL Tier 1 Practice · General Competitive Pattern'}
             </p>
           </div>
 
@@ -135,8 +201,11 @@ export default function ExamPage() {
                 question={currentQuestion}
                 currentIndex={state.currentQuestionIndex}
                 totalQuestions={totalQuestions}
-                selectedOptionId={state.answers[currentQuestion.id]}
+                userAnswer={state.answers[currentQuestion.id]}
+                selectedOptionId={typeof state.answers[currentQuestion.id] === 'string' ? (state.answers[currentQuestion.id] as string) : undefined}
                 onSelectOption={actions.selectAnswer}
+                onToggleOption={actions.toggleOption}
+                onSetAnswer={actions.setAnswer}
               />
             </CardContent>
           </Card>
@@ -213,6 +282,8 @@ export default function ExamPage() {
               isActive={isActive}
               status={status}
               lastCommand={lastCommand}
+              lastActionFeedback={lastActionFeedback}
+              errorMessage={errorMessage}
               onToggle={toggleVoiceMode}
             />
           </section>
@@ -240,7 +311,7 @@ export default function ExamPage() {
             </CardHeader>
             <CardContent className="p-4 sm:p-5 space-y-4">
               <QuestionPalette 
-                questions={MockExamQuestions}
+                questions={questions}
                 currentQuestionIndex={state.currentQuestionIndex}
                 answers={state.answers}
                 flagged={state.flagged}
@@ -262,5 +333,93 @@ export default function ExamPage() {
 
       </div>
     </div>
+  );
+}
+
+function ExamContent() {
+  const searchParams = useSearchParams();
+  const setId = searchParams?.get('set') || null;
+  const examId = searchParams?.get('exam') || searchParams?.get('id') || null;
+
+  const practiceSet = setId ? PracticeSets.find(p => p.id === setId) : null;
+  const selectedExam = examId ? AvailableExams.find(e => 
+    e.id.toLowerCase() === examId.toLowerCase() || 
+    e.title.toLowerCase().replace(/\s+/g, '-').includes(examId.toLowerCase()) ||
+    examId.toLowerCase().includes(e.id.toLowerCase())
+  ) : null;
+
+  const activeConfig = practiceSet || selectedExam;
+
+  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState<CandidateQuestion[]>([]);
+  const [isRemote, setIsRemote] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+
+    resolveCandidateQuestions({ setId, examId })
+      .then((res) => {
+        if (!isMounted) return;
+        setQuestions(res.questions);
+        setIsRemote(res.isRemote);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.warn('[ExamPage] Failed to load remote questions, using safe fallback:', err);
+        const fallback = getSafeQuestionsForContext({ setId, examId });
+        setQuestions(fallback);
+        setIsRemote(false);
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setId, examId]);
+
+  if (loading || questions.length === 0) {
+    return (
+      <div 
+        className="min-h-[60vh] flex flex-col items-center justify-center p-8 space-y-4 text-center"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="size-10 rounded-full border-4 border-primary border-t-transparent animate-spin" aria-hidden="true" />
+        <h2 className="text-xl font-bold text-foreground">Loading examination questions...</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Retrieving candidate-safe question cohort from remote exam engine.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ActiveExamSession
+      questions={questions}
+      activeConfig={activeConfig}
+      setId={setId}
+      examId={examId}
+      isRemote={isRemote}
+    />
+  );
+}
+
+export default function ExamPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div 
+          className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-medium"
+          role="status"
+          aria-live="polite"
+        >
+          Loading examination...
+        </div>
+      }
+    >
+      <ExamContent />
+    </React.Suspense>
   );
 }

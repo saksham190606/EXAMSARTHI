@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { AvailableExams, UserProfile } from "@/lib/mockData"
+import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -54,6 +55,8 @@ export default function DashboardPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const { t } = useTranslation()
+  const { user, profile } = useAuth()
+  const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Candidate'
 
   useEffect(() => {
     const storedHistory = getPerformanceHistory()
@@ -89,7 +92,7 @@ export default function DashboardPage() {
             id="welcome-heading"
             className="text-3xl md:text-4xl font-bold tracking-tight text-foreground"
           >
-            {t('welcomeBack')}, {UserProfile.name}.
+            {t('welcomeBack')}, {candidateName}.
           </h1>
           <p className="text-base md:text-lg text-muted-foreground">
             {t('dashboardSubtitle')}
@@ -100,6 +103,7 @@ export default function DashboardPage() {
             size="lg"
             className="h-11 px-6 font-medium shadow-xs"
             render={<Link href="/practice" />}
+            nativeButton={false}
           >
             <span>{t('continuePractice')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -109,6 +113,7 @@ export default function DashboardPage() {
             size="lg"
             className="h-11 px-5 font-medium gap-2 border-border"
             render={<Link href="/settings" />}
+            nativeButton={false}
           >
             <Sliders className="size-4" aria-hidden="true" />
             <span>{t('accessibilitySettings')}</span>
@@ -211,7 +216,7 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6 leading-relaxed">
               {t('dashboardSubtitle')}
             </p>
-            <Button render={<Link href="/exam" />} size="sm" className="font-medium">
+            <Button render={<Link href="/exam" />} nativeButton={false} size="sm" className="font-medium">
               {t('takeMockExam')}
             </Button>
           </Card>
@@ -268,6 +273,7 @@ export default function DashboardPage() {
               <CardContent className="pt-2">
                 <Button
                   render={<Link href={rec.actionUrl} />}
+                  nativeButton={false}
                   size="sm"
                   variant={rec.priority === "CRITICAL" ? "default" : "outline"}
                   className="w-full sm:w-auto font-medium"
@@ -404,7 +410,7 @@ export default function DashboardPage() {
               Full-length accessible simulations designed for competitive exam readiness.
             </p>
           </div>
-          <Button variant="ghost" render={<Link href="/exam" />} className="hidden sm:inline-flex">
+          <Button variant="ghost" render={<Link href="/exam" />} nativeButton={false} className="hidden sm:inline-flex">
             <span>View All</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
           </Button>
@@ -447,7 +453,8 @@ export default function DashboardPage() {
               <CardFooter className="pt-3">
                 <Button
                   className="w-full font-medium"
-                  render={<Link href={`/exam/${exam.id}`} />}
+                  render={<Link href={`/exam?exam=${exam.id}`} />}
+                  nativeButton={false}
                 >
                   <PlayCircle className="mr-2 size-4" aria-hidden="true" />
                   <span>Start Exam</span>
@@ -508,6 +515,7 @@ export default function DashboardPage() {
                       variant="outline"
                       size="sm"
                       render={<Link href="/results" />}
+                      nativeButton={false}
                       className="font-medium text-xs h-8 px-3"
                     >
                       View Results
@@ -528,7 +536,7 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6 leading-relaxed">
               Complete your first practice session to start building your learning history.
             </p>
-            <Button render={<Link href="/exam" />} size="sm" className="font-medium">
+            <Button render={<Link href="/exam" />} nativeButton={false} size="sm" className="font-medium">
               Start Practicing
             </Button>
           </Card>

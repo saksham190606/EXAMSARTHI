@@ -1,4 +1,4 @@
-import { Question } from './examData';
+import { Question, isQuestionAnswered, evaluateAnswer } from './examData';
 import { ExamState } from './useExamEngine';
 
 export interface SubjectMetrics {
@@ -33,7 +33,7 @@ export function calculateResults(
   
   let correct = 0;
   let incorrect = 0;
-  const attempted = Object.keys(answers).length;
+  const attempted = questions.filter(q => isQuestionAnswered(q, answers[q.id])).length;
   const totalQuestions = questions.length;
   const unanswered = totalQuestions - attempted;
 
@@ -54,12 +54,12 @@ export function calculateResults(
     subjectMap[q.subject].totalQuestions++;
   });
 
-  // Calculate scores
+  // Calculate scores using universal evaluator
   questions.forEach((q) => {
     const userAnswer = answers[q.id];
-    if (userAnswer) {
+    if (isQuestionAnswered(q, userAnswer)) {
       subjectMap[q.subject].attempted++;
-      if (userAnswer === q.correctAnswerId) {
+      if (evaluateAnswer(q, userAnswer)) {
         correct++;
         subjectMap[q.subject].correct++;
       } else {
@@ -76,8 +76,6 @@ export function calculateResults(
   });
 
   // Determine weak areas (accuracy < 70% AND attempted > 0 to not penalize unattempted randomly)
-  // Or if attempted is 0 but total questions > 0, maybe it's a weak area too (time management).
-  // Let's stick to accuracy < 70% on attempted questions.
   const weakAreas = subjectMetrics
     .filter((m) => m.attempted > 0 && m.accuracy < 70)
     .map((m) => m.subject);
@@ -85,7 +83,7 @@ export function calculateResults(
   // Overall metrics
   const accuracy = attempted > 0 ? (correct / attempted) * 100 : 0;
   const percentage = (correct / totalQuestions) * 100;
-  const score = correct; // Assuming 1 point per question
+  const score = correct; // 1 point per question
   const timeUsed = initialDurationSeconds - timeRemaining;
 
   return {
