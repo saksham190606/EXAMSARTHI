@@ -5,7 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2, ShieldCheck, WifiOff } from 'lucide-react';
 
 import { CandidateQuestion, isQuestionAnswered } from '@/types/question';
-import { resolveCandidateQuestions } from '@/lib/api/examRepository';
+import { 
+  resolveCandidateQuestions,
+  startRemoteExamAttempt,
+  saveCandidateAnswer,
+  submitExamAttempt
+} from '@/lib/api/examRepository';
 import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { useExamEngine } from '@/lib/useExamEngine';
@@ -54,23 +59,68 @@ function ActiveExamSession({
   const examDuration = activeConfig ? activeConfig.duration * 60 : 900;
   const { t } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Initialize official remote attempt when in remote mode
+  useEffect(() => {
+    let isSubscribed = true;
+    const targetExamOrSet = examId || setId;
+
+    if (isRemote && targetExamOrSet) {
+      startRemoteExamAttempt(targetExamOrSet, questions.length)
+        .then((res) => {
+          if (isSubscribed && res.attemptId) {
+            setAttemptId(res.attemptId);
+          }
+        })
+        .catch((err) => {
+          console.warn('[ExamPage] Remote attempt initialization notice:', err);
+        });
+    }
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [isRemote, examId, setId, questions.length]);
 
   const { state, actions, currentQuestion } = useExamEngine(
     questions,
     examDuration,
-    (finalState) => {
-      // Pass the final state to the results page via sessionStorage
+    async (finalState) => {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      // 1. If remote attempt is active, submit securely to server endpoint
+      if (attemptId) {
+        try {
+          const res = await submitExamAttempt(attemptId, finalState.answers, finalState.timeRemaining);
+          if (res.success) {
+            router.push(`/results?attemptId=${attemptId}`);
+            return;
+          }
+          console.warn('[ExamPage] Server submission returned error, falling back:', res.error);
+          setSubmitError(res.error || 'Submission failed');
+        } catch (err: any) {
+          console.error('[ExamPage] Submission exception:', err);
+          setSubmitError(err?.message || 'Submission error');
+        }
+      }
+
+      // 2. Safe local fallback if offline, unauthenticated, or server unreachable
       if (typeof window !== 'undefined') {
         const stateToSave = {
           ...finalState,
           flagged: Array.from(finalState.flagged),
           setId: setId || undefined,
           examId: examId || undefined,
-          isRemote,
+          isRemote: false,
           questionIds: questions.map(q => q.id)
         };
         sessionStorage.setItem('examResultState', JSON.stringify(stateToSave));
       }
+      setIsSubmitting(false);
       router.push('/results');
     },
     0,
@@ -78,6 +128,15 @@ function ActiveExamSession({
     examId || undefined,
     isRemote
   );
+
+  // Persist answers non-blockingly to attempt_answers when changed
+  useEffect(() => {
+    if (!attemptId || !currentQuestion) return;
+    const currentAns = state.answers[currentQuestion.id];
+    if (currentAns !== undefined && currentAns !== null) {
+      saveCandidateAnswer(attemptId, currentQuestion.id, currentAns);
+    }
+  }, [attemptId, currentQuestion, state.answers]);
 
   const totalQuestions = questions.length;
 

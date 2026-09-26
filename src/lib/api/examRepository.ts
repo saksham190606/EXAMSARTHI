@@ -290,3 +290,161 @@ export async function resolveCandidateQuestions(params: {
   // Default mock exam: SSC CGL (e1)
   return getRemoteQuestionsForExam('e1');
 }
+
+/**
+ * Creates or retrieves an in-progress exam attempt for the authenticated candidate.
+ * Guarantees idempotency and prevents duplicate attempts from React renders.
+ */
+export async function startRemoteExamAttempt(
+  rawExamId: string,
+  totalQuestions: number
+): Promise<{ attemptId: string | null; error?: string }> {
+  try {
+    const supabase = createClient();
+    if (!supabase) {
+      return { attemptId: null, error: 'Database unconfigured' };
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return { attemptId: null, error: 'Candidate not authenticated' };
+    }
+
+    const examId = normalizeExamId(rawExamId);
+
+    // 1. Look for existing in_progress attempt for this candidate and exam
+    const { data: existing, error: fetchErr } = await supabase
+      .from('exam_attempts')
+      .select('id, status, started_at')
+      .eq('user_id', user.id)
+      .eq('exam_id', examId)
+      .eq('status', 'in_progress')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!fetchErr && existing && existing.id) {
+      return { attemptId: existing.id };
+    }
+
+    // 2. Create new in_progress attempt using candidate client (strictly verified by RLS)
+    const { data: created, error: insertErr } = await supabase
+      .from('exam_attempts')
+      .insert({
+        user_id: user.id,
+        exam_id: examId,
+        status: 'in_progress',
+        total_questions: totalQuestions,
+      })
+      .select('id')
+      .single();
+
+    if (insertErr || !created) {
+      console.warn('[ExamRepository] startRemoteExamAttempt error:', insertErr?.message);
+      return { attemptId: null, error: insertErr?.message || 'Failed to create attempt' };
+    }
+
+    return { attemptId: created.id };
+  } catch (err: any) {
+    console.error('[ExamRepository] startRemoteExamAttempt exception:', err);
+    return { attemptId: null, error: err?.message };
+  }
+}
+
+/**
+ * Persists an active candidate answer during the exam.
+ * Non-blocking, fails gracefully without disrupting the candidate.
+ */
+export async function saveCandidateAnswer(
+  attemptId: string,
+  questionId: string,
+  userAnswer: any
+): Promise<void> {
+  if (!attemptId) return;
+
+  try {
+    const supabase = createClient();
+    if (!supabase) return;
+
+    await supabase
+      .from('attempt_answers')
+      .upsert(
+        {
+          attempt_id: attemptId,
+          question_id: questionId,
+          user_answer: userAnswer,
+        },
+        { onConflict: 'attempt_id,question_id' }
+      );
+  } catch (err) {
+    console.warn('[ExamRepository] saveCandidateAnswer failed silently:', err);
+  }
+}
+
+/**
+ * Submits the active candidate session to the secure server endpoint.
+ */
+export async function submitExamAttempt(
+  attemptId: string,
+  answers: Record<string, any>,
+  timeRemaining?: number
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const res = await fetch('/api/exam/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        attemptId,
+        answers,
+        timeRemaining,
+      }),
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data?.success) {
+      return {
+        success: false,
+        error: data?.error || `Submission failed with HTTP ${res.status}`,
+      };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Network error while submitting exam',
+    };
+  }
+}
+
+/**
+ * Retrieves the official persisted remote attempt from Supabase for the candidate.
+ */
+export async function getRemoteAttemptResult(attemptId: string): Promise<{
+  attempt: any | null;
+  error?: string;
+}> {
+  try {
+    const supabase = createClient();
+    if (!supabase) {
+      return { attempt: null, error: 'Database client unavailable' };
+    }
+
+    const { data, error } = await supabase
+      .from('exam_attempts')
+      .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at')
+      .eq('id', attemptId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { attempt: null, error: error?.message || 'Attempt not found' };
+    }
+
+    return { attempt: data };
+  } catch (err: any) {
+    return { attempt: null, error: err?.message };
+  }
+}

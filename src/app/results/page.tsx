@@ -26,11 +26,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
+import { useSearchParams } from 'next/navigation';
 import { getQuestionsForContext, getQuestionsByIds, MockExamQuestions } from '@/lib/examData';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
+import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
@@ -49,14 +51,144 @@ interface WeakTopicItem {
 }
 
 export default function ResultsPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center p-6">
+          <div className="text-center space-y-4" role="status" aria-live="polite">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
+            <p className="text-muted-foreground text-sm font-medium">Loading evaluation...</p>
+          </div>
+        </div>
+      }
+    >
+      <ResultsContent />
+    </React.Suspense>
+  );
+}
+
+function ResultsContent() {
+  const searchParams = useSearchParams();
+  const attemptId = searchParams.get('attemptId');
+
+  const [remoteAttempt, setRemoteAttempt] = useState<any | null>(null);
+  const [isOfficialRemote, setIsOfficialRemote] = useState<boolean>(false);
   const [finalState, setFinalState] = useState<ExamState | null>(null);
   const [results, setResults] = useState<ExamResults | null>(null);
   const [profile, setProfile] = useState<PerformanceProfile | null>(null);
   const [previousAttempt, setPreviousAttempt] = useState<PerformanceProfile | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingAttempt, setLoadingAttempt] = useState<boolean>(Boolean(attemptId));
   const { t } = useTranslation();
 
+  // 1. If attemptId is present, load the official persisted attempt from Supabase
   useEffect(() => {
+    if (!attemptId) {
+      setLoadingAttempt(false);
+      return;
+    }
+
+    let isSubscribed = true;
+    setLoadingAttempt(true);
+
+    getRemoteAttemptResult(attemptId)
+      .then(({ attempt, error }) => {
+        if (!isSubscribed) return;
+        if (attempt) {
+          setRemoteAttempt(attempt);
+          setIsOfficialRemote(true);
+
+          const timeUsed = attempt.time_used_seconds || 0;
+          const score = typeof attempt.score === 'number' ? attempt.score : 0;
+          const totalQ = attempt.total_questions || 0;
+          const accuracy = typeof attempt.accuracy === 'number' ? attempt.accuracy : (totalQ > 0 ? Math.round((score / totalQ) * 100) : 0);
+          const attempted = attempt.attempted_count ?? (attempt.correct_count + (attempt.incorrect_count || 0));
+          const correct = attempt.correct_count ?? score;
+          const incorrect = attempt.incorrect_count ?? (attempted - correct);
+          const unanswered = Math.max(0, totalQ - attempted);
+
+          const rawBreakdown = attempt.summary_metrics?.subjectBreakdown || {};
+          const subjectMetrics = Object.keys(rawBreakdown).length > 0
+            ? Object.entries(rawBreakdown).map(([subject, m]: [string, any]) => ({
+                subject,
+                totalQuestions: m.total || 0,
+                attempted: (m.correct || 0) + (m.incorrect || 0),
+                correct: m.correct || 0,
+                incorrect: m.incorrect || 0,
+                accuracy: (m.total || 0) > 0 ? Math.round(((m.correct || 0) / (m.total || 1)) * 100) : 0
+              }))
+            : [{
+                subject: 'General Assessment',
+                totalQuestions: totalQ,
+                attempted,
+                correct,
+                incorrect,
+                accuracy
+              }];
+
+          const officialResults: ExamResults = {
+            totalQuestions: totalQ,
+            attempted,
+            correct,
+            incorrect,
+            unanswered,
+            score,
+            accuracy,
+            percentage: accuracy,
+            timeUsed,
+            subjectMetrics,
+            weakAreas: attempt.summary_metrics?.weakAreas || []
+          };
+
+          setResults(officialResults);
+
+          // Build candidate profile for personalization from official metrics
+          const remoteSubjectPerformances = subjectMetrics.map(sm => ({
+            subject: sm.subject,
+            score: sm.correct,
+            totalQuestions: sm.totalQuestions,
+            attempted: sm.attempted,
+            correct: sm.correct,
+            incorrect: sm.incorrect,
+            accuracy: sm.accuracy,
+            topics: []
+          }));
+
+          const remoteProfile: PerformanceProfile = {
+            examId: attempt.exam_id,
+            timestamp: new Date(attempt.submitted_at || Date.now()).getTime(),
+            totalQuestions: totalQ,
+            attempted,
+            correct,
+            accuracy,
+            subjects: remoteSubjectPerformances
+          };
+
+          setProfile(remoteProfile);
+          const history = getPerformanceHistory();
+          if (history.length > 0) setPreviousAttempt(history[0]);
+          setRecommendations(generateRecommendations(remoteProfile, history));
+        } else {
+          console.warn('[ResultsPage] Could not load remote attempt:', error);
+        }
+        setLoadingAttempt(false);
+      })
+      .catch((err) => {
+        if (isSubscribed) {
+          console.warn('[ResultsPage] Exception loading remote attempt:', err);
+          setLoadingAttempt(false);
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [attemptId]);
+
+  // 2. Local fallback if no remote attemptId or for local demo sessions
+  useEffect(() => {
+    if (attemptId) return; // remote attempt flow active
+
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('examResultState');
       if (stored) {
@@ -76,7 +208,7 @@ export default function ResultsPage() {
         });
       }
     }
-  }, []);
+  }, [attemptId]);
 
   useEffect(() => {
     if (!finalState) return;
@@ -184,11 +316,13 @@ export default function ResultsPage() {
     ? recommendations[0].actionUrl
     : '/practice';
 
-  const activePracticeSet = finalState?.setId ? PracticeSets.find(p => p.id === finalState.setId) : null;
-  const activeExam = (finalState as any)?.examId 
+  const activePracticeSet = (remoteAttempt?.exam_id || finalState?.setId) 
+    ? PracticeSets.find(p => p.id === (remoteAttempt?.exam_id || finalState?.setId)) 
+    : null;
+  const activeExam = (remoteAttempt?.exam_id || (finalState as any)?.examId) 
     ? AvailableExams.find(e => 
-        e.id === (finalState as any).examId || 
-        e.title.toLowerCase().replace(/\s+/g, '-').includes(String((finalState as any).examId).toLowerCase())
+        e.id === (remoteAttempt?.exam_id || (finalState as any)?.examId) || 
+        e.title.toLowerCase().replace(/\s+/g, '-').includes(String(remoteAttempt?.exam_id || (finalState as any)?.examId).toLowerCase())
       ) 
     : null;
   const activeTitle = activePracticeSet?.title || activeExam?.title || t('examName');
@@ -237,26 +371,49 @@ export default function ResultsPage() {
         </p>
       </header>
 
-      {/* SECURITY & EVALUATION ARCHITECTURE BANNER (PHASE 7E-3) */}
-      {(finalState as any)?.isRemote !== false ? (
+      {/* SECURITY & EVALUATION ARCHITECTURE BANNER (PHASE 7E-4) */}
+      {isOfficialRemote ? (
         <div 
           className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-foreground flex items-start gap-3 shadow-xs"
           role="status"
-          aria-label="Remote question security status"
+          aria-label="Official remote attempt status"
         >
           <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="space-y-1 text-sm">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                Remote Secure Mode — Candidate-Safe Architecture (Phase 7E-3)
+                Official Remote Result — Server Evaluated &amp; Persisted (Phase 7E-4)
               </span>
               <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-emerald-600 border-emerald-500/30">
+                Tamper-Resistant
+              </Badge>
+              <Badge variant="secondary" className="text-2xs font-mono font-normal">
+                Attempt: {attemptId?.slice(0, 8)}...
+              </Badge>
+            </div>
+            <p className="text-muted-foreground text-xs leading-relaxed">
+              Official score was graded exclusively on the server with protected answer keys and permanently recorded in <code className="text-primary font-mono text-xs">public.exam_attempts</code>. The client browser never receives or computes raw keys.
+            </p>
+          </div>
+        </div>
+      ) : (finalState as any)?.isRemote !== false ? (
+        <div 
+          className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 text-foreground flex items-start gap-3 shadow-xs"
+          role="status"
+          aria-label="Remote question security status"
+        >
+          <ShieldCheck className="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-blue-700 dark:text-blue-300">
+                Remote Session — Candidate-Safe Mode
+              </span>
+              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-blue-600 border-blue-500/30">
                 Answer Keys Protected
               </Badge>
             </div>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Questions were securely retrieved from Supabase candidate-safe views (<code className="text-primary font-mono text-xs">exam_active_questions</code>) with zero browser answer keys. 
-              Active session responses recorded safely. Official immutable server-side evaluation and persistence will be finalized in <strong>Phase 7E-4</strong>.
+              Questions were securely retrieved from Supabase candidate-safe views (<code className="text-primary font-mono text-xs">exam_active_questions</code>) with zero browser answer keys.
             </p>
           </div>
         </div>
@@ -270,14 +427,14 @@ export default function ResultsPage() {
           <div className="space-y-1 text-sm">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-amber-700 dark:text-amber-300">
-                Local Fallback / Demo Mode
+                Local Demo / Offline Practice Mode
               </span>
               <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-amber-600 border-amber-500/30">
                 Offline Session
               </Badge>
             </div>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Session operated in offline safe fallback mode. Evaluated locally against candidate practice test sets.
+              Session operated in offline safe fallback mode. Evaluated locally against candidate practice test sets without remote persistence.
             </p>
           </div>
         </div>
