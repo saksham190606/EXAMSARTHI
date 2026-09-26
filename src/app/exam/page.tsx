@@ -254,7 +254,19 @@ function ActiveExamSession({
         <div className="lg:col-span-8 flex flex-col space-y-6 w-full">
           
           {/* Main Question Card */}
-          <Card className="border border-border bg-card shadow-xs">
+          <Card className="border border-border bg-card shadow-xs overflow-hidden">
+            {/* Voice Examination Mode Assistive Panel */}
+            <section aria-label="Voice examination controls">
+              <VoiceExamPanel 
+                isActive={isActive}
+                status={status}
+                lastCommand={lastCommand}
+                lastActionFeedback={lastActionFeedback}
+                errorMessage={errorMessage}
+                onToggle={toggleVoiceMode}
+              />
+            </section>
+
             <CardContent className="p-6 md:p-8">
               <QuestionDisplay 
                 question={currentQuestion}
@@ -334,18 +346,6 @@ function ActiveExamSession({
               </Button>
             </div>
           </div>
-
-          {/* Voice Examination Mode Assistive Panel */}
-          <section aria-label="Voice examination controls">
-            <VoiceExamPanel 
-              isActive={isActive}
-              status={status}
-              lastCommand={lastCommand}
-              lastActionFeedback={lastActionFeedback}
-              errorMessage={errorMessage}
-              onToggle={toggleVoiceMode}
-            />
-          </section>
         </div>
 
         {/* Right Column: Question Navigation Palette (4 cols on desktop) */}
