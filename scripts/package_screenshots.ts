@@ -10,52 +10,52 @@ if (!fs.existsSync(TARGET_DIR)) {
 
 const images = [
   {
-    src: 'landing_page_1790419263491.png',
+    src: 'landing_page_1790420640408.png',
     dest: '01_landing_page.png',
     title: '1. Landing Page (/)',
-    description: 'Entry point presenting accessibility features, keyboard navigation cues, dual language toggle, and WCAG AA contrast compliance.',
+    description: 'Redesigned visual identity: warm background palette, Lora serif typography, Academic Caspian Teal CTA hierarchy, live exam question simulation card, and zero AI-agent debug clutter.',
   },
   {
-    src: 'settings_page_1790419267494.png',
+    src: 'settings_page_1790420716488.png',
     dest: '02_settings_page.png',
     title: '2. Accessibility Settings (/settings)',
-    description: 'Centralized accessibility accommodations: Text Scaling (16px, 18px, 20px), Theme Selection (Light, Dark, High-Contrast), Audio Assistance, and Cloud Profile Name synchronization.',
+    description: 'Clean header navigation with debug badges removed; centralized accessibility accommodations: Text Scaling (16px, 18px, 20px), Theme Selection (Light, Dark, High-Contrast), Audio Assistance, and Cloud Profile Name synchronization.',
   },
   {
-    src: 'login_page_1790419283074.png',
+    src: 'login_page_1790420666954.png',
     dest: '03_login_page.png',
     title: '3. Candidate Sign In (/login)',
-    description: 'Accessible sign-in workflow with Supabase cookie SSR authentication, keyboard focus indicators, and accessible error handling.',
+    description: 'Accessible sign-in workflow with institutional brand anchor, Lora serif headline, rounded-2xl elevation, and clear field focus indicators.',
   },
   {
-    src: 'signup_page_1790419286585.png',
+    src: 'signup_page_1790420674334.png',
     dest: '04_signup_page.png',
     title: '4. Candidate Registration (/signup)',
-    description: 'Candidate account creation with full name, password guidelines, and seamless onboarding to Supabase candidate profiles.',
+    description: 'Candidate account creation with institutional framing, password guidelines, and seamless onboarding to Supabase candidate profiles.',
   },
   {
-    src: 'dashboard_page_1790419313337.png',
+    src: 'dashboard_page_1790420728097.png',
     dest: '05_dashboard_page.png',
     title: '5. Candidate Performance Dashboard (/dashboard)',
-    description: 'Real-time performance analytics directly synchronized with Supabase PostgreSQL attempts: Total Completed Attempts, Average Score, Accuracy Rate, Subject Breakdown, and Weak-Topic Recommendations.',
+    description: 'Average Score elevated into a dominant hero stat card; debug pills removed; subject performance indicators converted to subtle colored dots with clean row hover states.',
   },
   {
-    src: 'practice_page_1790419325412.png',
+    src: 'practice_page_1790420739098.png',
     dest: '06_practice_page.png',
     title: '6. Practice Sets Hub (/practice)',
-    description: 'Interactive question practice library with real-time multi-facet filters (Subject pills, search query, difficulty), question count/duration metadata, and accessible empty state resets.',
+    description: 'Interactive question practice library with serif headers, multi-facet subject filters with refined active states, and full keyboard accessibility.',
   },
   {
-    src: 'exam_page_1790419337077.png',
+    src: 'exam_page_1790420748115.png',
     dest: '07_exam_page.png',
     title: '7. Timed Sectional Examination Engine (/exam?exam=e2)',
-    description: 'Accessible examination interface showing Sectional Timing Active badges, section-specific countdown clocks, secure remote question delivery with zero answer keys exposed, bilingual Voice Examination Panel (EN/HI), and responsive Question Palette.',
+    description: 'High-elevation question card as primary visual focus; palette and timers softened to secondary visual weight; debug badges removed; serif question statements with accessible radio groups.',
   },
   {
-    src: 'results_page_1790419349588.png',
+    src: 'results_page_1790420758708.png',
     dest: '08_results_page.png',
     title: '8. Official Results & Question Review (/results)',
-    description: 'Comprehensive performance breakdown with official server-evaluated score, percentage accuracy, time used, weak topic diagnostic badges, and full question-by-question review with official explanations.',
+    description: 'Visual dominance established on overall score and percentage; debug banners removed; subtle server verification indicator; refined subject table and question-by-question review.',
   },
 ];
 

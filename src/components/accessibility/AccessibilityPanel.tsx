@@ -39,18 +39,32 @@ export function AccessibilityPanel() {
 
   const { theme, setTheme } = useTheme()
 
+  const triggerClasses = "size-9 inline-flex items-center justify-center rounded-[2px] border border-white/20 bg-black text-white shadow-none hover:bg-white/10 hover:border-white/40 transition-all duration-120 ease-out motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black cursor-pointer"
+
   if (!mounted) {
     return (
-      <Button variant="outline" size="icon" aria-label="Accessibility Settings">
-        <Settings2 className="h-[1.2rem] w-[1.2rem]" />
-      </Button>
+      <button
+        type="button"
+        aria-label="Accessibility Settings"
+        className={triggerClasses}
+      >
+        <Settings2 className="size-4" aria-hidden="true" />
+      </button>
     )
   }
 
   return (
     <Dialog>
-      <DialogTrigger render={<Button variant="outline" size="icon" aria-label="Accessibility Settings" />}>
-        <Settings2 className="h-[1.2rem] w-[1.2rem]" />
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Accessibility Settings"
+            className={triggerClasses}
+          />
+        }
+      >
+        <Settings2 className="size-4" aria-hidden="true" />
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px] max-h-[85vh] flex flex-col">
         <DialogHeader>

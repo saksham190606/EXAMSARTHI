@@ -273,7 +273,7 @@ function ActiveExamSession({
 
   if (!currentQuestion) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-medium">
+      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-bold">
         Loading question...
       </div>
     );
@@ -291,9 +291,9 @@ function ActiveExamSession({
           aria-live="assertive"
           aria-label="Submitting and evaluating examination"
         >
-          <div className="bg-card border border-border shadow-lg rounded-2xl p-6 sm:p-8 max-w-md w-full text-center space-y-4">
-            <div className="mx-auto size-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-              <span className="inline-block size-6 animate-spin rounded-full border-3 border-solid border-primary border-r-transparent" />
+          <div className="bg-card border border-border  rounded-none p-6 sm:p-8 max-w-md w-full text-center space-y-4">
+            <div className="mx-auto size-12 rounded-[46px] bg-primary/10 text-primary flex items-center justify-center">
+              <span className="inline-block size-6 animate-spin rounded-[46px] border-3 border-solid border-primary border-r-transparent" />
             </div>
             <div className="space-y-1.5">
               <h2 className="text-xl font-bold text-foreground">
@@ -312,7 +312,7 @@ function ActiveExamSession({
         <div 
           role="alert" 
           aria-live="assertive"
-          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm"
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-none border border-destructive/30 bg-destructive/10 text-destructive text-sm"
         >
           <div className="flex items-center gap-2">
             <AlertTriangle className="size-5 shrink-0" aria-hidden="true" />
@@ -329,7 +329,7 @@ function ActiveExamSession({
                 setSubmitError(null);
                 actions.submitExam();
               }}
-              className="w-full sm:w-auto font-medium border-destructive/40 hover:bg-destructive/10"
+              className="w-full sm:w-auto font-bold border-destructive/40 hover:bg-destructive/10"
             >
               Retry Submission
             </Button>
@@ -364,44 +364,24 @@ function ActiveExamSession({
       {/* SECTION 1 — Exam Header */}
       <header 
         aria-label="Exam header"
-        className="flex flex-col gap-3 p-4 md:p-6 bg-card border rounded-2xl shadow-xs"
+        className="flex flex-col gap-3 p-4 md:p-6 bg-card border rounded-none "
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground">
                 {activeConfig ? activeConfig.title : t('examName')}
               </h1>
               {activeConfig && (
-                <Badge variant="outline" className="text-xs font-semibold">
+                <Badge variant="outline" className="text-xs font-bold text-muted-foreground border-border/80">
                   {activeConfig.subject}
                 </Badge>
               )}
               {hasSections && (
-                <Badge 
-                  variant="outline" 
-                  className="text-xs font-semibold text-primary border-primary/30 bg-primary/10 flex items-center gap-1"
-                >
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[46px] text-xs font-bold text-primary bg-primary/10 border border-primary/20">
                   <Layers className="size-3" aria-hidden="true" />
                   <span>Sectional Timing Active</span>
-                </Badge>
-              )}
-              {isRemote ? (
-                <Badge 
-                  variant="outline" 
-                  className="text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 flex items-center gap-1"
-                >
-                  <ShieldCheck className="size-3" aria-hidden="true" />
-                  <span>Secure Remote Engine</span>
-                </Badge>
-              ) : (
-                <Badge 
-                  variant="outline" 
-                  className="text-xs font-medium text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 flex items-center gap-1"
-                >
-                  <WifiOff className="size-3" aria-hidden="true" />
-                  <span>Local Safe Fallback</span>
-                </Badge>
+                </span>
               )}
             </div>
             <p className="text-xs md:text-sm text-muted-foreground">
@@ -422,7 +402,7 @@ function ActiveExamSession({
             <Button 
               variant="default" 
               onClick={() => setIsSubmitDialogOpen(true)}
-              className="hidden md:flex font-medium h-10 px-4 shadow-xs"
+              className="hidden md:flex font-bold h-10 px-4 "
             >
               <span>{t('submitExam')}</span>
               <Send className="ml-2 size-4" aria-hidden="true" />
@@ -447,11 +427,11 @@ function ActiveExamSession({
       {/* SECTION 2 — Active Section Banner (shown when sections exist) */}
       {hasSections && state.activeSection && (
         <section 
-          className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-muted/40 border border-primary/20 rounded-xl"
+          className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-muted/40 border border-primary/20 rounded-none"
           aria-label="Active examination section details"
         >
           <div className="flex items-center gap-3">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
+            <span className="flex size-8 items-center justify-center rounded-[2px] bg-primary/10 text-primary font-bold text-sm">
               S{state.activeSectionIndex + 1}
             </span>
             <div>
@@ -474,7 +454,7 @@ function ActiveExamSession({
               variant="secondary"
               size="sm"
               onClick={() => setIsSectionAdvanceDialogOpen(true)}
-              className="h-9 px-3 text-xs font-semibold shadow-2xs gap-1.5"
+              className="h-9 px-3 text-xs font-semibold  gap-1.5"
             >
               <span>Next Section ({nextSection.name})</span>
               <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -489,8 +469,8 @@ function ActiveExamSession({
         {/* Left/Main Column: Question Display & Navigation (8 cols on desktop) */}
         <div className="lg:col-span-8 flex flex-col space-y-6 w-full">
           
-          {/* Main Question Card */}
-          <Card className="border border-border bg-card shadow-xs overflow-hidden">
+          {/* Main Question Card - Primary Visual Focus */}
+          <Card className="border-2 border-border/90 bg-card  rounded-none overflow-hidden ring-1 ring-border/50">
             {/* Voice Examination Mode Assistive Panel */}
             <section aria-label="Voice examination controls">
               <VoiceExamPanel 
@@ -519,7 +499,7 @@ function ActiveExamSession({
 
           {/* Primary Action Controls Row */}
           <div 
-            className="flex flex-wrap items-center justify-between gap-3 p-4 bg-card border rounded-xl shadow-xs"
+            className="flex flex-wrap items-center justify-between gap-3 p-4 bg-card border rounded-none "
             role="toolbar"
             aria-label="Question navigation actions"
           >
@@ -535,7 +515,7 @@ function ActiveExamSession({
                     : state.currentQuestionIndex === 0
                 }
                 aria-label="Go to previous question in section"
-                className="h-11 px-4 font-medium border-border"
+                className="h-12 px-4 font-bold border-border"
               >
                 <ChevronLeft className="mr-1.5 size-5" aria-hidden="true" />
                 <span>{t('previous')}</span>
@@ -550,7 +530,7 @@ function ActiveExamSession({
                     : state.currentQuestionIndex === totalQuestions - 1
                 }
                 aria-label="Go to next question in section"
-                className="h-11 px-5 font-medium shadow-xs"
+                className="h-12 px-5 font-bold "
               >
                 <span>{t('next')}</span>
                 <ChevronRight className="ml-1.5 size-5" aria-hidden="true" />
@@ -564,7 +544,7 @@ function ActiveExamSession({
                 size="lg"
                 onClick={() => actions.toggleFlag(currentQuestion.id)}
                 aria-pressed={isFlagged}
-                className={`h-11 px-4 font-medium transition-all ${
+                className={`h-12 px-4 font-bold transition-all ${
                   isFlagged 
                     ? 'border-primary/50 bg-primary/10 text-primary font-semibold' 
                     : 'border-border'
@@ -583,7 +563,7 @@ function ActiveExamSession({
                 variant="default" 
                 size="lg"
                 onClick={() => setIsSubmitDialogOpen(true)}
-                className="md:hidden h-11 px-4 font-medium shadow-xs"
+                className="md:hidden h-12 px-4 font-bold "
               >
                 <span>{t('submit')}</span>
                 <Send className="ml-1.5 size-4" aria-hidden="true" />
@@ -597,10 +577,10 @@ function ActiveExamSession({
           aria-label="Question overview"
           className="lg:col-span-4 w-full flex flex-col space-y-6"
         >
-          <Card className="border border-border bg-card shadow-xs lg:sticky lg:top-20">
-            <CardHeader className="p-4 sm:p-5 border-b border-border/50 bg-muted/20">
+          <Card className="border border-border/70 bg-card/80  lg:sticky lg:top-20 rounded-none">
+            <CardHeader className="p-4 sm:p-5 border-b border-border/40 bg-muted/10">
               <div className="flex items-center justify-between">
-                <CardTitle className="font-bold text-lg text-foreground">
+                <CardTitle className="font-semibold text-base text-foreground">
                   {t('questionPalette')}
                 </CardTitle>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground border">
@@ -629,7 +609,7 @@ function ActiveExamSession({
                   <Button 
                     variant="outline"
                     onClick={() => setIsSectionAdvanceDialogOpen(true)}
-                    className="w-full h-10 font-medium text-xs gap-1.5 border-border"
+                    className="w-full h-10 font-bold text-xs gap-1.5 border-border"
                   >
                     <span>Advance to Next Section</span>
                     <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -638,7 +618,7 @@ function ActiveExamSession({
 
                 <Button 
                   onClick={() => setIsSubmitDialogOpen(true)}
-                  className="w-full h-11 font-medium shadow-xs"
+                  className="w-full h-12 font-bold "
                 >
                   <Send className="mr-2 size-4" aria-hidden="true" />
                   <span>{t('submitFinalExam')}</span>
@@ -735,19 +715,19 @@ function ExamContent() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3 space-y-4">
-            <div className="h-48 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-6 space-y-4">
+            <div className="h-48 rounded-none border border-border/60 bg-muted/20 animate-pulse p-6 space-y-4">
               <div className="h-5 w-24 bg-muted rounded" />
               <div className="h-6 w-3/4 bg-muted rounded" />
               <div className="h-4 w-1/2 bg-muted/60 rounded" />
             </div>
             <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-14 rounded-lg border border-border/60 bg-muted/15 animate-pulse" />
+                <div key={i} className="h-14 rounded-[2px] border border-border/60 bg-muted/15 animate-pulse" />
               ))}
             </div>
           </div>
           <div className="hidden lg:block lg:col-span-1">
-            <div className="h-96 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
+            <div className="h-96 rounded-none border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
               <div className="h-5 w-32 bg-muted rounded" />
               <div className="grid grid-cols-5 gap-2 pt-2">
                 {Array.from({ length: 15 }).map((_, i) => (
@@ -766,7 +746,7 @@ function ExamContent() {
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <Card className="max-w-md w-full border-destructive/30" role="alert">
           <CardHeader>
-            <div className="size-10 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-2">
+            <div className="size-10 rounded-[46px] bg-destructive/10 text-destructive flex items-center justify-center mb-2">
               <AlertTriangle className="size-5" aria-hidden="true" />
             </div>
             <CardTitle>Unable to Load Examination</CardTitle>
@@ -809,7 +789,7 @@ export default function ExamPage() {
     <React.Suspense
       fallback={
         <div 
-          className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-medium"
+          className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-bold"
           role="status"
           aria-live="polite"
         >
@@ -821,3 +801,5 @@ export default function ExamPage() {
     </React.Suspense>
   );
 }
+
+

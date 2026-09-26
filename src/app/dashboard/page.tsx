@@ -32,6 +32,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   getCandidateDashboardAnalytics,
   CandidateDashboardAnalytics,
@@ -59,6 +60,7 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<CandidateDashboardAnalytics | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<string>("all")
   const { t } = useTranslation()
   const { user, profile } = useAuth()
   const candidateName =
@@ -110,15 +112,15 @@ export default function DashboardPage() {
             <div className="h-5 w-80 bg-muted/60 rounded animate-pulse" />
           </div>
           <div className="flex gap-3">
-            <div className="h-11 w-36 bg-muted rounded animate-pulse" />
-            <div className="h-11 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-12 w-36 bg-muted rounded animate-pulse" />
+            <div className="h-12 w-32 bg-muted rounded animate-pulse" />
           </div>
         </div>
 
         {/* 4 KPI Skeletons */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-5 space-y-3">
+            <div key={i} className="h-32 rounded-none border border-border/60 bg-muted/20 animate-pulse p-5 space-y-3">
               <div className="h-4 w-28 bg-muted rounded" />
               <div className="h-8 w-20 bg-muted rounded" />
               <div className="h-3 w-36 bg-muted/60 rounded" />
@@ -128,8 +130,8 @@ export default function DashboardPage() {
 
         {/* Analytics Skeletons */}
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="h-72 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-6" />
-          <div className="h-72 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-6" />
+          <div className="h-72 rounded-none border border-border/60 bg-muted/20 animate-pulse p-6" />
+          <div className="h-72 rounded-none border border-border/60 bg-muted/20 animate-pulse p-6" />
         </div>
       </div>
     )
@@ -141,7 +143,7 @@ export default function DashboardPage() {
       {fetchError && (
         <div 
           role="alert" 
-          className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-sm"
+          className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-none border border-destructive/30 bg-destructive/10 text-destructive text-sm"
         >
           <div className="flex items-center gap-2">
             <AlertCircle className="size-5 shrink-0" aria-hidden="true" />
@@ -163,30 +165,21 @@ export default function DashboardPage() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-border/40"
         aria-labelledby="welcome-heading"
       >
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1
-              id="welcome-heading"
-              className="text-3xl md:text-4xl font-bold tracking-tight text-foreground"
-            >
-              {t("welcomeBack")}, {candidateName}.
-            </h1>
-            <Badge
-              variant="outline"
-              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 flex items-center gap-1"
-            >
-              <ShieldCheck className="size-3" aria-hidden="true" />
-              <span>Official Database Analytics</span>
-            </Badge>
-          </div>
-          <p className="text-base md:text-lg text-muted-foreground">
+        <div className="space-y-1">
+          <h1
+            id="welcome-heading"
+            className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-foreground"
+          >
+            {t("welcomeBack")}, {candidateName}.
+          </h1>
+          <p className="text-base text-muted-foreground">
             {t("dashboardSubtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button
             size="lg"
-            className="h-11 px-6 font-medium shadow-xs"
+            className="h-12 px-6 font-medium shadow-none"
             render={<Link href="/practice" />}
             nativeButton={false}
           >
@@ -196,7 +189,7 @@ export default function DashboardPage() {
           <Button
             variant="outline"
             size="lg"
-            className="h-11 px-5 font-medium gap-2 border-border"
+            className="h-12 px-5 font-medium gap-2 border-border"
             render={<Link href="/settings" />}
             nativeButton={false}
           >
@@ -206,77 +199,115 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* SECTION B — Performance Snapshot */}
-      <section aria-labelledby="performance-heading" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2
-            id="performance-heading"
-            className="text-2xl font-bold tracking-tight text-foreground"
-          >
-            {t("performanceSnapshot")}
-          </h2>
-          {hasHistory && (
-            <Badge variant="outline" className="text-xs text-muted-foreground">
-              {completedCount} Official Attempt{completedCount > 1 ? "s" : ""}
-            </Badge>
-          )}
+      {/* Interactive Tabs with accessible tab transitions */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => setActiveTab(val || "all")}
+        className="w-full space-y-8"
+      >
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <TabsList className="bg-transparent border-0 p-0 gap-2 flex-wrap h-auto">
+            <TabsTrigger
+              value="all"
+              className="border border-black dark:border-white data-active:bg-black data-active:text-white dark:data-active:bg-white dark:data-active:text-black px-4 py-2 text-xs md:text-sm font-bold tracking-[0.144px]"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="analytics"
+              className="border border-black dark:border-white data-active:bg-black data-active:text-white dark:data-active:bg-white dark:data-active:text-black px-4 py-2 text-xs md:text-sm font-bold tracking-[0.144px]"
+            >
+              Analytics & Trends
+            </TabsTrigger>
+            <TabsTrigger
+              value="recommendations"
+              className="border border-black dark:border-white data-active:bg-black data-active:text-white dark:data-active:bg-white dark:data-active:text-black px-4 py-2 text-xs md:text-sm font-bold tracking-[0.144px]"
+            >
+              Focus Areas
+            </TabsTrigger>
+            <TabsTrigger
+              value="mock-exams"
+              className="border border-black dark:border-white data-active:bg-black data-active:text-white dark:data-active:bg-white dark:data-active:text-black px-4 py-2 text-xs md:text-sm font-bold tracking-[0.144px]"
+            >
+              Mock Simulations
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        {!isLoaded ? (
-          <div className="p-8 text-center" role="status" aria-live="polite">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-            <p className="text-muted-foreground text-sm font-medium mt-3">
-              Loading official performance data...
-            </p>
-          </div>
-        ) : hasHistory ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Metric 1: Completed Attempts */}
-            <Card className="border shadow-xs">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t("completedExams")}
-                </CardTitle>
-                <Clock className="size-4 text-primary" aria-hidden="true" />
-              </CardHeader>
-              <CardContent className="space-y-1">
-                <div className="text-3xl font-bold text-foreground">
-                  {completedCount}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Official completed examination sessions
-                </p>
-              </CardContent>
-            </Card>
+        <div key={activeTab} className="space-y-12 motion-safe:animate-tab-enter">
+          {/* SECTION B — Performance Snapshot */}
+          {(activeTab === "all" || activeTab === "analytics") && (
+            <section aria-labelledby="performance-heading" className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2
+                  id="performance-heading"
+                  className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
+                >
+                  {t("performanceSnapshot")}
+                </h2>
+                {hasHistory && (
+                  <span className="text-xs font-medium text-muted-foreground px-2.5 py-1 rounded-[46px] bg-muted border border-border/60">
+                    {completedCount} Official Attempt{completedCount > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
 
-            {/* Metric 2: Average Score */}
-            <Card className="border shadow-xs">
+              {!isLoaded ? (
+                <div className="p-8 text-center" role="status" aria-live="polite">
+                  <div className="inline-block h-8 w-8 animate-spin rounded-[46px] border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
+                  <p className="text-muted-foreground text-sm font-medium mt-3">
+                    Loading official performance data...
+                  </p>
+                </div>
+              ) : hasHistory ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Metric 1: Average Score — DOMINANT PRIMARY HERO STAT */}
+            <Card className="border-2 border-primary/30 bg-primary/[0.04] shadow-none relative overflow-hidden sm:col-span-2 lg:col-span-1">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Average Score
+                <CardTitle className="text-sm font-semibold text-primary">
+                  Average Score (Primary)
                 </CardTitle>
                 <Target className="size-4 text-primary" aria-hidden="true" />
               </CardHeader>
               <CardContent className="space-y-1">
-                <div className="text-3xl font-bold text-foreground">
+                <div className="font-heading text-4xl font-extrabold text-foreground">
                   {averageScore}
+                  <span className="text-sm font-sans font-normal text-muted-foreground ml-1.5">pts</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Points per completed examination
+                  Mean performance across completed exams
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Metric 2: Completed Attempts */}
+            <Card className="border border-border/80 shadow-none">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t("completedExams")}
+                </CardTitle>
+                <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="font-heading text-3xl font-bold text-foreground">
+                  {completedCount}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Official evaluation sessions
                 </p>
               </CardContent>
             </Card>
 
             {/* Metric 3: Average Accuracy */}
-            <Card className="border shadow-xs">
+            <Card className="border border-border/80 shadow-none">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {t("averageAccuracy")}
                 </CardTitle>
-                <Trophy className="size-4 text-primary" aria-hidden="true" />
+                <Trophy className="size-4 text-muted-foreground" aria-hidden="true" />
               </CardHeader>
               <CardContent className="space-y-1">
-                <div className="text-3xl font-bold text-foreground">
+                <div className="font-heading text-3xl font-bold text-foreground">
                   {averageAccuracy}%
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -286,15 +317,15 @@ export default function DashboardPage() {
             </Card>
 
             {/* Metric 4: Best Score */}
-            <Card className="border shadow-xs">
+            <Card className="border border-border/80 shadow-none">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   Best Score
                 </CardTitle>
-                <Award className="size-4 text-primary" aria-hidden="true" />
+                <Award className="size-4 text-muted-foreground" aria-hidden="true" />
               </CardHeader>
               <CardContent className="space-y-1">
-                <div className="text-3xl font-bold text-foreground">
+                <div className="font-heading text-3xl font-bold text-foreground">
                   {bestScore}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -306,7 +337,7 @@ export default function DashboardPage() {
         ) : (
           /* Empty State for Performance Snapshot */
           <Card className="border border-dashed bg-muted/20 p-8 text-center shadow-none">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-none bg-primary/10 text-primary mb-4">
               <Target className="size-6" aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-2 text-foreground">
@@ -337,13 +368,15 @@ export default function DashboardPage() {
           </Card>
         )}
       </section>
+          )}
 
       {/* SECTION C — Real Subject-Wise Performance */}
-      <section aria-labelledby="subject-performance-heading" className="space-y-4">
+      {(activeTab === "all" || activeTab === "analytics" || activeTab === "recommendations") && (
+        <section aria-labelledby="subject-performance-heading" className="space-y-4">
         <div className="space-y-1">
           <h2
             id="subject-performance-heading"
-            className="text-2xl font-bold tracking-tight text-foreground"
+            className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
           >
             Subject Performance
           </h2>
@@ -353,7 +386,7 @@ export default function DashboardPage() {
         </div>
 
         {hasHistory && subjectMetrics.length > 0 ? (
-          <Card className="border border-border/80 shadow-xs">
+          <Card className="border border-border/80 shadow-none">
             <CardContent className="p-0">
               <div
                 className="overflow-x-auto focus-within:ring-1 focus-within:ring-ring"
@@ -396,33 +429,28 @@ export default function DashboardPage() {
                         if (sm.attempted === 0) {
                           return {
                             label: "Not Attempted",
-                            variant: "outline" as const,
-                            icon: BookOpen,
+                            dotColor: "bg-muted-foreground",
                           }
                         }
                         if (sm.accuracy >= 80) {
                           return {
                             label: "Strong Area",
-                            variant: "secondary" as const,
-                            icon: CheckCircle2,
+                            dotColor: "bg-emerald-600 dark:bg-emerald-400",
                           }
                         }
                         if (sm.accuracy >= 60) {
                           return {
                             label: "Progressing",
-                            variant: "outline" as const,
-                            icon: CheckCircle2,
+                            dotColor: "bg-amber-600 dark:bg-amber-400",
                           }
                         }
                         return {
-                          label: "Focus Area",
-                          variant: "destructive" as const,
-                          icon: AlertCircle,
+                          label: "Needs Practice",
+                          dotColor: "bg-rose-600 dark:bg-rose-400",
                         }
                       }
 
                       const status = getStatus()
-                      const StatusIcon = status.icon
 
                       return (
                         <tr
@@ -449,11 +477,11 @@ export default function DashboardPage() {
                           </td>
                           <td className="py-3.5 px-4 w-48">
                             <div className="flex items-center gap-3">
-                              <span className="w-10 font-bold text-foreground text-sm">
+                              <span className="w-10 font-bold text-foreground text-sm font-mono">
                                 {sm.accuracy}%
                               </span>
                               <div
-                                className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden border border-border/50"
+                                className="flex-1 h-2 bg-muted rounded-none overflow-hidden border border-border/40"
                                 role="progressbar"
                                 aria-valuenow={sm.accuracy}
                                 aria-valuemin={0}
@@ -468,13 +496,10 @@ export default function DashboardPage() {
                             </div>
                           </td>
                           <td className="py-3.5 px-4 text-center">
-                            <Badge
-                              variant={status.variant}
-                              className="gap-1 text-xs font-medium"
-                            >
-                              <StatusIcon className="h-3 w-3" aria-hidden="true" />
-                              {status.label}
-                            </Badge>
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                              <span className={`size-2 rounded-[46px] ${status.dotColor} shrink-0`} aria-hidden="true" />
+                              <span>{status.label}</span>
+                            </span>
                           </td>
                         </tr>
                       )
@@ -504,13 +529,15 @@ export default function DashboardPage() {
           </Card>
         )}
       </section>
+      )}
 
       {/* SECTION D — Data-Driven Focus Areas & Recommendations */}
-      <section aria-labelledby="recommendations-heading" className="space-y-4">
+      {(activeTab === "all" || activeTab === "recommendations") && (
+        <section aria-labelledby="recommendations-heading" className="space-y-4">
         <div className="space-y-1">
           <h2
             id="recommendations-heading"
-            className="text-2xl font-bold tracking-tight text-foreground"
+            className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
           >
             {t("recommendedForYou")}
           </h2>
@@ -526,8 +553,8 @@ export default function DashboardPage() {
               className={cn(
                 "border transition-all flex flex-col justify-between focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20",
                 rec.priority === "CRITICAL"
-                  ? "border-primary/40 bg-primary/5 shadow-xs"
-                  : "border-border shadow-xs"
+                  ? "border-primary/40 bg-primary/5 shadow-none"
+                  : "border-border shadow-none"
               )}
             >
               <CardHeader className="pb-2">
@@ -570,23 +597,25 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+      )}
 
       {/* SECTION E — Progress / Learning Trend */}
-      <section aria-labelledby="trend-heading" className="space-y-4">
+      {(activeTab === "all" || activeTab === "analytics") && (
+        <section aria-labelledby="trend-heading" className="space-y-4">
         <h2
           id="trend-heading"
-          className="text-2xl font-bold tracking-tight text-foreground"
+          className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
         >
           Learning Trend
         </h2>
 
         {trend?.hasTrend && trend.trendDiff !== null && trend.latestAttempt && trend.previousAttempt ? (
-          <Card className="border shadow-xs p-6 space-y-6">
+          <Card className="border shadow-none p-6 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
-                    "flex size-10 items-center justify-center rounded-lg",
+                    "flex size-10 items-center justify-center rounded-[2px]",
                     trend.trendDiff >= 0
                       ? "bg-primary/10 text-primary"
                       : "bg-muted text-muted-foreground"
@@ -629,7 +658,7 @@ export default function DashboardPage() {
                 Attempt Comparison
               </h4>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="p-4 rounded-lg bg-muted/40 border space-y-1">
+                <div className="p-4 rounded-[2px] bg-muted/40 border space-y-1">
                   <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span className="font-semibold text-foreground truncate max-w-[180px]">
                       {trend.latestAttempt.examTitle}
@@ -643,7 +672,7 @@ export default function DashboardPage() {
                     Score: {trend.latestAttempt.score} / {trend.latestAttempt.totalQuestions} ({trend.latestAttempt.correctCount} correct)
                   </p>
                 </div>
-                <div className="p-4 rounded-lg bg-muted/20 border space-y-1">
+                <div className="p-4 rounded-[2px] bg-muted/20 border space-y-1">
                   <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span className="font-semibold text-foreground truncate max-w-[180px]">
                       {trend.previousAttempt.examTitle}
@@ -661,9 +690,9 @@ export default function DashboardPage() {
             </div>
           </Card>
         ) : completedCount === 1 && recentActivity.length > 0 ? (
-          <Card className="border p-6 shadow-xs space-y-3">
+          <Card className="border p-6 shadow-none space-y-3">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <div className="flex size-10 items-center justify-center rounded-[2px] bg-primary/10 text-primary">
                 <CheckCircle2 className="size-5" aria-hidden="true" />
               </div>
               <div>
@@ -690,14 +719,16 @@ export default function DashboardPage() {
           </Card>
         )}
       </section>
+      )}
 
       {/* SECTION F — Available Mock Exams */}
-      <section aria-labelledby="mock-exams-heading" className="space-y-4">
+      {(activeTab === "all" || activeTab === "mock-exams") && (
+        <section aria-labelledby="mock-exams-heading" className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h2
               id="mock-exams-heading"
-              className="text-2xl font-bold tracking-tight text-foreground"
+              className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
             >
               {t("takeMockExam")}
             </h2>
@@ -720,7 +751,7 @@ export default function DashboardPage() {
           {AvailableExams.map((exam) => (
             <Card
               key={exam.id}
-              className="flex flex-col justify-between border hover:border-primary/50 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-colors shadow-xs"
+              className="flex flex-col justify-between border hover:border-primary/50 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-colors shadow-none"
             >
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start gap-2 mb-2">
@@ -764,13 +795,15 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+      )}
 
       {/* SECTION G — Recent Activity (Official Completed Attempts) */}
-      <section aria-labelledby="activity-heading" className="space-y-4">
+      {(activeTab === "all" || activeTab === "analytics" || activeTab === "mock-exams") && (
+        <section aria-labelledby="activity-heading" className="space-y-4">
         <div className="space-y-1">
           <h2
             id="activity-heading"
-            className="text-2xl font-bold tracking-tight text-foreground"
+            className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
           >
             Recent Activity
           </h2>
@@ -780,7 +813,7 @@ export default function DashboardPage() {
         </div>
 
         {hasHistory && recentActivity.length > 0 ? (
-          <Card className="border shadow-xs overflow-hidden">
+          <Card className="border shadow-none overflow-hidden">
             <div className="divide-y divide-border" role="list">
               {recentActivity.map((attempt, index) => (
                 <div
@@ -832,7 +865,7 @@ export default function DashboardPage() {
           </Card>
         ) : (
           <Card className="border border-dashed bg-muted/20 p-8 text-center shadow-none">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground mb-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-none bg-muted text-muted-foreground mb-4">
               <Clock className="size-6" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-bold mb-1 text-foreground">
@@ -852,6 +885,11 @@ export default function DashboardPage() {
           </Card>
         )}
       </section>
+      )}
+        </div>
+      </Tabs>
     </div>
   )
 }
+
+

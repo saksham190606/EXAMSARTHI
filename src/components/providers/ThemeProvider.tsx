@@ -3,6 +3,21 @@
 import * as React from "react"
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 
+// React 19 / Next.js 16 compatibility: next-themes injects an inline script to prevent
+// theme flash (FOUC), which React 19 flags as a development console warning.
+if (process.env.NODE_ENV === "development") {
+  const originalError = console.error
+  console.error = (...args: unknown[]) => {
+    if (
+      typeof args[0] === "string" &&
+      args[0].includes("Encountered a script tag while rendering React component")
+    ) {
+      return
+    }
+    originalError.apply(console, args)
+  }
+}
+
 export function ThemeProvider({
   children,
   ...props

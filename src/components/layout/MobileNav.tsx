@@ -43,52 +43,62 @@ export function MobileNav() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open Navigation Menu" />}>
-        <Menu className="h-6 w-6" />
+      <SheetTrigger 
+        render={
+          <button
+            type="button"
+            aria-label="Open Navigation Menu"
+            className="md:hidden size-9 inline-flex items-center justify-center rounded-[2px] border border-white/20 bg-black text-white shadow-none hover:bg-white/10 hover:border-white/40 transition-all duration-120 ease-out motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black cursor-pointer"
+          />
+        }
+      >
+        <Menu className="size-5" />
       </SheetTrigger>
-      <SheetContent side="left" className="w-[300px] sm:w-[400px]">
+      <SheetContent side="left" className="w-[300px] sm:w-[400px] rounded-none border-r border-neutral-300 dark:border-white/20">
         <SheetHeader>
-          <SheetTitle className="text-left font-bold text-xl">EXAMSARTHI</SheetTitle>
+          <SheetTitle className="text-left font-heading font-bold text-2xl tracking-tight">EXAMSARTHI</SheetTitle>
           <SheetDescription className="text-left sr-only">
             Navigation menu
           </SheetDescription>
         </SheetHeader>
-        <nav aria-label="Mobile navigation" className="flex flex-col gap-4 mt-8">
+        <nav aria-label="Mobile navigation" className="flex flex-col gap-2 mt-8">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className={`text-lg font-medium p-2 rounded-md hover:bg-accent hover:text-accent-foreground ${
-                pathname === item.href ? "bg-accent text-accent-foreground" : ""
+              className={`text-base font-bold tracking-[0.144px] px-3 py-2.5 rounded-[2px] transition-colors ${
+                pathname === item.href 
+                  ? "bg-surface-soft dark:bg-surface-deep text-foreground border-l-2 border-primary" 
+                  : "text-neutral-700 dark:text-neutral-300 hover:text-foreground hover:bg-surface-soft"
               }`}
             >
               {item.label}
             </Link>
           ))}
 
-          <div className="border-t border-border/50 pt-4 mt-2">
+          <div className="border-t border-hairline dark:border-white/16 pt-6 mt-4">
             {user ? (
               <div className="space-y-3">
-                <p className="text-xs text-muted-foreground truncate px-2">
+                <p className="text-xs text-neutral-500 truncate px-2">
                   Candidate: <strong className="text-foreground">{candidateName}</strong>
                 </p>
-                <p className="text-[11px] text-muted-foreground/80 truncate px-2 -mt-1">
+                <p className="text-[11px] text-neutral-400 truncate px-2 -mt-1">
                   {user.email}
                 </p>
                 <Button
                   variant="outline"
                   onClick={handleSignOut}
-                  className="w-full justify-start gap-2 h-11 text-base font-medium"
+                  className="w-full justify-start gap-2 h-12 text-sm font-bold rounded-[2px]"
                 >
-                  <LogOut className="h-5 w-5" />
+                  <LogOut className="size-4" />
                   Sign Out
                 </Button>
               </div>
             ) : (
               <Link href="/login" onClick={() => setOpen(false)}>
-                <Button className="w-full justify-start gap-2 h-11 text-base font-medium">
-                  <LogIn className="h-5 w-5" />
+                <Button className="w-full justify-start gap-2 h-12 text-sm font-bold rounded-[2px]">
+                  <LogIn className="size-4" />
                   Log In / Sign Up
                 </Button>
               </Link>

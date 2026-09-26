@@ -77,7 +77,7 @@ export function QuestionPalette({
 
                 {/* Flag indicator */}
                 {isFlagged && (
-                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xs">
+                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-black ">
                     <Flag className="size-2 fill-current" aria-hidden="true" />
                   </span>
                 )}
@@ -128,9 +128,9 @@ export function QuestionPalette({
         return (
           <div 
             key={sec.id || secIdx} 
-            className={`rounded-xl border p-3 transition-colors ${
+            className={`rounded-none border p-3 transition-colors ${
               isActive 
-                ? 'border-primary/50 bg-primary/5 shadow-2xs' 
+                ? 'border-primary/50 bg-primary/5 ' 
                 : isCompleted 
                   ? 'border-border/60 bg-muted/20 opacity-80' 
                   : 'border-border/40 bg-muted/10 opacity-60'
@@ -200,7 +200,7 @@ export function QuestionPalette({
 
                     {/* Flag indicator */}
                     {isFlagged && (
-                      <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xs">
+                      <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-primary text-black ">
                         <Flag className="size-1.5 fill-current" aria-hidden="true" />
                       </span>
                     )}
@@ -263,3 +263,4 @@ function PaletteLegend() {
     </div>
   );
 }
+

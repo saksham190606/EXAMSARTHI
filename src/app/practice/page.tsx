@@ -172,7 +172,7 @@ function PracticeContent() {
         <div className="space-y-1.5">
           <h1
             id="practice-heading"
-            className="text-3xl md:text-4xl font-bold tracking-tight text-foreground"
+            className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-foreground"
           >
             {t('practiceTitle')}
           </h1>
@@ -183,7 +183,7 @@ function PracticeContent() {
         <div className="flex-shrink-0">
           <Button
             size="lg"
-            className="h-11 px-6 font-medium shadow-xs"
+            className="h-12 px-6 font-medium "
             render={<Link href="/exam" />}
             nativeButton={false}
           >
@@ -200,7 +200,7 @@ function PracticeContent() {
         </h2>
         {loadingAnalytics ? (
           <div 
-            className="h-32 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-6 space-y-3"
+            className="h-32 rounded-none border border-border/60 bg-muted/20 animate-pulse p-6 space-y-3"
             role="status"
             aria-live="polite"
             aria-label="Loading personalized recommendations"
@@ -210,7 +210,7 @@ function PracticeContent() {
             <div className="h-4 w-96 bg-muted/60 rounded" />
           </div>
         ) : topRecommendation ? (
-          <Card className="border-primary/40 bg-primary/5 p-5 md:p-6 shadow-xs">
+          <Card className="border-primary/40 bg-primary/5 p-5 md:p-6 ">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
@@ -226,7 +226,7 @@ function PracticeContent() {
               </div>
               <div className="flex-shrink-0">
                 <Button
-                  className="font-medium h-10 px-5 shadow-xs"
+                  className="font-medium h-10 px-5 "
                   render={<Link href={topRecommendation.actionUrl} />}
                   nativeButton={false}
                 >
@@ -270,7 +270,7 @@ function PracticeContent() {
       {/* SECTION C — Search, Filters, and Discovery */}
       <section
         aria-labelledby="filters-heading"
-        className="bg-card border rounded-2xl p-5 md:p-7 shadow-xs space-y-6"
+        className="bg-card border rounded-none p-5 md:p-7  space-y-6"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -386,10 +386,10 @@ function PracticeContent() {
                   onClick={() => setSubjectFilter(cat.id)}
                   aria-pressed={isSelected}
                   className={cn(
-                    "inline-flex items-center px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors border outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                    "inline-flex items-center px-4 py-2 rounded-[46px] text-xs md:text-sm font-bold tracking-[0.13px] transition-all duration-150 ease-[cubic-bezier(0.2,0,0,1)] motion-safe:active:scale-[0.98] border outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     isSelected
-                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                      : "bg-background text-foreground border-border hover:bg-muted/60"
+                      ? "bg-primary text-black border-primary shadow-[0_2px_8px_rgba(255,237,0,0.3)]"
+                      : "bg-white text-black border-black hover:bg-black hover:text-white dark:bg-black dark:text-white dark:border-white dark:hover:bg-white dark:hover:text-black"
                   )}
                 >
                   {cat.label}
@@ -470,7 +470,7 @@ function PracticeContent() {
           <div>
             <h2
               id="practice-results-heading"
-              className="text-2xl font-bold tracking-tight text-foreground"
+              className="font-heading text-2xl md:text-3xl font-bold tracking-tight text-foreground"
             >
               {subjectFilter !== "all"
                 ? `${getSubjectDisplayName(subjectFilter)} Practice`
@@ -486,11 +486,14 @@ function PracticeContent() {
         </div>
 
         {filteredSets.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div
+            key={`${subjectFilter}-${difficultyFilter}-${searchQuery}`}
+            className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 motion-safe:animate-tab-enter"
+          >
             {filteredSets.map((practice) => (
               <Card
                 key={practice.id}
-                className="flex flex-col justify-between border border-border bg-card hover:border-primary/50 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-xs"
+                className="flex flex-col justify-between border border-border bg-card hover:border-primary/50 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all "
               >
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start gap-2 mb-2">
@@ -501,7 +504,7 @@ function PracticeContent() {
                       {practice.subject}
                     </Badge>
                   </div>
-                  <CardTitle className="text-xl font-bold text-foreground">
+                  <CardTitle className="font-heading text-xl font-bold text-foreground">
                     {practice.title}
                   </CardTitle>
                   <CardDescription className="text-sm text-muted-foreground leading-relaxed mt-1">
@@ -509,7 +512,7 @@ function PracticeContent() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="py-2 flex-1">
-                  <div className="flex items-center gap-6 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/40 p-3 rounded-lg border border-border/40">
+                  <div className="flex items-center gap-6 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/40 p-3 rounded-[2px] border border-border/40">
                     <div className="flex items-center gap-2">
                       <BookOpen className="size-4 text-primary" aria-hidden="true" />
                       <span>{practice.questions} Questions</span>
@@ -522,7 +525,7 @@ function PracticeContent() {
                 </CardContent>
                 <CardFooter className="pt-3">
                   <Button
-                    className="w-full h-11 text-base font-medium shadow-xs"
+                    className="w-full h-12 text-base font-medium "
                     render={<Link href={`/exam?set=${practice.id}`} />}
                     nativeButton={false}
                   >
@@ -535,7 +538,7 @@ function PracticeContent() {
           </div>
         ) : (
           <Card className="border border-dashed bg-muted/20 p-12 text-center shadow-none">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground mb-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-none bg-muted text-muted-foreground mb-4">
               <Filter className="size-6" aria-hidden="true" />
             </div>
             <h3 className="text-xl font-bold mb-2 text-foreground">
@@ -571,3 +574,5 @@ export default function PracticePage() {
     </React.Suspense>
   )
 }
+
+

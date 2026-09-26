@@ -166,7 +166,7 @@ export function QuestionReviewList({
       {/* Header and Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
         <div className="space-y-1">
-          <h2 id="question-review-heading" className="text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h2 id="question-review-heading" className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <span>Question-by-Question Review</span>
             {hasSections && (
               <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
@@ -182,7 +182,7 @@ export function QuestionReviewList({
 
         {/* Filter Badges */}
         <div 
-          className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/50 rounded-lg border border-border/40"
+          className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/50 rounded-[2px] border border-border/40"
           role="group"
           aria-label="Filter questions by outcome"
         >
@@ -192,7 +192,7 @@ export function QuestionReviewList({
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring",
               filter === 'all'
-                ? "bg-background text-foreground shadow-2xs border border-border/80"
+                ? "bg-background text-foreground shadow-none border border-border/80"
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-pressed={filter === 'all'}
@@ -206,7 +206,7 @@ export function QuestionReviewList({
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
               filter === 'correct'
-                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-2xs border border-emerald-500/30"
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-none border border-emerald-500/30"
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-pressed={filter === 'correct'}
@@ -221,7 +221,7 @@ export function QuestionReviewList({
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
               filter === 'incorrect'
-                ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 shadow-2xs border border-rose-500/30"
+                ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 shadow-none border border-rose-500/30"
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-pressed={filter === 'incorrect'}
@@ -236,7 +236,7 @@ export function QuestionReviewList({
             className={cn(
               "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
               filter === 'unanswered'
-                ? "bg-slate-500/10 text-slate-700 dark:text-slate-300 shadow-2xs border border-slate-500/30"
+                ? "bg-slate-500/10 text-slate-700 dark:text-slate-300 shadow-none border border-slate-500/30"
                 : "text-muted-foreground hover:text-foreground"
             )}
             aria-pressed={filter === 'unanswered'}
@@ -250,7 +250,7 @@ export function QuestionReviewList({
       {/* Questions List (Grouped by Section if sectional, Flat if not) */}
       <div className="space-y-6">
         {filteredQuestions.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground rounded-lg border border-dashed border-border">
+          <div className="p-8 text-center text-muted-foreground rounded-[2px] border border-dashed border-border">
             No questions match the selected filter &quot;{filter}&quot;.
           </div>
         ) : hasSections ? (
@@ -259,9 +259,9 @@ export function QuestionReviewList({
             const accuracy = group.total > 0 ? Math.round((group.correct / group.total) * 100) : 0;
             return (
               <div key={group.name} className="space-y-3 pt-2">
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/30 border border-primary/20">
+                <div className="flex items-center justify-between p-3.5 rounded-none bg-muted/30 border border-primary/20">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">
+                    <span className="flex size-7 items-center justify-center rounded-[2px] bg-primary/10 text-primary font-bold text-xs">
                       <Layers className="size-3.5" aria-hidden="true" />
                     </span>
                     <div>
@@ -303,7 +303,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
   return (
     <Card 
       className={cn(
-        "border transition-all shadow-2xs",
+        "border transition-all shadow-none",
         q.isCorrect 
           ? "border-emerald-500/30 bg-card hover:border-emerald-500/50" 
           : q.isAnswered 
@@ -352,7 +352,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
         </div>
 
         {/* Question Text */}
-        <CardTitle className="text-base md:text-lg font-semibold text-foreground pt-1 leading-relaxed">
+        <CardTitle className="font-heading text-base md:text-lg font-semibold text-foreground pt-1 leading-relaxed">
           {q.text}
         </CardTitle>
       </CardHeader>
@@ -401,7 +401,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
                 <div
                   key={opt.id}
                   className={cn(
-                    "p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm transition-colors",
+                    "p-3 rounded-[2px] border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm transition-colors",
                     optionStyle
                   )}
                 >
@@ -441,7 +441,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
               return (
                 <div 
                   key={val} 
-                  className={cn("p-3 rounded-lg border text-center text-sm capitalize flex flex-col items-center justify-center gap-1", borderBg)}
+                  className={cn("p-3 rounded-[2px] border text-center text-sm capitalize flex flex-col items-center justify-center gap-1", borderBg)}
                 >
                   <span className="font-semibold">{val}</span>
                   {isCorrectOption && isUserAnswer && (
@@ -461,7 +461,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
 
         {/* Short Answer / Fill in the Blank Render */}
         {(q.type === 'short-answer' || q.type === 'fill-blank') && (
-          <div className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border/60 text-sm">
+          <div className="space-y-2 p-3 rounded-[2px] bg-muted/30 border border-border/60 text-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-xs font-semibold text-muted-foreground">Your Submitted Answer:</span>
               <span className={cn(
@@ -482,7 +482,7 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
 
         {/* Explanation Box */}
         {q.explanation && (
-          <div className="p-3.5 rounded-lg bg-primary/5 border border-primary/20 space-y-1.5 text-xs text-foreground">
+          <div className="p-3.5 rounded-[2px] bg-primary/5 border border-primary/20 space-y-1.5 text-xs text-foreground">
             <div className="flex items-center gap-1.5 font-semibold text-primary">
               <Lightbulb className="size-3.5" aria-hidden="true" />
               <span>Explanation & Solution</span>
@@ -496,3 +496,5 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
     </Card>
   );
 }
+
+

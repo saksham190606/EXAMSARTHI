@@ -72,13 +72,13 @@ function SignupForm() {
   };
 
   return (
-    <Card className="w-full max-w-md shadow-lg border-border/60">
-      <CardHeader className="space-y-1 text-center">
-        <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
-          <UserPlus className="w-6 h-6" aria-hidden="true" />
+    <Card className="w-full max-w-md shadow-none border border-neutral-300 dark:border-white/20 rounded-none bg-card">
+      <CardHeader className="space-y-3 text-center">
+        <div className="mx-auto size-11 rounded-[2px] bg-primary text-black flex items-center justify-center mb-1">
+          <UserPlus className="size-5" aria-hidden="true" />
         </div>
-        <CardTitle className="text-2xl font-bold tracking-tight">Create Account</CardTitle>
-        <CardDescription>
+        <CardTitle className="font-heading text-2xl font-bold tracking-tight text-foreground leading-[0.95]">Create Account</CardTitle>
+        <CardDescription className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400">
           Join EXAMSARTHI to access full examinations, practice tests, and track your progress.
         </CardDescription>
       </CardHeader>
@@ -188,13 +188,13 @@ function SignupForm() {
         <CardFooter className="flex flex-col space-y-4">
           <Button
             type="submit"
-            className="w-full text-base h-11 font-medium"
+            className="w-full text-sm h-12 font-bold tracking-[0.144px] rounded-[2px] bg-primary text-black hover:bg-primary-deep"
             disabled={loading}
             aria-busy={loading}
           >
             {loading ? (
               <span className="flex items-center gap-2">
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent" />
+                <span className="inline-block h-4 w-4 animate-spin rounded-none border-2 border-solid border-current border-r-transparent" />
                 Creating Account...
               </span>
             ) : (
@@ -202,11 +202,11 @@ function SignupForm() {
             )}
           </Button>
 
-          <p className="text-sm text-center text-muted-foreground">
+          <p className="text-sm text-center text-neutral-600 dark:text-neutral-400">
             Already have an account?{' '}
             <Link
               href={redirectTo !== '/dashboard' ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : '/login'}
-              className="font-medium text-primary hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              className="font-bold text-foreground hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground rounded-[2px]"
             >
               Sign In
             </Link>
@@ -219,8 +219,8 @@ function SignupForm() {
 
 export default function SignupPage() {
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md mb-6">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-4 py-12 relative">
+      <div className="w-full max-w-md mb-6 flex items-center justify-between">
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md p-1"
@@ -228,16 +228,21 @@ export default function SignupPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           <span>Back to Home</span>
         </Link>
+        <span className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">
+          New Candidate
+        </span>
       </div>
 
-      <Suspense fallback={
-        <Card className="w-full max-w-md p-8 text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
-          <p className="mt-4 text-sm text-muted-foreground">Loading registration form...</p>
-        </Card>
-      }>
-        <SignupForm />
-      </Suspense>
+      <div className="w-full max-w-md">
+        <Suspense fallback={
+          <Card className="w-full max-w-md p-8 text-center rounded-2xl border-border/80">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
+            <p className="mt-4 text-sm text-muted-foreground">Loading registration form...</p>
+          </Card>
+        }>
+          <SignupForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

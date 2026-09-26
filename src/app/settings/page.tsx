@@ -97,10 +97,6 @@ export default function SettingsPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           <span>{t('backToDashboard')}</span>
         </Link>
-        <Badge variant="outline" className="gap-1 font-semibold text-xs py-1">
-          <Sliders className="h-3 w-3" aria-hidden="true" />
-          <span>Saved Locally</span>
-        </Badge>
       </nav>
 
       {/* Header */}
@@ -109,7 +105,7 @@ export default function SettingsPage() {
           <Settings2 className="h-4 w-4" aria-hidden="true" />
           <span>{t('accessibilitySettings')}</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
           {t('settingsTitle')}
         </h1>
         <p className="text-base text-muted-foreground">
@@ -120,16 +116,13 @@ export default function SettingsPage() {
       <div className="grid gap-6">
 
         {/* Candidate Profile Section */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-primary" aria-hidden="true" />
-                <CardTitle className="text-lg font-bold">Candidate Profile</CardTitle>
+                <CardTitle className="font-heading text-xl font-bold text-foreground">Candidate Profile</CardTitle>
               </div>
-              <Badge variant="outline" className="gap-1 font-semibold text-xs py-0.5 border-primary/30 text-primary">
-                Cloud Synchronized
-              </Badge>
             </div>
             <CardDescription>
               Manage your candidate identity details synchronized with your EXAMSARTHI account.
@@ -208,11 +201,11 @@ export default function SettingsPage() {
         </Card>
 
         {/* 1. Typography & Text Scaling */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Eye className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">{t('textSizeHeading')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('textSizeHeading')}</CardTitle>
             </div>
             <CardDescription>
               {t('textSizeDesc')}
@@ -224,19 +217,19 @@ export default function SettingsPage() {
               onValueChange={(val) => setTextSize(val as TextSize)}
               className="grid sm:grid-cols-3 gap-3"
             >
-              <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="default" id="settings-ts-default" />
                 <Label htmlFor="settings-ts-default" className="cursor-pointer font-medium">
                   {t('defaultSize')}
                 </Label>
               </div>
-              <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="large" id="settings-ts-large" />
                 <Label htmlFor="settings-ts-large" className="cursor-pointer font-medium">
                   {t('largeSize')}
                 </Label>
               </div>
-              <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                 <RadioGroupItem value="xlarge" id="settings-ts-xlarge" />
                 <Label htmlFor="settings-ts-xlarge" className="cursor-pointer font-medium">
                   {t('extraLargeSize')}
@@ -247,11 +240,11 @@ export default function SettingsPage() {
         </Card>
 
         {/* 2. Visual Theme & Contrast */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <SunMoon className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">{t('themeContrastHeading')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('themeContrastHeading')}</CardTitle>
             </div>
             <CardDescription>
               {t('themeContrastDesc')}
@@ -266,15 +259,15 @@ export default function SettingsPage() {
                 onValueChange={(val) => setTheme(val)}
                 className="grid sm:grid-cols-3 gap-3"
               >
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="light" id="settings-theme-light" />
                   <Label htmlFor="settings-theme-light" className="cursor-pointer font-medium">{t('lightMode')}</Label>
                 </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="dark" id="settings-theme-dark" />
                   <Label htmlFor="settings-theme-dark" className="cursor-pointer font-medium">{t('darkMode')}</Label>
                 </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="system" id="settings-theme-system" />
                   <Label htmlFor="settings-theme-system" className="cursor-pointer font-medium">{t('systemMode')}</Label>
                 </div>
@@ -288,11 +281,11 @@ export default function SettingsPage() {
                 onValueChange={(val) => setContrast(val as Contrast)}
                 className="grid sm:grid-cols-2 gap-3"
               >
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="default" id="settings-c-default" />
                   <Label htmlFor="settings-c-default" className="cursor-pointer font-medium">{t('standardContrast')}</Label>
                 </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="high" id="settings-c-high" />
                   <Label htmlFor="settings-c-high" className="cursor-pointer font-medium">{t('highContrast')}</Label>
                 </div>
@@ -303,18 +296,18 @@ export default function SettingsPage() {
         </Card>
 
         {/* 3. Motion & Animation */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Move className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">{t('motionHeading')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('motionHeading')}</CardTitle>
             </div>
             <CardDescription>
               {t('motionDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
+            <div className="flex items-center justify-between p-3 rounded-[2px] border border-border/60">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="settings-reduced-motion" className="text-base font-semibold cursor-pointer">
                   {t('reducedMotionLabel')}
@@ -334,18 +327,18 @@ export default function SettingsPage() {
         </Card>
 
         {/* 4. Voice & Audio Assistance */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">{t('audioVoiceHeading')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('audioVoiceHeading')}</CardTitle>
             </div>
             <CardDescription>
               {t('audioVoiceDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60">
+            <div className="flex items-center justify-between p-3 rounded-[2px] border border-border/60">
               <div className="space-y-0.5 pr-4">
                 <Label htmlFor="settings-audio-assistance" className="text-base font-semibold cursor-pointer">
                   {t('audioAssistanceLabel')}
@@ -370,15 +363,15 @@ export default function SettingsPage() {
                 className="grid sm:grid-cols-3 gap-3"
                 disabled={!audioAssistance}
               >
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="slow" id="settings-vs-slow" />
                   <Label htmlFor="settings-vs-slow" className="cursor-pointer font-medium">Slow (0.8x)</Label>
                 </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="normal" id="settings-vs-normal" />
                   <Label htmlFor="settings-vs-normal" className="cursor-pointer font-medium">Normal (1.0x)</Label>
                 </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/60 hover:bg-muted/30 transition-colors">
+                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="fast" id="settings-vs-fast" />
                   <Label htmlFor="settings-vs-fast" className="cursor-pointer font-medium">Fast (1.2x)</Label>
                 </div>
@@ -388,11 +381,11 @@ export default function SettingsPage() {
         </Card>
 
         {/* 5. Language Preferences */}
-        <Card className="border border-border/80 shadow-sm">
+        <Card className="border border-border/80 shadow-none rounded-none">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-              <CardTitle className="text-lg font-bold">{t('languageHeading')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('languageHeading')}</CardTitle>
             </div>
             <CardDescription>
               {t('languageDesc')}
@@ -433,3 +426,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+

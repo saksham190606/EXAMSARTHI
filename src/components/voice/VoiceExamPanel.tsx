@@ -57,7 +57,7 @@ export function VoiceExamPanel({
   const renderStatusBadge = () => {
     if (status === 'RequestingPermission') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
           <Loader2 className="size-3 animate-spin" aria-hidden="true" />
           <span>{t('statusRequestingPermission')}</span>
         </span>
@@ -66,7 +66,7 @@ export function VoiceExamPanel({
 
     if (!isActive) {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-muted text-muted-foreground border border-border">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-muted text-muted-foreground border border-border">
           <MicOff className="size-3" aria-hidden="true" />
           <span>{t('statusOff')}</span>
         </span>
@@ -76,28 +76,28 @@ export function VoiceExamPanel({
     switch (status) {
       case 'Listening':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-primary/10 text-primary border border-primary/30">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-primary/10 text-primary border border-primary/30">
             <Radio className="size-3 motion-safe:animate-pulse" aria-hidden="true" />
             <span>{t('statusListening')}</span>
           </span>
         );
       case 'Processing':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary text-secondary-foreground border border-border">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-secondary text-secondary-foreground border border-border">
             <Loader2 className="size-3 animate-spin" aria-hidden="true" />
             <span>{t('statusProcessing')}</span>
           </span>
         );
       case 'Speaking':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-primary/15 text-primary border border-primary/30">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-primary/15 text-primary border border-primary/30">
             <Volume2 className="size-3" aria-hidden="true" />
             <span>{t('statusSpeaking')}</span>
           </span>
         );
       case 'Error':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-destructive/10 text-destructive border border-destructive/20">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-destructive/10 text-destructive border border-destructive/20">
             <AlertCircle className="size-3" aria-hidden="true" />
             <span>{t('statusError')}</span>
           </span>
@@ -105,7 +105,7 @@ export function VoiceExamPanel({
       case 'Ready':
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-muted text-foreground border border-border">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-muted text-foreground border border-border">
             <CheckCircle2 className="size-3 text-primary" aria-hidden="true" />
             <span>{t('statusReady')}</span>
           </span>
@@ -115,7 +115,7 @@ export function VoiceExamPanel({
 
   return (
     <Card className={cn(
-      "border transition-colors shadow-xs",
+      "border transition-colors ",
       isActive ? "border-primary/40 bg-card" : "border-border bg-card"
     )}>
       <CardContent className="p-4 sm:p-5 space-y-4">
@@ -178,7 +178,7 @@ export function VoiceExamPanel({
         {(status === 'Error' || errorMessage) && (
           <div 
             role="alert" 
-            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive"
+            className="flex items-start gap-2.5 p-3.5 rounded-[2px] bg-destructive/10 border border-destructive/20 text-xs text-destructive"
           >
             <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
             <div className="space-y-1">
@@ -255,3 +255,4 @@ export function VoiceExamPanel({
     </Card>
   );
 }
+

@@ -90,7 +90,7 @@ export function QuestionDisplay({
 
         return (
           <fieldset className="space-y-6 border-none p-0 m-0">
-            <legend className="text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-6 block">
+            <legend className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-6 block">
               {scq.text}
             </legend>
             
@@ -111,10 +111,10 @@ export function QuestionDisplay({
                   <div 
                     key={option.id} 
                     className={`
-                      relative flex items-center p-4 sm:p-5 rounded-xl border transition-all cursor-pointer
+                      relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30' 
+                        ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -132,9 +132,9 @@ export function QuestionDisplay({
                       {/* Distinct Letter Badge (A, B, C, D) */}
                       <span 
                         className={`
-                          flex shrink-0 items-center justify-center size-9 rounded-lg font-bold text-sm transition-colors border
+                          flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                           ${isSelected 
-                            ? 'bg-primary text-primary-foreground border-primary shadow-2xs' 
+                            ? 'bg-primary text-black border-primary ' 
                             : 'bg-muted/60 text-muted-foreground border-border'
                           }
                         `}
@@ -182,12 +182,12 @@ export function QuestionDisplay({
             aria-describedby={`mcq-instructions-${mcq.id}`}
           >
             <div>
-              <legend className="text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-2 block">
+              <legend className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-2 block">
                 {mcq.text}
               </legend>
               <div 
                 id={`mcq-instructions-${mcq.id}`}
-                className="flex items-center gap-1.5 text-sm font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20 w-fit mb-6"
+                className="flex items-center gap-1.5 text-sm font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-[2px] border border-primary/20 w-fit mb-6"
                 role="note"
               >
                 <HelpCircle className="size-4 shrink-0" aria-hidden="true" />
@@ -204,10 +204,10 @@ export function QuestionDisplay({
                   <div 
                     key={option.id}
                     className={`
-                      relative flex items-center p-4 sm:p-5 rounded-xl border transition-all cursor-pointer
+                      relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30' 
+                        ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -237,9 +237,9 @@ export function QuestionDisplay({
                       {/* Checkbox Box with Letter */}
                       <span 
                         className={`
-                          flex shrink-0 items-center justify-center size-9 rounded-lg font-bold text-sm transition-colors border
+                          flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                           ${isSelected 
-                            ? 'bg-primary text-primary-foreground border-primary shadow-2xs' 
+                            ? 'bg-primary text-black border-primary ' 
                             : 'bg-muted/60 text-muted-foreground border-border'
                           }
                         `}
@@ -258,7 +258,7 @@ export function QuestionDisplay({
                         className={`
                           size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors ml-2
                           ${isSelected 
-                            ? 'bg-primary text-primary-foreground border-primary' 
+                            ? 'bg-primary text-black border-primary' 
                             : 'border-muted-foreground/30 bg-card'
                           }
                         `}
@@ -293,7 +293,7 @@ export function QuestionDisplay({
 
         return (
           <fieldset className="space-y-6 border-none p-0 m-0">
-            <legend className="text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-6 block">
+            <legend className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed mb-6 block">
               {question.text}
             </legend>
 
@@ -306,10 +306,10 @@ export function QuestionDisplay({
               {/* True Option */}
               <div 
                 className={`
-                  relative flex items-center p-5 rounded-xl border transition-all cursor-pointer
+                  relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'true' 
-                    ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30' 
+                    ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
@@ -326,9 +326,9 @@ export function QuestionDisplay({
                   <div className="flex items-center gap-3">
                     <span 
                       className={`
-                        flex shrink-0 items-center justify-center size-9 rounded-lg font-bold text-sm transition-colors border
+                        flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                         ${currentChoice === 'true' 
-                          ? 'bg-primary text-primary-foreground border-primary shadow-2xs' 
+                          ? 'bg-primary text-black border-primary ' 
                           : 'bg-muted/60 text-muted-foreground border-border'
                         }
                       `}
@@ -352,10 +352,10 @@ export function QuestionDisplay({
               {/* False Option */}
               <div 
                 className={`
-                  relative flex items-center p-5 rounded-xl border transition-all cursor-pointer
+                  relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'false' 
-                    ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/30' 
+                    ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
@@ -372,9 +372,9 @@ export function QuestionDisplay({
                   <div className="flex items-center gap-3">
                     <span 
                       className={`
-                        flex shrink-0 items-center justify-center size-9 rounded-lg font-bold text-sm transition-colors border
+                        flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                         ${currentChoice === 'false' 
-                          ? 'bg-primary text-primary-foreground border-primary shadow-2xs' 
+                          ? 'bg-primary text-black border-primary ' 
                           : 'bg-muted/60 text-muted-foreground border-border'
                         }
                       `}
@@ -405,7 +405,7 @@ export function QuestionDisplay({
 
         return (
           <div className="space-y-6">
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed">
+            <h2 className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground leading-relaxed">
               {question.text}
             </h2>
 
@@ -489,3 +489,5 @@ export function QuestionDisplay({
     </div>
   );
 }
+
+

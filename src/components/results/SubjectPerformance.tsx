@@ -10,9 +10,9 @@ interface SubjectPerformanceProps {
 
 export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
   return (
-    <Card className="border border-border/80 shadow-sm">
+    <Card className="border border-neutral-300 dark:border-white/20 shadow-none">
       <CardHeader className="pb-4">
-        <CardTitle className="text-xl font-bold tracking-tight">Subject-wise Performance</CardTitle>
+        <CardTitle className="font-heading text-xl font-bold tracking-tight">Subject-wise Performance</CardTitle>
         <CardDescription>
           Detailed evaluation of question attempts and accuracy per examination subject.
         </CardDescription>
@@ -22,7 +22,7 @@ export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
           <table className="w-full text-left text-sm whitespace-nowrap min-w-[600px]">
             <caption className="sr-only">Subject performance breakdown showing total questions, correct, incorrect, accuracy, and status</caption>
             <thead>
-              <tr className="border-b border-border bg-muted/30 text-muted-foreground text-xs uppercase tracking-wider">
+              <tr className="border-b border-border/60 bg-muted/20 text-muted-foreground text-xs uppercase tracking-wider">
                 <th scope="col" className="py-3 px-4 font-semibold">Subject</th>
                 <th scope="col" className="py-3 px-4 font-semibold text-center">Total</th>
                 <th scope="col" className="py-3 px-4 font-semibold text-center">Attempted</th>
@@ -36,22 +36,21 @@ export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
               {metrics.map((m) => {
                 const getStatus = () => {
                   if (m.attempted === 0) {
-                    return { label: 'Not Attempted', variant: 'outline' as const, icon: BookOpen };
+                    return { label: 'Not Attempted', dotClass: 'bg-muted-foreground/50' };
                   }
                   if (m.accuracy >= 80) {
-                    return { label: 'Strong Area', variant: 'secondary' as const, icon: CheckCircle2 };
+                    return { label: 'Strong Area', dotClass: 'bg-emerald-600 dark:bg-emerald-400' };
                   }
                   if (m.accuracy >= 60) {
-                    return { label: 'Progressing', variant: 'outline' as const, icon: CheckCircle2 };
+                    return { label: 'Progressing', dotClass: 'bg-amber-600 dark:bg-amber-400' };
                   }
-                  return { label: 'Focus Area', variant: 'destructive' as const, icon: AlertCircle };
+                  return { label: 'Focus Area', dotClass: 'bg-rose-600 dark:bg-rose-400' };
                 };
 
                 const status = getStatus();
-                const StatusIcon = status.icon;
 
                 return (
-                  <tr key={m.subject} className="hover:bg-muted/20 transition-colors">
+                  <tr key={m.subject} className="hover:bg-muted/15 transition-colors">
                     <th scope="row" className="py-3.5 px-4 font-semibold text-foreground">
                       {m.subject}
                     </th>
@@ -63,7 +62,7 @@ export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
                       <div className="flex items-center gap-3">
                         <span className="w-10 font-bold text-foreground text-sm">{m.accuracy}%</span>
                         <div 
-                          className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden border border-border/50" 
+                          className="flex-1 h-2 bg-muted rounded-none overflow-hidden border border-border/40" 
                           role="progressbar"
                           aria-valuenow={m.accuracy}
                           aria-valuemin={0}
@@ -78,10 +77,10 @@ export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <Badge variant={status.variant} className="gap-1 text-xs font-medium">
-                        <StatusIcon className="h-3 w-3" aria-hidden="true" />
-                        {status.label}
-                      </Badge>
+                      <div className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        <span className={`size-2 rounded-full ${status.dotClass}`} aria-hidden="true" />
+                        <span>{status.label}</span>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -93,3 +92,5 @@ export function SubjectPerformance({ metrics }: SubjectPerformanceProps) {
     </Card>
   );
 }
+
+

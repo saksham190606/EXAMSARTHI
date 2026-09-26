@@ -44,7 +44,7 @@ export function SubmitDialog({
         {/* Completion Breakdown Card */}
         <div className="py-2 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 space-y-1">
+            <div className="p-3.5 rounded-none bg-primary/5 border border-primary/20 space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                 <CheckCircle2 className="size-3.5" aria-hidden="true" />
                 <span>{t('answered')}</span>
@@ -57,7 +57,7 @@ export function SubmitDialog({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-muted/40 border border-border space-y-1">
+            <div className="p-3.5 rounded-none bg-muted/40 border border-border space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                 <AlertCircle className="size-3.5 text-muted-foreground" aria-hidden="true" />
                 <span>{t('unanswered')}</span>
@@ -71,7 +71,7 @@ export function SubmitDialog({
             </div>
           </div>
 
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-xs text-muted-foreground leading-relaxed">
+          <div className="p-3 rounded-none bg-muted/30 border border-border/50 text-xs text-muted-foreground leading-relaxed">
             <span className="font-semibold text-foreground">Note:</span> {t('irreversibleNotice')}
           </div>
         </div>
@@ -80,7 +80,7 @@ export function SubmitDialog({
           <Button 
             variant="outline" 
             onClick={() => onOpenChange(false)}
-            className="font-medium"
+            className="font-bold"
           >
             <ArrowLeft className="mr-2 size-4" aria-hidden="true" />
             {t('returnToExam')}
@@ -90,7 +90,7 @@ export function SubmitDialog({
               onOpenChange(false);
               onConfirmSubmit();
             }}
-            className="font-medium shadow-xs"
+            className="font-bold "
           >
             <Send className="mr-2 size-4" aria-hidden="true" />
             {t('confirmAndSubmit')}
@@ -100,3 +100,4 @@ export function SubmitDialog({
     </Dialog>
   );
 }
+

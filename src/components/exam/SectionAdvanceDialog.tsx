@@ -29,7 +29,7 @@ export function SectionAdvanceDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[440px] p-6 space-y-4">
         <DialogHeader className="space-y-2">
-          <div className="size-11 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+          <div className="size-11 rounded-[2px] bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <AlertTriangle className="size-5" aria-hidden="true" />
           </div>
           <DialogTitle className="text-xl font-bold tracking-tight text-foreground">

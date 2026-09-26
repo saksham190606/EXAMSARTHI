@@ -58,7 +58,7 @@ export default function ResultsPage() {
       fallback={
         <div className="min-h-screen bg-background flex items-center justify-center p-6">
           <div className="text-center space-y-4" role="status" aria-live="polite">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
+            <div className="inline-block h-8 w-8 animate-spin rounded-[46px] border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
             <p className="text-muted-foreground text-sm font-medium">Loading evaluation...</p>
           </div>
         </div>
@@ -328,7 +328,7 @@ function ResultsContent() {
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <Card className="max-w-md w-full border-destructive/30" role="alert">
           <CardHeader>
-            <div className="size-10 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-2">
+            <div className="size-10 rounded-[46px] bg-destructive/10 text-destructive flex items-center justify-center mb-2">
               <AlertTriangle className="size-5" aria-hidden="true" />
             </div>
             <CardTitle>Unable to Load Examination Attempt</CardTitle>
@@ -389,13 +389,13 @@ function ResultsContent() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-28 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
+            <div key={i} className="h-28 rounded-none border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
               <div className="h-4 w-20 bg-muted rounded" />
               <div className="h-8 w-16 bg-muted rounded" />
             </div>
           ))}
         </div>
-        <div className="h-48 rounded-xl border border-border/60 bg-muted/20 animate-pulse" />
+        <div className="h-48 rounded-none border border-border/60 bg-muted/20 animate-pulse" />
       </div>
     );
   }
@@ -471,82 +471,21 @@ function ResultsContent() {
           </span>
         </div>
 
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+        <h1 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
           {t('examinationResults')}
         </h1>
-        <p className="text-base text-muted-foreground font-medium">
-          {activeTitle}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-base text-muted-foreground font-medium">
+            {activeTitle}
+          </p>
+          {isOfficialRemote && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20">
+              <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>Official Record · Attempt <span className="font-mono text-2xs">{attemptId?.slice(0, 8)}</span></span>
+            </div>
+          )}
+        </div>
       </header>
-
-      {/* SECURITY & EVALUATION ARCHITECTURE BANNER (PHASE 7E-4) */}
-      {isOfficialRemote ? (
-        <div 
-          className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-foreground flex items-start gap-3 shadow-xs"
-          role="status"
-          aria-label="Official remote attempt status"
-        >
-          <ShieldCheck className="size-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                Official Remote Result — Server Evaluated &amp; Persisted (Phase 7E-4)
-              </span>
-              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-emerald-600 border-emerald-500/30">
-                Tamper-Resistant
-              </Badge>
-              <Badge variant="secondary" className="text-2xs font-mono font-normal">
-                Attempt: {attemptId?.slice(0, 8)}...
-              </Badge>
-            </div>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Official score was graded exclusively on the server with protected answer keys and permanently recorded in <code className="text-primary font-mono text-xs">public.exam_attempts</code>. The client browser never receives or computes raw keys.
-            </p>
-          </div>
-        </div>
-      ) : (finalState as any)?.isRemote !== false ? (
-        <div 
-          className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 text-foreground flex items-start gap-3 shadow-xs"
-          role="status"
-          aria-label="Remote question security status"
-        >
-          <ShieldCheck className="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-blue-700 dark:text-blue-300">
-                Remote Session — Candidate-Safe Mode
-              </span>
-              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-blue-600 border-blue-500/30">
-                Answer Keys Protected
-              </Badge>
-            </div>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Questions were securely retrieved from Supabase candidate-safe views (<code className="text-primary font-mono text-xs">exam_active_questions</code>) with zero browser answer keys.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div 
-          className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 text-foreground flex items-start gap-3 shadow-xs"
-          role="status"
-          aria-label="Local fallback status"
-        >
-          <WifiOff className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-amber-700 dark:text-amber-300">
-                Local Demo / Offline Practice Mode
-              </span>
-              <Badge variant="outline" className="text-2xs font-semibold uppercase tracking-wider text-amber-600 border-amber-500/30">
-                Offline Session
-              </Badge>
-            </div>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Session operated in offline safe fallback mode. Evaluated locally against candidate practice test sets without remote persistence.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* SECTION B — OVERALL PERFORMANCE */}
       <section aria-labelledby="overall-performance-heading" className="space-y-4">
@@ -556,41 +495,41 @@ function ResultsContent() {
 
         <div className="grid gap-6 md:grid-cols-12 items-stretch">
           
-          {/* Main Score Card (7 columns on desktop) */}
-          <Card className="md:col-span-7 border border-border/80 shadow-sm flex flex-col justify-between">
+          {/* Main Score Card (7 columns on desktop) - Dominant Visual Focus */}
+          <Card className="md:col-span-7 border-2 border-primary/25 bg-gradient-to-br from-card via-card to-primary/[0.04]  rounded-none flex flex-col justify-between overflow-hidden">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">
                   {t('overallScore')}
                 </span>
-                <Badge variant={overallStatus.variant} className="gap-1 text-xs font-medium">
-                  <StatusIcon className="h-3 w-3" aria-hidden="true" />
+                <Badge variant={overallStatus.variant} className="gap-1 text-xs font-semibold px-2.5 py-0.5">
+                  <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{overallStatus.label}</span>
                 </Badge>
               </div>
-              <CardTitle className="text-lg font-bold">{t('performanceSummary')}</CardTitle>
+              <CardTitle className="font-heading text-2xl font-bold tracking-tight text-foreground">{t('performanceSummary')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 pt-2">
-              <div className="flex flex-col sm:flex-row items-baseline sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row items-baseline sm:items-center justify-between gap-6 py-2">
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl sm:text-5xl font-black text-foreground tracking-tight">
+                    <span className="font-heading text-6xl sm:text-7xl font-extrabold text-foreground tracking-tight">
                       {results.score}
                     </span>
-                    <span className="text-xl sm:text-2xl font-bold text-muted-foreground">
+                    <span className="font-heading text-2xl sm:text-3xl font-medium text-muted-foreground">
                       / {results.totalQuestions}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground font-medium mt-1">
-                    Score: {results.score} out of {results.totalQuestions} ({results.percentage}%)
+                    Total Score: {results.score} out of {results.totalQuestions} ({results.percentage}%)
                   </p>
                 </div>
 
-                <div className="text-right sm:text-right">
-                  <span className="text-xs font-medium uppercase text-muted-foreground">
+                <div className="text-left sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-border/40">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                     {t('accuracyRate')}
                   </span>
-                  <div className="text-2xl sm:text-3xl font-bold text-foreground">
+                  <div className="font-heading text-4xl sm:text-5xl font-bold text-primary tracking-tight">
                     {results.accuracy}%
                   </div>
                 </div>
@@ -600,11 +539,11 @@ function ResultsContent() {
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-medium text-muted-foreground">
                   <span>Score Progress</span>
-                  <span>{results.percentage}%</span>
+                  <span className="font-semibold text-foreground">{results.percentage}%</span>
                 </div>
                 <Progress 
                   value={results.percentage} 
-                  className="h-3.5 bg-muted" 
+                  className="h-3 bg-muted" 
                   aria-label={`Score: ${results.score} out of ${results.totalQuestions}, representing ${results.percentage} percent.`}
                 />
               </div>
@@ -612,15 +551,15 @@ function ResultsContent() {
           </Card>
 
           {/* Question Outcome Breakdown Cards (5 columns on desktop) */}
-          <Card className="md:col-span-5 border border-border/80 shadow-sm flex flex-col justify-between">
+          <Card className="md:col-span-5 border border-border/70 bg-card/90  rounded-none flex flex-col justify-between">
             <CardHeader className="pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Question Breakdown
               </span>
-              <CardTitle className="text-lg font-bold">{t('attemptOutcomes')}</CardTitle>
+              <CardTitle className="font-heading text-xl font-bold text-foreground">{t('attemptOutcomes')}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40">
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-none bg-muted/20 border border-border/40">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="h-5 w-5 text-primary" aria-hidden="true" />
                   <div>
@@ -628,10 +567,10 @@ function ResultsContent() {
                     <div className="text-xs text-muted-foreground">{t('correctDesc')}</div>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-foreground">{results.correct}</span>
+                <span className="font-heading text-2xl font-bold text-foreground">{results.correct}</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40">
+              <div className="flex items-center justify-between p-3 rounded-none bg-muted/20 border border-border/40">
                 <div className="flex items-center gap-2.5">
                   <XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
                   <div>
@@ -639,10 +578,10 @@ function ResultsContent() {
                     <div className="text-xs text-muted-foreground">{t('incorrectDesc')}</div>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-foreground">{results.incorrect}</span>
+                <span className="font-heading text-2xl font-bold text-foreground">{results.incorrect}</span>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/40">
+              <div className="flex items-center justify-between p-3 rounded-none bg-muted/20 border border-border/40">
                 <div className="flex items-center gap-2.5">
                   <MinusCircle className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                   <div>
@@ -650,7 +589,7 @@ function ResultsContent() {
                     <div className="text-xs text-muted-foreground">{t('unansweredDesc')}</div>
                   </div>
                 </div>
-                <span className="text-xl font-bold text-foreground">{results.unanswered}</span>
+                <span className="font-heading text-2xl font-bold text-foreground">{results.unanswered}</span>
               </div>
             </CardContent>
           </Card>
@@ -660,7 +599,7 @@ function ResultsContent() {
 
       {/* SECTION C — SUBJECT PERFORMANCE */}
       <section aria-labelledby="subject-performance-heading" className="space-y-3">
-        <h2 id="subject-performance-heading" className="text-xl font-bold tracking-tight">
+        <h2 id="subject-performance-heading" className="font-heading text-xl sm:text-2xl font-bold tracking-tight">
           {t('subjectAnalysis')}
         </h2>
         <SubjectPerformance metrics={results.subjectMetrics} />
@@ -670,13 +609,14 @@ function ResultsContent() {
       {remoteAttempt?.summary_metrics?.sectionMetrics && Array.isArray(remoteAttempt.summary_metrics.sectionMetrics) && remoteAttempt.summary_metrics.sectionMetrics.length > 0 && (
         <section aria-labelledby="sectional-performance-heading" className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 id="sectional-performance-heading" className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <h2 id="sectional-performance-heading" className="font-heading text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
               <Layers className="size-5 text-primary" aria-hidden="true" />
               <span>Sectional Timing & Performance</span>
             </h2>
-            <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
-              Verified Server-Side Timing
-            </Badge>
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <ShieldCheck className="size-3.5 text-primary" aria-hidden="true" />
+              <span>Verified Server Timing</span>
+            </span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {remoteAttempt.summary_metrics.sectionMetrics.map((sec: any) => {
@@ -687,7 +627,7 @@ function ResultsContent() {
               const isCapped = sec.timing_flag === 'EXCEEDED_ALLOTTED_TIME_CAPPED';
 
               return (
-                <Card key={sec.section_id || sec.name} className="border border-border/80 shadow-2xs">
+                <Card key={sec.section_id || sec.name} className="border border-border/80 ">
                   <CardHeader className="pb-2 space-y-1">
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="text-2xs font-semibold">
@@ -755,7 +695,7 @@ function ResultsContent() {
       {/* SECTION E — AREAS TO IMPROVE */}
       <section aria-labelledby="areas-to-improve-heading" className="space-y-4">
         <div className="space-y-1">
-          <h2 id="areas-to-improve-heading" className="text-xl font-bold tracking-tight">
+          <h2 id="areas-to-improve-heading" className="font-heading text-xl sm:text-2xl font-bold tracking-tight">
             {t('areasToImprove')}
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -766,7 +706,7 @@ function ResultsContent() {
         {weakTopics.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {weakTopics.map((item) => (
-              <Card key={`${item.subject}-${item.topic}`} className="border border-border/80 shadow-sm flex flex-col justify-between">
+              <Card key={`${item.subject}-${item.topic}`} className="border border-border/80  flex flex-col justify-between">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <Badge variant="outline" className="text-xs font-semibold">
@@ -803,9 +743,9 @@ function ResultsContent() {
             ))}
           </div>
         ) : (
-          <Card className="border border-border/80 shadow-sm bg-muted/20">
+          <Card className="border border-border/80  bg-muted/20">
             <CardContent className="flex flex-col sm:flex-row items-center gap-4 py-6">
-              <div className="p-3 bg-primary/10 rounded-full text-primary shrink-0">
+              <div className="p-3 bg-primary/10 rounded-[46px] text-primary shrink-0">
                 <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
               </div>
               <div className="space-y-1 text-center sm:text-left flex-1">
@@ -866,7 +806,7 @@ function ResultsContent() {
               return (
                 <Card 
                   key={rec.id} 
-                  className={`border shadow-sm flex flex-col justify-between ${
+                  className={`border  flex flex-col justify-between ${
                     isCritical ? 'border-destructive/40 bg-destructive/5' : 'border-border/80'
                   }`}
                 >
@@ -905,9 +845,9 @@ function ResultsContent() {
             })}
           </div>
         ) : (
-          <Card className="border border-border/80 shadow-sm bg-muted/20">
+          <Card className="border border-border/80  bg-muted/20">
             <CardContent className="flex flex-col sm:flex-row items-center gap-4 py-8 text-center sm:text-left">
-              <div className="p-3 bg-muted rounded-full text-muted-foreground shrink-0">
+              <div className="p-3 bg-muted rounded-[46px] text-muted-foreground shrink-0">
                 <BookOpen className="h-6 w-6" aria-hidden="true" />
               </div>
               <div className="space-y-1 flex-1">
@@ -933,7 +873,7 @@ function ResultsContent() {
         </h2>
 
         {previousAttempt ? (
-          <Card className="border border-border/80 shadow-sm">
+          <Card className="border border-border/80 ">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -977,7 +917,7 @@ function ResultsContent() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="border border-border/80 shadow-sm bg-muted/10">
+          <Card className="border border-border/80  bg-muted/10">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -1035,3 +975,5 @@ function ResultsContent() {
     </div>
   );
 }
+
+
