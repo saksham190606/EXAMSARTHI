@@ -142,12 +142,13 @@ cmd /c "npx tsx scripts/verify_phase7e8.ts"
 
 ## 👥 Contributors & Team
 
-| Contributor | Role | Focus Area |
-|---|---|---|
-| **Saksham** | Team Lead + Core Developer | Full-Stack Architecture, Exam Engine, Voice & Accessibility Systems |
-| **Prakhar Pal** | Data + Testing / QA | Exam Datasets, Test Scenarios, QA & Analytics Support |
-| **Priyansh** | Accessibility & Research | WCAG 2.1 AA Audits, Screen-Reader Testing, Keyboard Usability |
-| **Tanmay** | UI/UX & Presentation | UI/UX Design, Layout Review, Presentation & Pitch |
+| Contributor | GitHub | Role | Focus Area |
+|---|---|---|---|
+| **Saksham Shrivastava** | [@saksham190606](https://github.com/saksham190606) | Team Lead + Core Developer | Full-Stack Architecture, Exam Engine, Voice & Accessibility Systems |
+| **Priyansh Gupta** | [@Priyanshh](https://github.com/Priyanshh) | Accessibility & Research | WCAG 2.1 AA Audits, Screen-Reader Testing, Keyboard Usability |
+| **Prakhar Pal** | Contributor | Data + Testing / QA | Exam Datasets, Test Scenarios, QA & Analytics Support |
+| **Tanmay** | Contributor | UI/UX & Presentation | UI/UX Design, Layout Review, Presentation & Pitch |
+
 
 ---
 

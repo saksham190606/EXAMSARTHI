@@ -6,6 +6,19 @@ We would like to acknowledge and celebrate all contributors who helped develop a
  
 ## Project Contributors
  
+### 🌟 Saksham Shrivastava ([@saksham190606](https://github.com/saksham190606))
+- **Role**: Team Lead & Core Developer
+- **Contributions**:
+  - Architected the Next.js/React application and state management with Zustand.
+  - Built the Accessible Examination Engine, voice commands, and Text-to-Speech integration.
+  - Implemented real-time accessibility preference controls and dashboard analytics.
+ 
+### 🌟 Priyansh Gupta ([@Priyanshh](https://github.com/Priyanshh))
+- **Role**: Accessibility & Research
+- **Contributions**:
+  - Performed WCAG 2.1 AA accessibility auditing and screen-reader compatibility tests.
+  - Validated keyboard-only navigation workflows, focus indicators, and ARIA landmarks.
+ 
 ### 🌟 Prakhar Pal
 - **Role**: Data + Testing / QA & Analytics Support
 - **Contributions**:
@@ -13,19 +26,6 @@ We would like to acknowledge and celebrate all contributors who helped develop a
   - Organized question banks by topic, difficulty tier, and semantic explanations.
   - Performed end-to-end quality assurance, exploratory bug finding, and stress-testing of edge cases.
   - Formulated metrics and requirements for diagnostic performance analytics and learning recommendation insights.
- 
-### 🌟 Saksham
-- **Role**: Team Lead & Core Developer
-- **Contributions**:
-  - Architected the Next.js/React application and state management with Zustand.
-  - Built the Accessible Examination Engine, voice commands, and Text-to-Speech integration.
-  - Implemented real-time accessibility preference controls and dashboard analytics.
- 
-### 🌟 Priyansh
-- **Role**: Accessibility & Research
-- **Contributions**:
-  - Performed WCAG 2.1 AA accessibility auditing and screen-reader compatibility tests.
-  - Validated keyboard-only navigation workflows, focus indicators, and ARIA landmarks.
  
 ### 🌟 Tanmay
 - **Role**: UI/UX & Presentation

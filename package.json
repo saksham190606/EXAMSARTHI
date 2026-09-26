@@ -4,16 +4,18 @@
   "description": "Accessibility-first examination and practice platform for visually impaired candidates",
   "contributors": [
     {
-      "name": "Saksham",
+      "name": "Saksham Shrivastava",
+      "url": "https://github.com/saksham190606",
       "role": "Team Lead & Core Developer"
+    },
+    {
+      "name": "Priyansh Gupta",
+      "url": "https://github.com/Priyanshh",
+      "role": "Accessibility & Research"
     },
     {
       "name": "Prakhar Pal",
       "role": "Data & Testing / QA"
-    },
-    {
-      "name": "Priyansh",
-      "role": "Accessibility & Research"
     },
     {
       "name": "Tanmay",
