@@ -178,15 +178,19 @@ export function VoiceExamPanel({
         {(status === 'Error' || errorMessage) && (
           <div 
             role="alert" 
-            className="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive"
+            className="flex items-start gap-2.5 p-3.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive"
           >
             <AlertCircle className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <p className="font-semibold text-foreground">
-                {t('statusError')}
+                {t('statusError')} — Seamless Keyboard Fallback Active
               </p>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground leading-relaxed">
                 {errorMessage || t('voiceMicDeniedError')}
+              </p>
+              <p className="text-emerald-700 dark:text-emerald-400 font-medium text-2xs flex items-center gap-1 pt-0.5">
+                <BookmarkCheck className="size-3" aria-hidden="true" />
+                <span>Your exam answers and timer are safe. Keyboard controls (Tab, Arrow keys, 1-4, Enter) remain active.</span>
               </p>
             </div>
           </div>
@@ -216,6 +220,12 @@ export function VoiceExamPanel({
               </kbd>
               <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
                 {isHindi ? '"पिछला"' : '"Previous"'}
+              </kbd>
+              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+                {isHindi ? '"अगला सेक्शन"' : '"Next Section"'}
+              </kbd>
+              <kbd className="px-2 py-0.5 rounded bg-muted/80 border border-border font-mono text-2xs text-foreground">
+                {isHindi ? '"वर्तमान सेक्शन"' : '"Current Section"'}
               </kbd>
               <span className="mx-1">·</span>
               <span className="mr-1">{t('voiceAudioLabel')}</span>

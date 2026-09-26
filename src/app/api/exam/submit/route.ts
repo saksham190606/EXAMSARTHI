@@ -6,6 +6,7 @@ interface SubmitRequestBody {
   attemptId: string;
   answers: Record<string, any>;
   timeRemaining?: number;
+  sectionProgress?: any;
 }
 
 export async function POST(req: NextRequest) {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { attemptId, answers = {}, timeRemaining = 0 } = body;
+    const { attemptId, answers = {}, timeRemaining = 0, sectionProgress = null } = body;
 
     // 3. Retrieve attempt and verify candidate ownership
     const admin = getSupabaseAdminClient();
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     const { data: attempt, error: attemptFetchError } = await admin
       .from('exam_attempts')
-      .select('id, user_id, exam_id, status, total_questions, started_at, submitted_at, score, accuracy, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics')
+      .select('id, user_id, exam_id, status, total_questions, started_at, submitted_at, score, accuracy, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, section_progress')
       .eq('id', attemptId)
       .maybeSingle();
 
@@ -121,6 +122,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Retrieve exam configuration to enforce duration limits
+    const { data: examConfig } = await adminSupabase
+      .from('exams')
+      .select('id, title, duration_minutes, sections')
+      .eq('id', attempt.exam_id)
+      .maybeSingle();
+
+    const durationMinutes = examConfig?.duration_minutes || 15;
+    const allottedDurationSeconds = durationMinutes * 60;
+    const gracePeriodSeconds = 120; // 2 minutes grace period for network latency
+    const maxAbandonmentThreshold = allottedDurationSeconds + (15 * 60); // 15 min beyond duration
+
+    const startTimeMs = new Date(attempt.started_at).getTime();
+    const serverNow = new Date();
+    const serverElapsedSeconds = Math.max(0, Math.floor((serverNow.getTime() - startTimeMs) / 1000));
+
+    // If attempt has been open past duration + 15 min grace, mark abandoned and reject
+    if (serverElapsedSeconds > maxAbandonmentThreshold) {
+      await adminSupabase
+        .from('exam_attempts')
+        .update({
+          status: 'abandoned',
+          time_used_seconds: allottedDurationSeconds,
+          summary_metrics: {
+            abandonedAt: serverNow.toISOString(),
+            reason: 'EXCEEDED_MAX_DURATION_WINDOW',
+            serverElapsedSeconds,
+            allottedDurationSeconds,
+          }
+        })
+        .eq('id', attempt.id)
+        .eq('status', 'in_progress');
+
+      return NextResponse.json(
+        { error: 'Examination attempt has expired and been marked as abandoned.' },
+        { status: 410 }
+      );
+    }
+
     // Retrieve the deterministic question cohort for this exam
     const { data: examQuestions, error: eqError } = await adminSupabase
       .from('exam_questions')
@@ -173,6 +213,45 @@ export async function POST(req: NextRequest) {
       user_answer: any;
       is_correct: boolean;
     }> = [];
+
+    // Fetch answers persisted prior to final submission to protect locked/expired sections
+    const { data: savedAttemptAnswers } = await adminSupabase
+      .from('attempt_answers')
+      .select('question_id, user_answer')
+      .eq('attempt_id', attempt.id);
+
+    const savedAnswersMap = new Map((savedAttemptAnswers || []).map(a => [a.question_id, a.user_answer]));
+
+    // Sectional anti-tamper rule: reject submissions attempting to alter answers for closed/expired sections
+    const currentProgress = attempt.section_progress as any;
+    if (currentProgress && Array.isArray(currentProgress.sections)) {
+      const expiredOrCompletedSecNames = new Set(
+        currentProgress.sections
+          .filter((s: any) => s.status === 'expired' || s.status === 'completed')
+          .map((s: any) => s.name?.toLowerCase())
+      );
+
+      for (const eq of examQuestions) {
+        if (eq.section_name && expiredOrCompletedSecNames.has(eq.section_name.toLowerCase())) {
+          const payloadAns = answers[eq.question_id];
+          const savedAns = savedAnswersMap.get(eq.question_id);
+          const hasPayloadAns = payloadAns !== undefined && payloadAns !== null && payloadAns !== '';
+          const hasSavedAns = savedAns !== undefined && savedAns !== null && savedAns !== '';
+
+          if (hasPayloadAns && (!hasSavedAns || JSON.stringify(payloadAns) !== JSON.stringify(savedAns))) {
+            return NextResponse.json(
+              {
+                error: `Tamper detected: Answers cannot be submitted or altered for closed section '${eq.section_name}'.`,
+                code: 'SECTION_LOCKED_OR_EXPIRED',
+                sectionName: eq.section_name,
+                questionId: eq.question_id
+              },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    }
 
     for (const eq of examQuestions) {
       const q = questionMap.get(eq.question_id);
@@ -283,11 +362,19 @@ export async function POST(req: NextRequest) {
     const calculatedScore = correctCount; // 1 mark per correct question
     const calculatedAccuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
     
-    // Compute duration in seconds safely on server
-    const startTimeMs = new Date(attempt.started_at).getTime();
-    const serverNow = new Date();
-    const elapsedSeconds = Math.max(0, Math.floor((serverNow.getTime() - startTimeMs) / 1000));
-    const effectiveTimeUsed = Math.min(elapsedSeconds, 900); // capped at duration ceiling
+    // Server-validated timer: verify started_at -> submitted_at against allotted duration
+    const clientReportedUsedSeconds = Math.max(0, allottedDurationSeconds - (typeof timeRemaining === 'number' ? timeRemaining : 0));
+    const timingDiscrepancySeconds = Math.abs(serverElapsedSeconds - clientReportedUsedSeconds);
+    const isExceeded = serverElapsedSeconds > allottedDurationSeconds;
+    const hasDiscrepancy = timingDiscrepancySeconds > 60; // Flag if client and server diverge by more than 1 min
+    
+    // Server enforces the true elapsed duration capped at the exam's allotted duration ceiling
+    const effectiveTimeUsed = Math.min(serverElapsedSeconds, allottedDurationSeconds);
+    const timingFlag = isExceeded
+      ? 'EXCEEDED_ALLOTTED_TIME_CAPPED'
+      : hasDiscrepancy
+        ? 'CLIENT_SERVER_TIME_DISCREPANCY'
+        : 'NORMAL';
 
     // 7. Persist candidate answers using upsert on (attempt_id, question_id)
     if (evaluatedAnswers.length > 0) {
@@ -300,12 +387,112 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 8. Update and lock the attempt as 'completed'
+    // 8. Process sectional timing if configured on the exam
+    const rawSections = (Array.isArray(examConfig?.sections) ? examConfig.sections : []) as any[];
+    const hasSections = rawSections.length > 0;
+    let sectionMetrics: any[] | undefined = undefined;
+    let sectionValidations: any[] | undefined = undefined;
+    let finalizedSectionProgress: any = attempt.section_progress || sectionProgress;
+
+    if (hasSections) {
+      sectionMetrics = [];
+      sectionValidations = [];
+      const incomingSections = sectionProgress?.sections || (attempt.section_progress as any)?.sections || [];
+
+      for (let sIdx = 0; sIdx < rawSections.length; sIdx++) {
+        const sec = rawSections[sIdx];
+        const secAllotted = (sec.duration_minutes || 5) * 60;
+        
+        // Find questions in this section
+        const secQuestions = examQuestions.filter(eq => 
+          eq.section_name === sec.name || 
+          eq.section_name?.toLowerCase() === sec.name.toLowerCase() ||
+          (sec.id && eq.section_name === sec.id)
+        );
+        const secQIds = new Set(secQuestions.map(sq => sq.question_id));
+
+        // Evaluate section performance
+        let secAttempted = 0;
+        let secCorrect = 0;
+        let secIncorrect = 0;
+
+        for (const ea of evaluatedAnswers) {
+          if (secQIds.has(ea.question_id)) {
+            secAttempted++;
+            if (ea.is_correct) secCorrect++;
+            else secIncorrect++;
+          }
+        }
+
+        const secAccuracy = secAttempted > 0 ? Math.round((secCorrect / secAttempted) * 100) : 0;
+        const progressItem = incomingSections.find((p: any) => p.section_id === sec.id);
+
+        const secReportedUsed = progressItem?.time_used_seconds ?? secAllotted;
+        const secServerUsed = Math.min(secReportedUsed, secAllotted);
+        const secIsExceeded = secReportedUsed > secAllotted;
+        const secTimingFlag = progressItem?.timing_flag 
+          ? progressItem.timing_flag 
+          : secIsExceeded 
+            ? 'EXCEEDED_ALLOTTED_TIME_CAPPED' 
+            : 'NORMAL';
+
+        sectionMetrics.push({
+          section_id: sec.id,
+          name: sec.name,
+          order_index: sec.order_index ?? sIdx,
+          totalQuestions: secQuestions.length,
+          attempted: secAttempted,
+          correct: secCorrect,
+          incorrect: secIncorrect,
+          accuracy: secAccuracy,
+          timeUsedSeconds: secServerUsed,
+          durationSeconds: secAllotted,
+          timingFlag: secTimingFlag,
+        });
+
+        sectionValidations.push({
+          sectionId: sec.id,
+          name: sec.name,
+          allottedDurationSeconds: secAllotted,
+          reportedUsedSeconds: secReportedUsed,
+          effectiveTimeUsed: secServerUsed,
+          timingFlag: secTimingFlag,
+        });
+      }
+
+      finalizedSectionProgress = {
+        active_section_index: rawSections.length - 1,
+        sections: sectionMetrics.map((sm, idx) => ({
+          section_id: sm.section_id,
+          name: sm.name,
+          order_index: sm.order_index,
+          duration_seconds: sm.durationSeconds,
+          time_used_seconds: sm.timeUsedSeconds,
+          started_at: incomingSections[idx]?.started_at || attempt.started_at,
+          submitted_at: incomingSections[idx]?.submitted_at || serverNow.toISOString(),
+          status: 'completed',
+          timing_flag: sm.timingFlag,
+        })),
+      };
+    }
+
+    // 9. Update and lock the attempt as 'completed'
     const subjectMetricsArray = Object.values(subjectMetricsMap);
     const summaryMetrics = {
       subjectMetrics: subjectMetricsArray,
+      sectionMetrics: sectionMetrics,
       evaluatedAt: serverNow.toISOString(),
       questionCount: totalQuestions,
+      timingValidation: {
+        allottedDurationSeconds,
+        serverElapsedSeconds,
+        clientReportedUsedSeconds,
+        timingDiscrepancySeconds,
+        effectiveTimeUsed,
+        timingFlag,
+        sectionalTimingSupported: hasSections,
+        sections: sectionValidations,
+      },
     };
 
     const { error: updateAttemptError } = await adminSupabase
@@ -318,6 +505,7 @@ export async function POST(req: NextRequest) {
         correct_count: correctCount,
         incorrect_count: incorrectCount,
         time_used_seconds: effectiveTimeUsed,
+        section_progress: finalizedSectionProgress,
         summary_metrics: summaryMetrics,
         submitted_at: serverNow.toISOString(),
       })

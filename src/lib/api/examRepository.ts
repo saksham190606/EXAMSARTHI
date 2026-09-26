@@ -12,6 +12,7 @@
 
 import { createClient } from '@/lib/supabase/client';
 import { CandidateQuestion, QuestionType, QuestionOption } from '@/types/question';
+import { ExamSectionConfig, ExamSectionProgress } from '@/types/section';
 import { 
   getSafeQuestionsForContext, 
   SafeBankingPrelimsMockQuestions, 
@@ -23,6 +24,7 @@ import {
   SafePracticeEnglishQuestions,
   SafePracticeShowcaseQuestions
 } from '@/lib/questions/safeQuestionBank';
+import { AvailableExams, PracticeSets } from '@/lib/mockData';
 
 export interface RemoteExamSummary {
   id: string;
@@ -32,6 +34,7 @@ export interface RemoteExamSummary {
   duration_minutes: number;
   total_questions: number;
   is_active: boolean;
+  sections?: ExamSectionConfig[] | null;
 }
 
 export interface QuestionLoadResult {
@@ -40,6 +43,7 @@ export interface QuestionLoadResult {
   error?: string;
   examId?: string;
   setId?: string;
+  sections?: ExamSectionConfig[] | null;
 }
 
 /**
@@ -103,7 +107,7 @@ export async function getRemoteExams(): Promise<RemoteExamSummary[]> {
 
     const { data, error } = await supabase
       .from('exams')
-      .select('id, title, description, category, duration_minutes, total_questions, is_active')
+      .select('id, title, description, category, duration_minutes, total_questions, is_active, sections')
       .eq('is_active', true)
       .order('id', { ascending: true });
 
@@ -128,7 +132,8 @@ function getFallbackExams(): RemoteExamSummary[] {
       category: 'SSC / Central Govt',
       duration_minutes: 15,
       total_questions: 12,
-      is_active: true
+      is_active: true,
+      sections: null,
     },
     {
       id: 'e2',
@@ -137,7 +142,12 @@ function getFallbackExams(): RemoteExamSummary[] {
       category: 'Banking & Insurance',
       duration_minutes: 15,
       total_questions: 12,
-      is_active: true
+      is_active: true,
+      sections: [
+        { id: 'sec_quant', name: 'Quantitative Aptitude', order_index: 0, duration_minutes: 5, question_count: 4 },
+        { id: 'sec_reasoning', name: 'Reasoning', order_index: 1, duration_minutes: 5, question_count: 4 },
+        { id: 'sec_english', name: 'English', order_index: 2, duration_minutes: 5, question_count: 4 },
+      ],
     },
     {
       id: 'e3',
@@ -146,7 +156,8 @@ function getFallbackExams(): RemoteExamSummary[] {
       category: 'Civil Services / UPSC',
       duration_minutes: 15,
       total_questions: 9,
-      is_active: true
+      is_active: true,
+      sections: null,
     }
   ];
 }
@@ -161,18 +172,32 @@ export async function getRemoteQuestionsForExam(rawExamId: string): Promise<Ques
   try {
     const supabase = createClient();
     if (!supabase) {
+      const fallback = getSafeQuestionsForContext({ examId });
+      const fallbackSections = examId === 'e2' ? getFallbackExams()[1].sections : null;
       return {
-        questions: getSafeQuestionsForContext({ examId }),
+        questions: fallback,
         isRemote: false,
-        examId
+        examId,
+        sections: fallbackSections,
       };
     }
 
-    const { data, error } = await supabase
-      .from('exam_active_questions')
-      .select('question_id, type, text, subject, topic, difficulty, options, explanation, order_index, exam_id, section_name')
-      .eq('exam_id', examId)
-      .order('order_index', { ascending: true });
+    const [questionsRes, examRes] = await Promise.all([
+      supabase
+        .from('exam_active_questions')
+        .select('question_id, type, text, subject, topic, difficulty, options, explanation, order_index, exam_id, section_name')
+        .eq('exam_id', examId)
+        .order('order_index', { ascending: true }),
+      supabase
+        .from('exams')
+        .select('sections')
+        .eq('id', examId)
+        .maybeSingle()
+    ]);
+
+    const error = questionsRes.error;
+    const data = questionsRes.data;
+    const sections = (examRes.data?.sections as any) || null;
 
     if (error) {
       console.warn(`[ExamRepository] Supabase error for exam ${examId}:`, error.message);
@@ -180,7 +205,8 @@ export async function getRemoteQuestionsForExam(rawExamId: string): Promise<Ques
         questions: getSafeQuestionsForContext({ examId }),
         isRemote: false,
         error: error.message,
-        examId
+        examId,
+        sections,
       };
     }
 
@@ -189,7 +215,8 @@ export async function getRemoteQuestionsForExam(rawExamId: string): Promise<Ques
       return {
         questions: getSafeQuestionsForContext({ examId }),
         isRemote: false,
-        examId
+        examId,
+        sections,
       };
     }
 
@@ -197,7 +224,8 @@ export async function getRemoteQuestionsForExam(rawExamId: string): Promise<Ques
     return {
       questions: mapped,
       isRemote: true,
-      examId
+      examId,
+      sections,
     };
   } catch (err: any) {
     console.warn(`[ExamRepository] Network/client exception for exam ${examId}:`, err?.message);
@@ -315,7 +343,7 @@ export async function startRemoteExamAttempt(
     // 1. Look for existing in_progress attempt for this candidate and exam
     const { data: existing, error: fetchErr } = await supabase
       .from('exam_attempts')
-      .select('id, status, started_at')
+      .select('id, status, started_at, exams(duration_minutes)')
       .eq('user_id', user.id)
       .eq('exam_id', examId)
       .eq('status', 'in_progress')
@@ -324,10 +352,58 @@ export async function startRemoteExamAttempt(
       .maybeSingle();
 
     if (!fetchErr && existing && existing.id) {
-      return { attemptId: existing.id };
+      const startedMs = new Date(existing.started_at).getTime();
+      const elapsedSeconds = Math.floor((Date.now() - startedMs) / 1000);
+      const durationMin = (existing.exams as any)?.duration_minutes || 15;
+      const maxAllowedSeconds = (durationMin * 60) + (15 * 60); // 15 min grace
+
+      if (elapsedSeconds > maxAllowedSeconds) {
+        // Mark stale attempt as abandoned so candidate starts a fresh valid session
+        await supabase
+          .from('exam_attempts')
+          .update({
+            status: 'abandoned',
+            summary_metrics: {
+              abandonedAt: new Date().toISOString(),
+              reason: 'CHECK_ON_READ_EXPIRED',
+              elapsedSeconds,
+              durationMinutes: durationMin,
+            },
+          })
+          .eq('id', existing.id)
+          .eq('status', 'in_progress');
+      } else {
+        return { attemptId: existing.id };
+      }
     }
 
-    // 2. Create new in_progress attempt using candidate client (strictly verified by RLS)
+    // 2. Query exam configuration to check for sectional timing
+    const { data: examData } = await supabase
+      .from('exams')
+      .select('sections')
+      .eq('id', examId)
+      .maybeSingle();
+
+    let initialSectionProgress: any = null;
+    if (examData?.sections && Array.isArray(examData.sections) && examData.sections.length > 0) {
+      const nowIso = new Date().toISOString();
+      initialSectionProgress = {
+        active_section_index: 0,
+        sections: examData.sections.map((sec: any, idx: number) => ({
+          section_id: sec.id,
+          name: sec.name,
+          order_index: sec.order_index ?? idx,
+          duration_seconds: (sec.duration_minutes || 5) * 60,
+          time_used_seconds: 0,
+          started_at: idx === 0 ? nowIso : null,
+          submitted_at: null,
+          status: idx === 0 ? 'in_progress' : 'pending',
+          timing_flag: 'NORMAL',
+        })),
+      };
+    }
+
+    // 3. Create new in_progress attempt using candidate client (strictly verified by RLS)
     const { data: created, error: insertErr } = await supabase
       .from('exam_attempts')
       .insert({
@@ -335,6 +411,7 @@ export async function startRemoteExamAttempt(
         exam_id: examId,
         status: 'in_progress',
         total_questions: totalQuestions,
+        section_progress: initialSectionProgress,
       })
       .select('id')
       .single();
@@ -352,32 +429,62 @@ export async function startRemoteExamAttempt(
 }
 
 /**
- * Persists an active candidate answer during the exam.
+ * Persists an active candidate answer during the exam with sectional timing validation.
  * Non-blocking, fails gracefully without disrupting the candidate.
  */
 export async function saveCandidateAnswer(
   attemptId: string,
   questionId: string,
   userAnswer: any
-): Promise<void> {
-  if (!attemptId) return;
+): Promise<{ success: boolean; error?: string }> {
+  if (!attemptId) return { success: false, error: 'No attemptId' };
 
   try {
-    const supabase = createClient();
-    if (!supabase) return;
+    const res = await fetch('/api/exam/save-answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attemptId, questionId, userAnswer }),
+    });
 
-    await supabase
-      .from('attempt_answers')
-      .upsert(
-        {
-          attempt_id: attemptId,
-          question_id: questionId,
-          user_answer: userAnswer,
-        },
-        { onConflict: 'attempt_id,question_id' }
-      );
-  } catch (err) {
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.warn('[ExamRepository] saveCandidateAnswer server notice:', data?.error);
+      return { success: false, error: data?.error || 'Save answer rejected' };
+    }
+    return { success: true };
+  } catch (err: any) {
     console.warn('[ExamRepository] saveCandidateAnswer failed silently:', err);
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Updates section progress on the server when advancing or auto-submitting a section.
+ */
+export async function updateSectionProgress(
+  attemptId: string,
+  sectionId: string,
+  timeUsedSeconds: number,
+  advanceToNextSection: boolean = true
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const res = await fetch('/api/exam/section-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        attemptId,
+        sectionId,
+        timeUsedSeconds,
+        advanceToNextSection,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Failed to update section progress' };
+    }
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Network error updating section progress' };
   }
 }
 
@@ -387,7 +494,8 @@ export async function saveCandidateAnswer(
 export async function submitExamAttempt(
   attemptId: string,
   answers: Record<string, any>,
-  timeRemaining?: number
+  timeRemaining?: number,
+  sectionProgress?: any
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const res = await fetch('/api/exam/submit', {
@@ -399,6 +507,7 @@ export async function submitExamAttempt(
         attemptId,
         answers,
         timeRemaining,
+        sectionProgress,
       }),
     });
 
@@ -448,3 +557,284 @@ export async function getRemoteAttemptResult(attemptId: string): Promise<{
     return { attempt: null, error: err?.message };
   }
 }
+
+export interface CandidateActivityItem {
+  id: string;
+  examId: string;
+  examTitle: string;
+  subject?: string;
+  score: number;
+  totalQuestions: number;
+  accuracy: number;
+  correctCount: number;
+  attemptedCount: number;
+  submittedAt: string | null;
+  timeUsedSeconds: number;
+}
+
+export interface CandidateSubjectMetric {
+  subject: string;
+  totalQuestions: number;
+  attempted: number;
+  correct: number;
+  incorrect: number;
+  accuracy: number;
+}
+
+export interface CandidateDashboardAnalytics {
+  completedAttemptsCount: number;
+  averageScore: number;
+  averageAccuracy: number;
+  bestScore: number;
+  totalQuestionsAttempted: number;
+  subjectMetrics: CandidateSubjectMetric[];
+  recentActivity: CandidateActivityItem[];
+  trend: {
+    hasTrend: boolean;
+    trendDiff: number | null;
+    latestAttempt: CandidateActivityItem | null;
+    previousAttempt: CandidateActivityItem | null;
+  };
+  recommendations: Array<{
+    id: string;
+    priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'MAINTAIN' | 'GENERAL';
+    title: string;
+    description: string;
+    actionLabel: string;
+    actionUrl: string;
+  }>;
+}
+
+function resolveExamTitle(examId: string, remoteExamTitle?: string | null): string {
+  if (remoteExamTitle) return remoteExamTitle;
+  const pSet = PracticeSets.find(p => p.id === examId);
+  if (pSet) return pSet.title;
+  const exam = AvailableExams.find(e => e.id === examId);
+  if (exam) return exam.title;
+  return `Examination ${examId.toUpperCase()}`;
+}
+
+function getSubjectSlug(subject: string): string {
+  const s = subject.toLowerCase();
+  if (s.includes('general') || s.includes('gk')) return 'gk';
+  if (s.includes('quant')) return 'quant';
+  if (s.includes('reason')) return 'reasoning';
+  if (s.includes('english')) return 'english';
+  return 'all';
+}
+
+/**
+ * Fetches real authenticated candidate analytics from completed exam attempts.
+ * Strictly scoped to the authenticated candidate under Supabase RLS.
+ */
+export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboardAnalytics> {
+  const emptyAnalytics: CandidateDashboardAnalytics = {
+    completedAttemptsCount: 0,
+    averageScore: 0,
+    averageAccuracy: 0,
+    bestScore: 0,
+    totalQuestionsAttempted: 0,
+    subjectMetrics: [],
+    recentActivity: [],
+    trend: {
+      hasTrend: false,
+      trendDiff: null,
+      latestAttempt: null,
+      previousAttempt: null,
+    },
+    recommendations: [
+      {
+        id: 'no-data',
+        priority: 'GENERAL',
+        title: 'Start Practicing',
+        description: 'Complete your first practice exam to unlock personalized recommendations.',
+        actionLabel: 'Take a Mock Exam',
+        actionUrl: '/exam',
+      },
+    ],
+  };
+
+  try {
+    const supabase = createClient();
+    if (!supabase) return emptyAnalytics;
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return emptyAnalytics;
+
+    // Fetch ONLY completed attempts for this candidate under RLS
+    const { data: attempts, error } = await supabase
+      .from('exam_attempts')
+      .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at, exams(id, title, subject, category)')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .order('submitted_at', { ascending: false });
+
+    if (error || !attempts || attempts.length === 0) {
+      return emptyAnalytics;
+    }
+
+    const completedAttemptsCount = attempts.length;
+    const averageScore = Number(
+      (attempts.reduce((sum, a) => sum + (Number(a.score) || 0), 0) / completedAttemptsCount).toFixed(1)
+    );
+    const averageAccuracy = Math.round(
+      attempts.reduce((sum, a) => sum + (Number(a.accuracy) || 0), 0) / completedAttemptsCount
+    );
+    const bestScore = Math.max(...attempts.map(a => Number(a.score) || 0));
+    const totalQuestionsAttempted = attempts.reduce((sum, a) => sum + (a.attempted_count || 0), 0);
+
+    // Map recent activity items
+    const recentActivity: CandidateActivityItem[] = attempts.slice(0, 10).map((a: any) => ({
+      id: a.id,
+      examId: a.exam_id,
+      examTitle: resolveExamTitle(a.exam_id, a.exams?.title),
+      subject: a.exams?.subject || undefined,
+      score: Number(a.score) || 0,
+      totalQuestions: a.total_questions || 0,
+      accuracy: Math.round(Number(a.accuracy) || 0),
+      correctCount: a.correct_count || 0,
+      attemptedCount: a.attempted_count || 0,
+      submittedAt: a.submitted_at || a.started_at,
+      timeUsedSeconds: a.time_used_seconds || 0,
+    }));
+
+    // Aggregate subject metrics across completed attempts
+    const subjectMap: Record<string, CandidateSubjectMetric> = {};
+    for (const att of attempts) {
+      const metricsArray = (att.summary_metrics as any)?.subjectMetrics;
+      if (Array.isArray(metricsArray)) {
+        for (const sm of metricsArray) {
+          const subName = sm.subject || 'General Assessment';
+          if (!subjectMap[subName]) {
+            subjectMap[subName] = {
+              subject: subName,
+              totalQuestions: 0,
+              attempted: 0,
+              correct: 0,
+              incorrect: 0,
+              accuracy: 0,
+            };
+          }
+          subjectMap[subName].totalQuestions += Number(sm.totalQuestions) || 0;
+          subjectMap[subName].attempted += Number(sm.attempted) || 0;
+          subjectMap[subName].correct += Number(sm.correct) || 0;
+          subjectMap[subName].incorrect += Number(sm.incorrect) || 0;
+        }
+      }
+    }
+
+    const subjectMetrics: CandidateSubjectMetric[] = Object.values(subjectMap).map(s => ({
+      ...s,
+      accuracy: s.attempted > 0 ? Math.round((s.correct / s.attempted) * 100) : 0,
+    }));
+
+    // Sort subject metrics by lowest accuracy first to highlight improvement areas
+    subjectMetrics.sort((a, b) => a.accuracy - b.accuracy);
+
+    // Calculate trend from last 2 attempts
+    const latestAttempt = recentActivity.length > 0 ? recentActivity[0] : null;
+    const previousAttempt = recentActivity.length > 1 ? recentActivity[1] : null;
+    const hasTrend = Boolean(latestAttempt && previousAttempt);
+    const trendDiff = hasTrend && latestAttempt && previousAttempt
+      ? latestAttempt.accuracy - previousAttempt.accuracy
+      : null;
+
+    // Synthesize data-driven recommendations
+    const recommendations: CandidateDashboardAnalytics['recommendations'] = [];
+
+    // 1. Weak subjects (accuracy < 70)
+    const weakSubjects = subjectMetrics.filter(s => s.attempted > 0 && s.accuracy < 70);
+    for (const ws of weakSubjects) {
+      const slug = getSubjectSlug(ws.subject);
+      const isCritical = ws.accuracy < 50;
+      recommendations.push({
+        id: `weak-${ws.subject}`,
+        priority: isCritical ? 'CRITICAL' : 'HIGH',
+        title: `${ws.subject} Focus Area`,
+        description: `Your accuracy in ${ws.subject} is currently ${ws.accuracy}% (${ws.correct}/${ws.attempted} correct). Targeted practice is recommended.`,
+        actionLabel: `Practice ${ws.subject}`,
+        actionUrl: `/practice?subject=${slug}`,
+      });
+    }
+
+    // 2. Strong subjects (accuracy >= 80)
+    const strongSubjects = subjectMetrics.filter(s => s.attempted > 0 && s.accuracy >= 80);
+    for (const ss of strongSubjects) {
+      const slug = getSubjectSlug(ss.subject);
+      recommendations.push({
+        id: `strong-${ss.subject}`,
+        priority: 'MAINTAIN',
+        title: `${ss.subject} Mastery`,
+        description: `Strong performance at ${ss.accuracy}% accuracy (${ss.correct}/${ss.attempted} correct). Maintain your competitive edge.`,
+        actionLabel: 'Practice Advanced',
+        actionUrl: `/practice?subject=${slug}&difficulty=advanced`,
+      });
+    }
+
+    // 3. Overall trend indicator
+    if (trendDiff !== null && trendDiff >= 5) {
+      recommendations.push({
+        id: 'trend-improving',
+        priority: 'GENERAL',
+        title: 'Steady Progress',
+        description: `Your accuracy improved by ${trendDiff} percentage points over your previous completed examination.`,
+        actionLabel: 'Continue Practice',
+        actionUrl: '/practice',
+      });
+    }
+
+    // Fallback if no specific weak/strong areas
+    if (recommendations.length === 0) {
+      recommendations.push({
+        id: 'balanced-perf',
+        priority: 'GENERAL',
+        title: 'Comprehensive Practice',
+        description: 'Keep building test stamina across all competitive syllabus areas.',
+        actionLabel: 'Explore Practice Sets',
+        actionUrl: '/practice',
+      });
+    }
+
+    return {
+      completedAttemptsCount,
+      averageScore,
+      averageAccuracy,
+      bestScore,
+      totalQuestionsAttempted,
+      subjectMetrics,
+      recentActivity,
+      trend: {
+        hasTrend,
+        trendDiff,
+        latestAttempt,
+        previousAttempt,
+      },
+      recommendations: recommendations.slice(0, 4),
+    };
+  } catch (err) {
+    console.warn('[ExamRepository] getCandidateDashboardAnalytics exception:', err);
+    return emptyAnalytics;
+  }
+}
+
+/**
+ * Triggers background cleanup of stale in_progress attempts that exceeded
+ * the exam's allotted duration plus grace period (15 minutes).
+ */
+export async function cleanupCandidateAbandonedAttempts(): Promise<number> {
+  try {
+    const res = await fetch('/api/exam/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return typeof data.cleanedCount === 'number' ? data.cleanedCount : 0;
+    }
+  } catch (err) {
+    // Non-blocking cleanup failure should never break candidate UI
+    console.warn('[ExamRepository] cleanupCandidateAbandonedAttempts error:', err);
+  }
+  return 0;
+}
+

@@ -37,8 +37,7 @@ import {
 } from "@/components/ui/select"
 
 import { Recommendation } from "@/lib/personalization/types"
-import { getPerformanceHistory } from "@/lib/personalization/history"
-import { generateRecommendations } from "@/lib/personalization/engine"
+import { getCandidateDashboardAnalytics } from "@/lib/api/examRepository"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n"
 
@@ -70,6 +69,8 @@ function PracticeContent() {
 
   const [topRecommendation, setTopRecommendation] = React.useState<Recommendation | null>(null)
   const [hasExamHistory, setHasExamHistory] = React.useState(false)
+  const [loadingAnalytics, setLoadingAnalytics] = React.useState(true)
+  const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
 
   // Keep state synchronized with URL search params (e.g. from recommendation clicks)
   React.useEffect(() => {
@@ -86,19 +87,44 @@ function PracticeContent() {
     }
   }, [searchParams])
 
-  // Load real personalization engine data
-  React.useEffect(() => {
-    const history = getPerformanceHistory()
-    setHasExamHistory(history.length > 0)
-    if (history.length > 0) {
-      const recs = generateRecommendations(history[0], history.slice(1))
-      const actionable =
-        recs.find((r) => r.id !== "no-data" && r.id !== "balanced-perf") || recs[0]
-      if (actionable && actionable.id !== "no-data") {
-        setTopRecommendation(actionable)
-      }
+  // Load real personalization engine data from official database analytics
+  const fetchAnalytics = React.useCallback(() => {
+    let isMounted = true
+    setLoadingAnalytics(true)
+    setAnalyticsError(null)
+
+    getCandidateDashboardAnalytics()
+      .then((analytics) => {
+        if (!isMounted) return
+        const hasHistory = analytics.completedAttemptsCount > 0
+        setHasExamHistory(hasHistory)
+        if (analytics.recommendations.length > 0) {
+          const actionable =
+            analytics.recommendations.find(
+              (r) => r.id !== "no-data" && r.id !== "balanced-perf"
+            ) || analytics.recommendations[0]
+          if (actionable && actionable.id !== "no-data") {
+            setTopRecommendation(actionable as any)
+          }
+        }
+        setLoadingAnalytics(false)
+      })
+      .catch((err) => {
+        console.warn("[PracticePage] Failed to fetch analytics:", err)
+        if (isMounted) {
+          setAnalyticsError(err?.message || "Could not load personalized recommendations")
+          setLoadingAnalytics(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
     }
   }, [])
+
+  React.useEffect(() => {
+    return fetchAnalytics()
+  }, [fetchAnalytics])
 
   // Filter practice sets based on search, subject, and difficulty
   const filteredSets = PracticeSets.filter((set) => {
@@ -172,7 +198,18 @@ function PracticeContent() {
         <h2 id="personalized-focus-heading" className="sr-only">
           Personalized Practice Recommendation
         </h2>
-        {topRecommendation ? (
+        {loadingAnalytics ? (
+          <div 
+            className="h-32 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-6 space-y-3"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading personalized recommendations"
+          >
+            <div className="h-4 w-48 bg-muted rounded" />
+            <div className="h-6 w-72 bg-muted rounded" />
+            <div className="h-4 w-96 bg-muted/60 rounded" />
+          </div>
+        ) : topRecommendation ? (
           <Card className="border-primary/40 bg-primary/5 p-5 md:p-6 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
               <div className="space-y-1.5">

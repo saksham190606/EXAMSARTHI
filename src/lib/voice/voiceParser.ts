@@ -22,6 +22,8 @@ export type ParsedCommand =
   | { type: 'NO'; detectedLanguage: CommandLanguage }
   | { type: 'ENABLE_VOICE'; detectedLanguage: CommandLanguage }
   | { type: 'DISABLE_VOICE'; detectedLanguage: CommandLanguage }
+  | { type: 'NEXT_SECTION'; detectedLanguage: CommandLanguage }
+  | { type: 'CURRENT_SECTION'; detectedLanguage: CommandLanguage }
   | { type: 'UNKNOWN'; rawText: string; detectedLanguage: CommandLanguage };
 
 export interface VoiceParserContext {
@@ -241,6 +243,24 @@ export function parseVoiceCommand(
     /^(?:पिछला question|previous सवाल|प्रीवियस|प्रीवियस सवाल)$/i.test(t)
   ) {
     return { type: 'PREVIOUS', detectedLanguage: lang };
+  }
+
+  // 6.1 Section Navigation Controls
+  if (
+    /^(?:next section|go to next section|advance section|skip section|next part)$/i.test(t) ||
+    /^(?:अगला सेक्शन|अगला खंड|अगले सेक्शन पर जाओ|अगला सेक्शन करो|अगला भाग)$/i.test(t) ||
+    /^(?:agla section|agla khand|next section|advance section)$/i.test(t)
+  ) {
+    return { type: 'NEXT_SECTION', detectedLanguage: lang };
+  }
+
+  // 6.2 Section Information
+  if (
+    /^(?:current section|which section|what section|section details|what is the section|section info)$/i.test(t) ||
+    /^(?:वर्तमान सेक्शन|कौन सा सेक्शन है|सेक्शन बताओ|कौन सा सेक्शन|वर्तमान खंड)$/i.test(t) ||
+    /^(?:current section kya hai|kaun sa section hai|section batao)$/i.test(t)
+  ) {
+    return { type: 'CURRENT_SECTION', detectedLanguage: lang };
   }
 
   // Jump to Question (e.g. "go to question 5", "question 5", "सवाल 5", "प्रश्न 5 पर जाओ")

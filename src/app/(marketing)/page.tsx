@@ -6,7 +6,7 @@ import { BentoFeatureSection } from "@/components/marketing/BentoFeatureSection"
 
 export default function LandingPage() {
   return (
-    <main id="main-content" className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen">
       
       {/* Hero Section */}
       <section className="flex-1 flex flex-col items-center justify-center text-center px-4 py-24 md:py-32 bg-primary/5">
@@ -115,6 +115,6 @@ export default function LandingPage() {
         </div>
       </footer>
       
-    </main>
+    </div>
   )
 }

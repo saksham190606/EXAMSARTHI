@@ -18,7 +18,8 @@ import {
   History,
   Award,
   ShieldCheck,
-  WifiOff
+  WifiOff,
+  Layers
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
+import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
@@ -79,7 +81,36 @@ function ResultsContent() {
   const [previousAttempt, setPreviousAttempt] = useState<PerformanceProfile | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingAttempt, setLoadingAttempt] = useState<boolean>(Boolean(attemptId));
+  const [attemptError, setAttemptError] = useState<string | null>(null);
+  const [reviewQuestions, setReviewQuestions] = useState<QuestionReviewItem[]>([]);
+  const [loadingReview, setLoadingReview] = useState<boolean>(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const { t } = useTranslation();
+
+  const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
+    setLoadingReview(true);
+    setReviewError(null);
+    fetch(`/api/exam/attempt-review?attemptId=${encodeURIComponent(targetAttemptId)}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Review endpoint returned HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data.success && Array.isArray(data.questions)) {
+          setReviewQuestions(data.questions);
+        } else {
+          setReviewError(data.error || 'Unable to retrieve question breakdown');
+        }
+        setLoadingReview(false);
+      })
+      .catch((err) => {
+        console.warn('[ResultsPage] Question review fetch notice:', err);
+        setReviewError(err?.message || 'Failed to load question details');
+        setLoadingReview(false);
+      });
+  }, []);
 
   // 1. If attemptId is present, load the official persisted attempt from Supabase
   useEffect(() => {
@@ -90,6 +121,7 @@ function ResultsContent() {
 
     let isSubscribed = true;
     setLoadingAttempt(true);
+    setAttemptError(null);
 
     getRemoteAttemptResult(attemptId)
       .then(({ attempt, error }) => {
@@ -97,6 +129,9 @@ function ResultsContent() {
         if (attempt) {
           setRemoteAttempt(attempt);
           setIsOfficialRemote(true);
+
+          // Fetch question-by-question breakdown for this completed attempt
+          fetchQuestionReview(attempt.id);
 
           const timeUsed = attempt.time_used_seconds || 0;
           const score = typeof attempt.score === 'number' ? attempt.score : 0;
@@ -170,12 +205,14 @@ function ResultsContent() {
           setRecommendations(generateRecommendations(remoteProfile, history));
         } else {
           console.warn('[ResultsPage] Could not load remote attempt:', error);
+          setAttemptError(error || 'Failed to locate examination attempt');
         }
         setLoadingAttempt(false);
       })
       .catch((err) => {
         if (isSubscribed) {
           console.warn('[ResultsPage] Exception loading remote attempt:', err);
+          setAttemptError(err?.message || 'Error communicating with exam database');
           setLoadingAttempt(false);
         }
       });
@@ -183,7 +220,7 @@ function ResultsContent() {
     return () => {
       isSubscribed = false;
     };
-  }, [attemptId]);
+  }, [attemptId, fetchQuestionReview]);
 
   // 2. Local fallback if no remote attemptId or for local demo sessions
   useEffect(() => {
@@ -205,6 +242,11 @@ function ResultsContent() {
           flagged: new Set(),
           timeRemaining: 900,
           isSubmitted: true,
+          activeSectionIndex: 0,
+          sectionTimeRemaining: 900,
+          activeSection: null,
+          sections: null,
+          currentSectionIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
         });
       }
     }
@@ -281,13 +323,79 @@ function ResultsContent() {
     return items.sort((a, b) => a.accuracy - b.accuracy);
   }, [profile]);
 
-  if (!results) {
+  if (attemptError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center space-y-4" role="status" aria-live="polite">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-          <p className="text-muted-foreground text-sm font-medium">Loading evaluation and performance analysis...</p>
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full border-destructive/30" role="alert">
+          <CardHeader>
+            <div className="size-10 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-2">
+              <AlertTriangle className="size-5" aria-hidden="true" />
+            </div>
+            <CardTitle>Unable to Load Examination Attempt</CardTitle>
+            <CardDescription>{attemptError}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button 
+              className="w-full" 
+              onClick={() => {
+                setAttemptError(null);
+                setLoadingAttempt(true);
+                if (attemptId) {
+                  getRemoteAttemptResult(attemptId).then(({ attempt, error }) => {
+                    if (attempt) {
+                      setRemoteAttempt(attempt);
+                      setIsOfficialRemote(true);
+                      fetchQuestionReview(attempt.id);
+                    } else {
+                      setAttemptError(error || 'Failed to locate examination attempt');
+                    }
+                    setLoadingAttempt(false);
+                  });
+                }
+              }}
+            >
+              Retry Loading Attempt
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              render={<Link href="/dashboard" />} 
+              nativeButton={false}
+            >
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadingAttempt || !results) {
+    return (
+      <div 
+        className="min-h-screen bg-background py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading examination results"
+      >
+        <div className="flex items-center justify-between pb-4 border-b border-border/60">
+          <div className="h-5 w-36 bg-muted rounded animate-pulse" />
+          <div className="h-6 w-28 bg-muted rounded animate-pulse" />
         </div>
+        <div className="space-y-3">
+          <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+          <div className="h-10 w-96 bg-muted rounded animate-pulse" />
+          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 rounded-xl border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
+              <div className="h-4 w-20 bg-muted rounded" />
+              <div className="h-8 w-16 bg-muted rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="h-48 rounded-xl border border-border/60 bg-muted/20 animate-pulse" />
       </div>
     );
   }
@@ -558,7 +666,93 @@ function ResultsContent() {
         <SubjectPerformance metrics={results.subjectMetrics} />
       </section>
 
-      {/* SECTION D — AREAS TO IMPROVE */}
+      {/* SECTIONAL TIMING & PERFORMANCE (Active when exam has sections) */}
+      {remoteAttempt?.summary_metrics?.sectionMetrics && Array.isArray(remoteAttempt.summary_metrics.sectionMetrics) && remoteAttempt.summary_metrics.sectionMetrics.length > 0 && (
+        <section aria-labelledby="sectional-performance-heading" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 id="sectional-performance-heading" className="text-xl font-bold tracking-tight flex items-center gap-2">
+              <Layers className="size-5 text-primary" aria-hidden="true" />
+              <span>Sectional Timing & Performance</span>
+            </h2>
+            <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
+              Verified Server-Side Timing
+            </Badge>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {remoteAttempt.summary_metrics.sectionMetrics.map((sec: any) => {
+              const secTimeMins = Math.floor((sec.time_used_seconds || 0) / 60);
+              const secTimeSecs = (sec.time_used_seconds || 0) % 60;
+              const formattedSecTime = `${secTimeMins}m ${secTimeSecs}s`;
+              const isDiscrepancy = sec.timing_flag === 'CLIENT_SERVER_TIME_DISCREPANCY';
+              const isCapped = sec.timing_flag === 'EXCEEDED_ALLOTTED_TIME_CAPPED';
+
+              return (
+                <Card key={sec.section_id || sec.name} className="border border-border/80 shadow-2xs">
+                  <CardHeader className="pb-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="text-2xs font-semibold">
+                        Section {(sec.order_index ?? 0) + 1}
+                      </Badge>
+                      <span className="text-xs font-mono font-medium text-muted-foreground">
+                        {sec.duration_minutes || 5}m limit
+                      </span>
+                    </div>
+                    <CardTitle className="text-base font-bold text-foreground">
+                      {sec.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-xs">
+                    <div className="flex justify-between items-center py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Score & Accuracy:</span>
+                      <span className="font-semibold text-foreground">
+                        {sec.correct}/{sec.total_questions || 4} ({sec.accuracy}%)
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Time Used:</span>
+                      <span className="font-mono font-semibold text-foreground">
+                        {formattedSecTime}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1">
+                      <span className="text-muted-foreground">Timing Verification:</span>
+                      {isCapped ? (
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">
+                          Capped at Limit
+                        </span>
+                      ) : isDiscrepancy ? (
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">
+                          Discrepancy Flagged
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          Verified Normal
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* SECTION D — QUESTION-BY-QUESTION REVIEW */}
+      {(reviewQuestions.length > 0 || loadingReview || reviewError) && (
+        <QuestionReviewList
+          questions={reviewQuestions}
+          isLoading={loadingReview}
+          error={reviewError}
+          onRetry={() => {
+            if (remoteAttempt?.id) {
+              fetchQuestionReview(remoteAttempt.id);
+            }
+          }}
+        />
+      )}
+
+      {/* SECTION E — AREAS TO IMPROVE */}
       <section aria-labelledby="areas-to-improve-heading" className="space-y-4">
         <div className="space-y-1">
           <h2 id="areas-to-improve-heading" className="text-xl font-bold tracking-tight">

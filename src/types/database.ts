@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -104,6 +104,7 @@ export type Database = {
           id: string
           incorrect_count: number
           score: number | null
+          section_progress: Json | null
           started_at: string
           status: string
           submitted_at: string | null
@@ -120,6 +121,7 @@ export type Database = {
           id?: string
           incorrect_count?: number
           score?: number | null
+          section_progress?: Json | null
           started_at?: string
           status?: string
           submitted_at?: string | null
@@ -136,6 +138,7 @@ export type Database = {
           id?: string
           incorrect_count?: number
           score?: number | null
+          section_progress?: Json | null
           started_at?: string
           status?: string
           submitted_at?: string | null
@@ -213,6 +216,7 @@ export type Database = {
           duration_minutes: number
           id: string
           is_active: boolean
+          sections: Json | null
           subject: string
           title: string
           total_questions: number
@@ -225,6 +229,7 @@ export type Database = {
           duration_minutes: number
           id: string
           is_active?: boolean
+          sections?: Json | null
           subject: string
           title: string
           total_questions: number
@@ -237,6 +242,7 @@ export type Database = {
           duration_minutes?: number
           id?: string
           is_active?: boolean
+          sections?: Json | null
           subject?: string
           title?: string
           total_questions?: number

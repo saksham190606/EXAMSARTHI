@@ -24,11 +24,14 @@ interface UseVoiceModeProps {
     goToQuestion: (idx: number) => void;
     submitExam: () => void;
     toggleFlag?: (qId: string) => void;
+    goToNextSection?: () => void;
   };
   state: ExamState;
   currentQuestion: CandidateQuestion;
   totalQuestions: number;
   questions?: CandidateQuestion[];
+  activeSection?: { id?: string; name: string; duration_minutes: number; question_count?: number } | null;
+  sectionTimeRemaining?: number;
   onOpenSubmitDialog?: () => void;
   onCloseSubmitDialog?: () => void;
   onStartExam?: () => void;
@@ -40,6 +43,8 @@ export function useVoiceMode({
   currentQuestion, 
   totalQuestions,
   questions,
+  activeSection,
+  sectionTimeRemaining,
   onOpenSubmitDialog,
   onCloseSubmitDialog,
   onStartExam
@@ -355,6 +360,43 @@ export function useVoiceMode({
         } else {
           speak(
             isHindi ? 'आप पहले प्रश्न पर हैं।' : 'You are on the first question.',
+            { langOverride: targetLang, onEnd: () => startListening() }
+          );
+        }
+        break;
+
+      case 'NEXT_SECTION':
+        setLastActionFeedback(null);
+        if (actions.goToNextSection) {
+          actions.goToNextSection();
+          speak(
+            isHindi ? 'अगले सेक्शन पर जा रहे हैं।' : 'Advancing to the next section.',
+            { langOverride: targetLang, onEnd: () => startListening() }
+          );
+        } else {
+          speak(
+            isHindi ? 'इस परीक्षा में कोई अन्य सेक्शन नहीं है।' : 'This exam has no additional sections.',
+            { langOverride: targetLang, onEnd: () => startListening() }
+          );
+        }
+        break;
+
+      case 'CURRENT_SECTION':
+        setLastActionFeedback(null);
+        if (activeSection) {
+          const secMins = Math.floor((sectionTimeRemaining ?? 0) / 60);
+          const secSecs = (sectionTimeRemaining ?? 0) % 60;
+          const qCountText = activeSection.question_count ? ` इसमें ${activeSection.question_count} प्रश्न हैं।` : '';
+          const qCountTextEn = activeSection.question_count ? ` It has ${activeSection.question_count} questions.` : '';
+          speak(
+            isHindi
+              ? `वर्तमान सेक्शन है ${activeSection.name}।${qCountText} इसमें ${secMins} मिनट और ${secSecs} सेकंड का समय शेष है।`
+              : `Current section is ${activeSection.name}.${qCountTextEn} It has ${secMins} minutes and ${secSecs} seconds remaining.`,
+            { langOverride: targetLang, onEnd: () => startListening() }
+          );
+        } else {
+          speak(
+            isHindi ? 'वर्तमान परीक्षा में अलग-अलग सेक्शन नहीं हैं।' : 'This exam has no separate sections.',
             { langOverride: targetLang, onEnd: () => startListening() }
           );
         }
@@ -787,6 +829,7 @@ export function useVoiceMode({
     if (!recognition) return;
 
     recognition.onresult = (event: any) => {
+      consecutiveFailuresRef.current = 0;
       const transcript = event.results?.[0]?.[0]?.transcript?.trim();
       if (!transcript) {
         speak(
@@ -804,22 +847,22 @@ export function useVoiceMode({
     recognition.onerror = (event: any) => {
       const error = event.error;
 
-      // Fatal microphone permission denied error
+      // Fatal microphone permission denied / revoked mid-exam error
       if (error === 'not-allowed' || error === 'service-not-allowed') {
         setStatus('Error');
-        setErrorMessage(getTranslation(language, 'voiceMicDeniedError'));
+        const fallbackMsg = language === 'hi'
+          ? 'माइक्रोफ़ोन अनुमति अस्वीकृत या निरस्त। कीबोर्ड मोड सक्रिय है, और आपकी परीक्षा प्रगति पूरी तरह सुरक्षित है।'
+          : 'Microphone permission denied or revoked. Voice mode disabled. Keyboard and mouse controls remain active, and your exam progress is safely preserved.';
+        
+        setErrorMessage(fallbackMsg);
         setIsActive(false);
         isActiveRef.current = false;
-        speak(
-          language === 'hi' 
-            ? 'माइक्रोफ़ोन अनुमति अस्वीकृत। आप कीबोर्ड का उपयोग जारी रख सकते हैं।' 
-            : 'Microphone permission denied. You can continue using keyboard controls.',
-          { langOverride: language === 'hi' ? 'hi' : 'en' }
-        );
+        announceToScreenReader(fallbackMsg);
+        speak(fallbackMsg, { langOverride: language === 'hi' ? 'hi' : 'en' });
         return;
       }
 
-      // CRITICAL: 'no-speech' is normal silence while thinking.
+      // CRITICAL: 'no-speech' is normal silence while candidate is thinking.
       // Silently resume listening without speaking or producing errors.
       if (error === 'no-speech') {
         if (isActiveRef.current && !isSpeakingRef.current) {
@@ -834,7 +877,41 @@ export function useVoiceMode({
         return;
       }
 
-      // Non-fatal network or audio-capture errors: quietly recover to listening state
+      // Hardware disconnection (e.g. microphone unplugged mid-exam)
+      if (error === 'audio-capture') {
+        consecutiveFailuresRef.current += 1;
+        if (consecutiveFailuresRef.current >= 2) {
+          setStatus('Error');
+          const disconnectMsg = language === 'hi'
+            ? 'माइक्रोफ़ोन डिस्कनेक्ट हो गया है। कीबोर्ड मोड सक्रिय है और आपकी परीक्षा प्रगति सुरक्षित है।'
+            : 'Microphone disconnected or unavailable. Voice mode paused. Keyboard controls remain fully active, and your exam progress is safely preserved.';
+          setErrorMessage(disconnectMsg);
+          setIsActive(false);
+          isActiveRef.current = false;
+          announceToScreenReader(disconnectMsg);
+          speak(disconnectMsg, { langOverride: language === 'hi' ? 'hi' : 'en' });
+          return;
+        }
+      }
+
+      // Network loss for cloud-backed speech recognition services
+      if (error === 'network') {
+        consecutiveFailuresRef.current += 1;
+        if (consecutiveFailuresRef.current >= 2) {
+          setStatus('Error');
+          const netMsg = language === 'hi'
+            ? 'आवाज़ सेवा नेटवर्क त्रुटि। कीबोर्ड मोड सक्रिय है, परीक्षा प्रगति सुरक्षित है।'
+            : 'Speech recognition network lost. Voice mode paused. Keyboard controls remain active, and your exam progress is safely preserved.';
+          setErrorMessage(netMsg);
+          setIsActive(false);
+          isActiveRef.current = false;
+          announceToScreenReader(netMsg);
+          speak(netMsg, { langOverride: language === 'hi' ? 'hi' : 'en' });
+          return;
+        }
+      }
+
+      // Non-fatal transient errors: quietly recover to listening state
       if (isActiveRef.current && !isSpeakingRef.current) {
         setStatus('Listening');
         clearRestartTimer();
