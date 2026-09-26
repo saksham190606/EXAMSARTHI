@@ -2,6 +2,24 @@
   "name": "examsarthi",
   "version": "0.1.0",
   "description": "Accessibility-first examination and practice platform for visually impaired candidates",
+  "contributors": [
+    {
+      "name": "Saksham",
+      "role": "Team Lead & Core Developer"
+    },
+    {
+      "name": "Prakhar Pal",
+      "role": "Data & Testing / QA"
+    },
+    {
+      "name": "Priyansh",
+      "role": "Accessibility & Research"
+    },
+    {
+      "name": "Tanmay",
+      "role": "UI/UX & Presentation"
+    }
+  ],
   "private": true,
   "scripts": {
     "dev": "next dev",

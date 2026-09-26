@@ -1,4 +1,4 @@
-# Prakhar — Data + AI Support + Testing
+# Prakhar Pal — Data + AI Support + Testing
 
 ## Main Responsibility
 

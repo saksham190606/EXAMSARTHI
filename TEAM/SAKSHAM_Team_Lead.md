@@ -19,7 +19,7 @@ Build and integrate the EXAMSARTHI project.
 
 * Priyansh → Accessibility testing
 * Tanmay → UI/UX + presentation
-* Prakhar → Data + testing
+* Prakhar Pal → Data + testing
 
 ## Important
 

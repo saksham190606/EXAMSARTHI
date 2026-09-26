@@ -140,6 +140,17 @@ cmd /c "npx tsx scripts/verify_phase7e8.ts"
 
 ---
 
+## 👥 Contributors & Team
+
+| Contributor | Role | Focus Area |
+|---|---|---|
+| **Saksham** | Team Lead + Core Developer | Full-Stack Architecture, Exam Engine, Voice & Accessibility Systems |
+| **Prakhar Pal** | Data + Testing / QA | Exam Datasets, Test Scenarios, QA & Analytics Support |
+| **Priyansh** | Accessibility & Research | WCAG 2.1 AA Audits, Screen-Reader Testing, Keyboard Usability |
+| **Tanmay** | UI/UX & Presentation | UI/UX Design, Layout Review, Presentation & Pitch |
+
+---
+
 ## ⚠️ Known Limitations
 
 1. **Browser Speech Recognition**: Voice Mode relies on the standard W3C Web Speech API, natively supported in Chromium-based browsers (Google Chrome, Microsoft Edge, Brave, Opera). In browsers lacking speech recognition (such as Firefox or Safari on iOS), EXAMSARTHI automatically activates an accessible keyboard fallback.
