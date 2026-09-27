@@ -29,6 +29,7 @@ export type ParsedCommand =
   | { type: 'DISABLE_VOICE'; detectedLanguage: CommandLanguage }
   | { type: 'NEXT_SECTION'; detectedLanguage: CommandLanguage }
   | { type: 'CURRENT_SECTION'; detectedLanguage: CommandLanguage }
+  | { type: 'NAVIGATE'; path: string; labelHi: string; labelEn: string; detectedLanguage: CommandLanguage }
   | { type: 'UNKNOWN'; rawText: string; detectedLanguage: CommandLanguage };
 
 export interface VoiceParserContext {
@@ -193,24 +194,63 @@ export function parseVoiceCommand(
     return { type: 'ENABLE_VOICE', detectedLanguage: lang };
   }
 
-  // 1.1 Bilingual Language Switching Controls (real-time voice switching)
+  // 1.1 Navigation Commands (Route jumping across platform)
   if (
-    /^(?:switch to hindi|change to hindi|hindi please|hindi mein karo|hindi bhasha|hindi karo|hindi)$/i.test(t) ||
-    /^(?:हिंदी में करो|हिंदी भाषा|हिंदी में बदलो|हिंदी करो|हिंदी बोलिए|हिंदी में बोलो|हिंदी)$/i.test(t) ||
+    /^(?:go to dashboard|open dashboard|show dashboard|dashboard|डैशबोर्ड चुनें|डैशबोर्ड चुनो|डैशबोर्ड जाओ|डैशबोर्ड|dashboard chune|dashboard chuno|dashboard jao)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/dashboard', labelHi: 'डैशबोर्ड', labelEn: 'Dashboard', detectedLanguage: lang };
+  }
+
+  if (
+    /^(?:go to exams?|open exams?|show exams?|exams?|परीक्षा चुनें|परीक्षा चुनो|परीक्षा जाओ|परीक्षा|exams? chune|exams? chuno|exams? jao|exam jao)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/exam', labelHi: 'परीक्षा', labelEn: 'Exams', detectedLanguage: lang };
+  }
+
+  if (
+    /^(?:go to practice|open practice|show practice|practice|प्रैक्टिस चुनें|प्रैक्टिस चुनो|अभ्यास चुनें|अभ्यास चुनो|practice chune|practice chuno|practice jao)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/practice', labelHi: 'प्रैक्टिस', labelEn: 'Practice', detectedLanguage: lang };
+  }
+
+  if (
+    /^(?:go to results?|open results?|show results?|results?|परिणाम चुनें|परिणाम चुनो|परिणाम जाओ|परिणाम|results? chune|results? chuno|parinaam chune|parinaam jao)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/results', labelHi: 'परिणाम', labelEn: 'Results', detectedLanguage: lang };
+  }
+
+  if (
+    /^(?:go to settings?|open settings?|show settings?|settings?|सेटिंग्स चुनें|सेटिंग्स चुनो|सेटिंग्स जाओ|सेटिंग्स|settings? chune|settings? chuno|settings? jao)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/settings', labelHi: 'सेटिंग्स', labelEn: 'Settings', detectedLanguage: lang };
+  }
+
+  // 1.2 Practice Action Command
+  if (
+    /^(?:start practice|begin practice|launch practice|practice shuru kare|practice shuru karo|abhyas shuru kare|abhyas shuru karo|प्रैक्टिस शुरू करें|प्रैक्टिस शुरू करो|अभ्यास शुरू करें|अभ्यास शुरू करो)$/i.test(t)
+  ) {
+    return { type: 'NAVIGATE', path: '/practice', labelHi: 'प्रैक्टिस', labelEn: 'Practice', detectedLanguage: lang };
+  }
+
+  // 1.3 Bilingual Language Switching Controls (real-time voice switching)
+  if (
+    /^(?:switch to hindi|change to hindi|hindi please|hindi mein karo|hindi bhasha|hindi karo|hindi chune|hindi chuno|hindi)$/i.test(t) ||
+    /^(?:हिंदी में बदलें|हिंदी में बदलो|हिंदी चुनें|हिंदी चुनो|हिंदी में करो|हिंदी भाषा|हिंदी करो|हिंदी बोलिए|हिंदी में बोलो|हिंदी)$/i.test(t) ||
     /^(?:hindi mein baat karo|hindi language)$/i.test(t)
   ) {
     return { type: 'SWITCH_TO_HINDI', detectedLanguage: 'hi' };
   }
 
+  // "अंग्रेजी में बदलें" / "switch to English" / "English chune"
   if (
-    /^(?:switch to english|change to english|english please|angrezi mein karo|english mein karo|english)$/i.test(t) ||
-    /^(?:अंग्रेज़ी में करो|अंग्रेजी में करो|अंग्रेजी भाषा|अंग्रेज़ी भाषा|इंग्लिश में करो|अंग्रेजी बोलिए|अंग्रेजी में बोलो|अंग्रेजी)$/i.test(t) ||
+    /^(?:switch to english|change to english|english please|english chune|english chuno|angrezi chune|angrezi chuno|angrezi mein karo|english mein karo|english)$/i.test(t) ||
+    /^(?:अंग्रेजी में बदलें|अंग्रेज़ी में बदलें|अंग्रेजी में बदलो|अंग्रेज़ी में बदलो|अंग्रेजी चुनें|अंग्रेज़ी चुनें|अंग्रेजी चुनो|अंग्रेजी भाषा|इंग्लिश में करो|अंग्रेजी बोलिए|अंग्रेजी में बोलो|अंग्रेजी)$/i.test(t) ||
     /^(?:angreji mein karo|english language)$/i.test(t)
   ) {
     return { type: 'SWITCH_TO_ENGLISH', detectedLanguage: 'en' };
   }
 
-  // 1.2 Help Announcements
+  // 1.4 Help Announcements
   if (
     /^(?:help|help me|what can i say|commands|voice commands|how to use)$/i.test(t) ||
     /^(?:मदद|सहायता|मदद करो|सहायता करो|क्या बोल सकता हूँ|क्या कह सकता हूँ)$/i.test(t) ||
@@ -219,29 +259,29 @@ export function parseVoiceCommand(
     return { type: 'HELP', detectedLanguage: lang };
   }
 
-  // 1.3 Vision AI Diagram Description
+  // 1.5 Vision AI Diagram Description: "चित्र का विवरण दें" / "chitra ka vivaran do" / "diagram samjhao"
   if (
     /^(?:describe diagram|describe image|describe the diagram|describe visual|explain diagram)$/i.test(t) ||
-    /^(?:चित्र का विवरण|चित्र का विवरण दें|चित्र बताओ|चित्र समझाओ|डायग्राम समझाओ|चित्र पढ़ो)$/i.test(t) ||
-    /^(?:chitra ka vivaran|diagram describe karo|chitra samjhao|chitra batao)$/i.test(t)
+    /^(?:चित्र का विवरण दें|चित्र का विवरण दो|चित्र का विवरण|चित्र बताओ|चित्र समझाओ|डायग्राम समझाओ|चित्र पढ़ो)$/i.test(t) ||
+    /^(?:chitra ka vivaran do|chitra ka vivaran de|chitra ka vivaran|diagram samjhao|chitra samjhao|diagram describe karo|chitra batao)$/i.test(t)
   ) {
     return { type: 'DESCRIBE_DIAGRAM', detectedLanguage: lang };
   }
 
-  // 1.4 Clear / Reset Response
+  // 1.6 Clear / Reset Response: "उत्तर हटाएं" / "uttar hataye"
   if (
     /^(?:clear response|clear answer|clear selection|clear my answer|reset answer|clear)$/i.test(t) ||
-    /^(?:उत्तर हटाएं|उत्तर हटाओ|जवाब हटाएं|जवाब हटाओ|हटाओ|उत्तर साफ करो|उत्तर मिटाओ)$/i.test(t) ||
-    /^(?:uttar hatao|jawab hatao|clear karo)$/i.test(t)
+    /^(?:उत्तर हटाएं|उत्तर हटाओ|उत्तर हटा|जवाब हटाएं|जवाब हटाओ|हटाओ|उत्तर साफ करो|उत्तर मिटाओ)$/i.test(t) ||
+    /^(?:uttar hataye|uttar hatao|jawab hatao|jawab hataye|clear karo)$/i.test(t)
   ) {
     return { type: 'CLEAR_RESPONSE', detectedLanguage: lang };
   }
 
-  // 2. Exam Controls: Start Exam
+  // 2. Exam Controls: Start Exam ("मॉक टेस्ट शुरू करें" / "mock exam shuru kare" / "test shuru kare")
   if (
-    /^(?:start exam|begin exam|start test|begin test|start the exam|start the test)$/i.test(t) ||
-    /^(?:परीक्षा शुरू करो|परीक्षा चालू करो|टेस्ट शुरू करो|टेस्ट चालू करो|परीक्षा शुरू|टेस्ट शुरू)$/i.test(t) ||
-    /^(?:pariksha shuru karo|test shuru karo|exam start karo|test start karo|test start करो|exam start करो)$/i.test(t)
+    /^(?:start exam|begin exam|start test|begin test|start the exam|start the test|take mock exam|start mock exam)$/i.test(t) ||
+    /^(?:मॉक टेस्ट शुरू करें|मॉक टेस्ट शुरू करो|मॉक परीक्षा शुरू करें|मॉक परीक्षा शुरू करो|परीक्षा शुरू करें|परीक्षा शुरू करो|परीक्षा चालू करो|टेस्ट शुरू करो|टेस्ट शुरू करें|टेस्ट चालू करो|परीक्षा शुरू|टेस्ट शुरू)$/i.test(t) ||
+    /^(?:mock exam shuru kare|mock exam shuru karo|mock test shuru kare|mock test shuru karo|test shuru kare|test shuru karo|pariksha shuru karo|pariksha shuru kare|exam start karo|test start karo)$/i.test(t)
   ) {
     return { type: 'START_EXAM', detectedLanguage: lang };
   }
@@ -255,12 +295,12 @@ export function parseVoiceCommand(
     return { type: 'FLAG_QUESTION', detectedLanguage: lang };
   }
 
-  // 4. Two-Step Submission Controls (Strict command matching - never accidental from answers)
+  // 4. Two-Step Submission Controls ("परीक्षा जमा करें" / "pariksha jama kare")
   if (
     /^(?:submit exam|submit test|finish exam|finish test|end exam|end test|submit)$/i.test(t) ||
-    /^(?:परीक्षा जमा करो|परीक्षा खत्म करो|परीक्षा समाप्त करो|टेस्ट जमा करो|सबमिट करो|परीक्षा सबमिट करो|टेस्ट सबमिट करो|परीक्षा सबमिट|सबमिट)$/i.test(t) ||
+    /^(?:परीक्षा जमा करें|परीक्षा जमा करो|परीक्षा खत्म करो|परीक्षा समाप्त करो|टेस्ट जमा करें|टेस्ट जमा करो|सबमिट करें|सबमिट करो|परीक्षा सबमिट करें|परीक्षा सबमिट करो|टेस्ट सबमिट करो|परीक्षा सबमिट|सबमिट)$/i.test(t) ||
     /^(?:परीक्षा submit करो|टेस्ट submit करो|exam submit करो|submit परीक्षा|submit pariksha)$/i.test(t) ||
-    /^(?:pariksha jama karo|pariksha submit karo|submit karo|test submit karo|jama karo)$/i.test(t)
+    /^(?:pariksha jama kare|pariksha jama karo|pariksha submit karo|submit karo|test submit karo|jama karo|jama kare)$/i.test(t)
   ) {
     return { type: 'SUBMIT', detectedLanguage: lang };
   }
@@ -275,20 +315,20 @@ export function parseVoiceCommand(
     }
   }
 
-  // 6. Navigation Controls
+  // 6. Navigation Controls ("अगला प्रश्न" / "agla prashn", "पिछला प्रश्न" / "pichla prashn")
   if (
-    /^(?:next|next question|go next|forward|next one)$/i.test(t) ||
+    /^(?:next|next question|go next|forward|next one|next prashn)$/i.test(t) ||
     /^(?:अगला|अगला सवाल|अगला प्रश्न|आगे|आगे बढ़ो|अगला वाला)$/i.test(t) ||
-    /^(?:agla|agla sawal|agla prashna|aage|aage badho)$/i.test(t) ||
+    /^(?:agla|agla prashn|agla prashna|agla sawal|aage|aage badho)$/i.test(t) ||
     /^(?:अगला question|next सवाल|next प्रश्न|नेक्स्ट|नेक्स्ट सवाल|नेक्स्ट क्वेश्चन)$/i.test(t)
   ) {
     return { type: 'NEXT', detectedLanguage: lang };
   }
 
   if (
-    /^(?:previous|previous question|go back|back|previous one)$/i.test(t) ||
+    /^(?:previous|previous question|go back|back|previous one|previous prashn)$/i.test(t) ||
     /^(?:पिछला|पिछला सवाल|पिछला प्रश्न|पीछे|वापस|पिछला वाला)$/i.test(t) ||
-    /^(?:pichhla|pichla|pichla sawal|pichhla prashna|peeche|wapas)$/i.test(t) ||
+    /^(?:pichhla|pichla|pichla prashn|pichhla prashn|pichla sawal|pichhla prashna|peeche|wapas)$/i.test(t) ||
     /^(?:पिछला question|previous सवाल|प्रीवियस|प्रीवियस सवाल)$/i.test(t)
   ) {
     return { type: 'PREVIOUS', detectedLanguage: lang };
@@ -432,7 +472,7 @@ export function parseVoiceCommand(
     /^(?:select |choose |mark |answer )?(?:option |vikalp |विकल्प |ऑप्शन )?(?:a|1|one|पहला|पहला विकल्प|ए)$/i.test(t) ||
     /^(?:option|vikalp|विकल्प|ऑप्शन)\s+(?:a|1|one|पहला|ए)$/i.test(t) ||
     /^(?:ए चुनो|ए विकल्प|पहला चुनो|mark a|choose a|select a)$/i.test(t) ||
-    t === 'a' || t === '1' || t === 'ए' || t === 'पहला' || t === 'pehla'
+    t === 'a' || t === '1' || t === 'ए' || t === 'पहला' || t === 'pehla' || t === 'option a' || t === 'vikalp a' || t === 'विकल्प ए'
   ) {
     return { type: 'SELECT_OPTION', letterIndex: 0, rawText: transcript, detectedLanguage: lang };
   }
@@ -442,7 +482,7 @@ export function parseVoiceCommand(
     /^(?:select |choose |mark |answer )?(?:option |vikalp |विकल्प |ऑप्शन )?(?:b|2|two|दो|दूसरा|दूसरा विकल्प|बी|bee)$/i.test(t) ||
     /^(?:option|vikalp|विकल्प|ऑप्शन)\s+(?:b|2|two|दो|दूसरा|बी)$/i.test(t) ||
     /^(?:बी चुनो|बी विकल्प|दूसरा चुनो|mark b|choose b|select b)$/i.test(t) ||
-    t === 'b' || t === '2' || t === 'बी' || t === 'दूसरा' || t === 'doosra' || t === 'dusra'
+    t === 'b' || t === '2' || t === 'बी' || t === 'दूसरा' || t === 'doosra' || t === 'dusra' || t === 'option b' || t === 'vikalp b' || t === 'विकल्प बी'
   ) {
     return { type: 'SELECT_OPTION', letterIndex: 1, rawText: transcript, detectedLanguage: lang };
   }
@@ -452,7 +492,7 @@ export function parseVoiceCommand(
     /^(?:select |choose |mark |answer )?(?:option |vikalp |विकल्प |ऑप्शन )?(?:c|3|three|तीन|तीसरा|तीसरा विकल्प|सी|see|sea)$/i.test(t) ||
     /^(?:option|vikalp|विकल्प|ऑप्शन)\s+(?:c|3|three|तीन|तीसरा|सी)$/i.test(t) ||
     /^(?:सी चुनो|सी विकल्प|तीसरा चुनो|mark c|choose c|select c)$/i.test(t) ||
-    t === 'c' || t === '3' || t === 'सी' || t === 'तीसरा' || t === 'teesra' || t === 'tisra'
+    t === 'c' || t === '3' || t === 'सी' || t === 'तीसरा' || t === 'teesra' || t === 'tisra' || t === 'option c' || t === 'vikalp c' || t === 'विकल्प सी'
   ) {
     return { type: 'SELECT_OPTION', letterIndex: 2, rawText: transcript, detectedLanguage: lang };
   }
@@ -462,7 +502,7 @@ export function parseVoiceCommand(
     /^(?:select |choose |mark |answer )?(?:option |vikalp |विकल्प |ऑप्शन )?(?:d|4|four|चार|चौथा|चौथा विकल्प|डी|dee)$/i.test(t) ||
     /^(?:option|vikalp|विकल्प|ऑप्शन)\s+(?:d|4|four|चार|चौथा|डी)$/i.test(t) ||
     /^(?:डी चुनो|डी विकल्प|चौथा चुनो|mark d|choose d|select d)$/i.test(t) ||
-    t === 'd' || t === '4' || t === 'डी' || t === 'चौथा' || t === 'chautha'
+    t === 'd' || t === '4' || t === 'डी' || t === 'चौथा' || t === 'chautha' || t === 'option d' || t === 'vikalp d' || t === 'विकल्प डी'
   ) {
     return { type: 'SELECT_OPTION', letterIndex: 3, rawText: transcript, detectedLanguage: lang };
   }

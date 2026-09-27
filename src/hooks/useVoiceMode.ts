@@ -537,8 +537,24 @@ export function useVoiceMode({
           recognitionRef.current.lang = 'en-IN';
         }
         speak(
-          'Language switched to English. You can now navigate in English.',
+          'Language switched to English.',
           { langOverride: 'en', onEnd: () => startListening() }
+        );
+        break;
+      }
+
+      case 'NAVIGATE': {
+        const targetPath = cmd.path;
+        speak(
+          isHindi ? `${cmd.labelHi} पर जा रहे हैं` : `Navigating to ${cmd.labelEn}`,
+          {
+            langOverride: targetLang,
+            onEnd: () => {
+              if (typeof window !== 'undefined') {
+                window.location.href = targetPath;
+              }
+            }
+          }
         );
         break;
       }

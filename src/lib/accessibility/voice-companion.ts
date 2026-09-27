@@ -271,7 +271,8 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
   const play = () => {
     try {
       const store = useAccessibilityStore.getState();
-      const targetLang = lang || (store.language === "hi" ? "hi-IN" : "en-US");
+      const rawTargetLang = lang || (store.language === "hi" ? "hi-IN" : "en-US");
+      const targetLang = (rawTargetLang === "hi" || rawTargetLang.toLowerCase().startsWith("hi")) ? "hi-IN" : rawTargetLang;
       const spokenText = formatSpeechPronunciation(text);
       const utterance = new SpeechSynthesisUtterance(spokenText);
       utterance.rate = 1.0;
@@ -384,7 +385,8 @@ export function speak(text: string, options?: SpeakOptions): void {
     utterance.rate = Math.max(0.6, Math.min(2.0, rate));
 
     const effectiveLang = langOverride || lang;
-    const targetLang = effectiveLang || (store.language === "hi" ? "hi-IN" : "en-US");
+    const rawTargetLang = effectiveLang || (store.language === "hi" ? "hi-IN" : "en-US");
+    const targetLang = (rawTargetLang === "hi" || rawTargetLang.toLowerCase().startsWith("hi")) ? "hi-IN" : rawTargetLang;
     utterance.lang = targetLang;
 
     // Lock in the exact same natural female voice across the platform
@@ -547,10 +549,457 @@ function getAssociatedLabel(element: HTMLElement): string {
 }
 
 /**
+ * Dedicated, strict Hindi Talk-Back Computer for Tab Navigation.
+ * Guarantees that when Hindi mode is active, all element talk-backs speak strictly in Hindi.
+ */
+export function computeHindiTalkBack(target: HTMLElement): string | null {
+  if (!target || typeof target.tagName !== "string") return null;
+
+  const tagName = target.tagName.toUpperCase();
+  const role = (target.getAttribute("role") || "").toLowerCase();
+  const inputType = (target.getAttribute("type") || "").toLowerCase();
+  const closestAnchor = target.tagName === "A" ? (target as HTMLAnchorElement) : target.closest("a");
+  const hrefAttr = (closestAnchor?.getAttribute("href") || target.getAttribute("href") || "").trim();
+  const anchorPathname = closestAnchor?.pathname || "";
+  const ariaLabel = (target.getAttribute("aria-label") || closestAnchor?.getAttribute("aria-label") || "").trim();
+  const text = cleanAccessibleText(target.textContent || "");
+
+  // 0. Skip to main content link -> "मुख्य सामग्री पर जाएं, लिंक"
+  if (
+    hrefAttr === "#main-content" ||
+    hrefAttr.includes("main-content") ||
+    text.toLowerCase().includes("skip to main content")
+  ) {
+    return "मुख्य सामग्री पर जाएं, लिंक";
+  }
+
+  // 1. Logo / Home link -> "होम पेज, लिंक"
+  const isHomeLink =
+    Boolean(closestAnchor) &&
+    (hrefAttr === "/" ||
+      anchorPathname === "/" ||
+      text.includes("EXAMSARTHI") ||
+      ariaLabel.toLowerCase().includes("home") ||
+      Boolean(target.closest('a[href="/"]')));
+
+  if (isHomeLink) {
+    return "होम पेज, लिंक";
+  }
+
+  // 2. Start Practice button -> "प्रैक्टिस शुरू करें, बटन"
+  const isStartPractice =
+    text.includes("प्रैक्टिस शुरू") ||
+    text.toLowerCase().includes("start practice") ||
+    ariaLabel.toLowerCase().includes("start practice") ||
+    (hrefAttr === "/practice" && (text.toLowerCase().includes("start") || text.includes("शुरू") || text.includes("Alt+P")));
+
+  if (isStartPractice) {
+    return "प्रैक्टिस शुरू करें, बटन";
+  }
+
+  // 3. Take Mock Exam button -> "मॉक परीक्षा शुरू करें, बटन"
+  const isTakeMock =
+    text.includes("मॉक परीक्षा") ||
+    text.includes("मॉक टेस्ट") ||
+    text.toLowerCase().includes("take mock exam") ||
+    text.toLowerCase().includes("mock exam") ||
+    text.toLowerCase().includes("mock test") ||
+    ariaLabel.toLowerCase().includes("take mock exam") ||
+    ariaLabel.toLowerCase().includes("mock test");
+
+  if (isTakeMock) {
+    return "मॉक परीक्षा शुरू करें, बटन";
+  }
+
+  // 4. Main Nav Items (Dashboard, Practice, Exams, Results, Settings)
+  // Dashboard -> "डैशबोर्ड, बटन"
+  if (
+    hrefAttr === "/dashboard" ||
+    hrefAttr.endsWith("/dashboard") ||
+    text.toLowerCase() === "dashboard" ||
+    text === "डैशबोर्ड" ||
+    ariaLabel.toLowerCase() === "dashboard" ||
+    ariaLabel === "डैशबोर्ड"
+  ) {
+    return "डैशबोर्ड, बटन";
+  }
+
+  // Practice nav link -> "प्रैक्टिस, बटन"
+  if (
+    (hrefAttr === "/practice" ||
+      hrefAttr.endsWith("/practice") ||
+      text.toLowerCase() === "practice" ||
+      text === "अभ्यास" ||
+      text === "प्रैक्टिस" ||
+      ariaLabel.toLowerCase() === "practice" ||
+      ariaLabel === "अभ्यास" ||
+      ariaLabel === "प्रैक्टिस") &&
+    !isStartPractice
+  ) {
+    return "प्रैक्टिस, बटन";
+  }
+
+  // Exams nav link -> "परीक्षा, बटन"
+  if (
+    (hrefAttr === "/exam" ||
+      hrefAttr.endsWith("/exam") ||
+      hrefAttr.endsWith("/exams") ||
+      text.toLowerCase() === "exams" ||
+      text.toLowerCase() === "exam" ||
+      text === "परीक्षा" ||
+      ariaLabel.toLowerCase() === "exams" ||
+      ariaLabel.toLowerCase() === "exam" ||
+      ariaLabel === "परीक्षा") &&
+    !isTakeMock
+  ) {
+    return "परीक्षा, बटन";
+  }
+
+  // Results nav link -> "परिणाम, बटन"
+  if (
+    hrefAttr === "/results" ||
+    hrefAttr.endsWith("/results") ||
+    text.toLowerCase() === "results" ||
+    text.toLowerCase() === "result" ||
+    text === "परिणाम" ||
+    ariaLabel.toLowerCase() === "results" ||
+    ariaLabel === "परिणाम"
+  ) {
+    return "परिणाम, बटन";
+  }
+
+  // Settings nav link -> "सेटिंग्स, बटन"
+  if (
+    hrefAttr === "/settings" ||
+    hrefAttr.endsWith("/settings") ||
+    text.toLowerCase() === "settings" ||
+    text.toLowerCase() === "setting" ||
+    text === "सेटिंग्स" ||
+    ariaLabel.toLowerCase() === "settings" ||
+    ariaLabel === "सेटिंग्स"
+  ) {
+    return "सेटिंग्स, बटन";
+  }
+
+  // 5. Describe Diagram -> "चित्र का विवरण सुनें, शॉर्टकट ऑल्ट डी"
+  const isDescribeDiagram =
+    ariaLabel.includes("चित्र का विवरण") ||
+    ariaLabel.toLowerCase().includes("describe diagram") ||
+    text.includes("चित्र का विवरण") ||
+    text.toLowerCase().includes("describe diagram") ||
+    Boolean(target.closest('[aria-label*="Describe diagram" i]')) ||
+    Boolean(target.closest('[aria-label*="चित्र का विवरण" i]'));
+
+  if (isDescribeDiagram) {
+    return "चित्र का विवरण सुनें, शॉर्टकट ऑल्ट डी";
+  }
+
+  // 6. Stop Audio -> "ऑडियो रोकें, बटन"
+  const isStopAudio =
+    text.includes("ऑडियो रोकें") ||
+    text.toLowerCase().includes("stop audio") ||
+    ariaLabel.includes("ऑडियो रोकें") ||
+    ariaLabel.toLowerCase().includes("stop audio") ||
+    ariaLabel.toLowerCase().includes("stop reading");
+
+  if (isStopAudio) {
+    return "ऑडियो रोकें, बटन";
+  }
+
+  // 7. Close -> "बंद करें, बटन"
+  const isClose =
+    text === "Close" ||
+    text === "बंद करें" ||
+    text === "Cancel" ||
+    text === "रद्द करें" ||
+    ariaLabel.toLowerCase() === "close" ||
+    ariaLabel.toLowerCase().includes("close modal") ||
+    ariaLabel.toLowerCase().includes("close dialog") ||
+    ariaLabel.includes("बंद करें") ||
+    Boolean(target.querySelector("svg.lucide-x")) ||
+    target.classList.contains("lucide-x") ||
+    Boolean(target.closest('button[aria-label*="close" i]'));
+
+  if (isClose) {
+    return "बंद करें, बटन";
+  }
+
+  // 8. Next Question -> "अगला प्रश्न, बटन"
+  const isNext =
+    text === "Next" ||
+    text === "अगला" ||
+    text.includes("अगला प्रश्न") ||
+    text.toLowerCase().includes("next question") ||
+    ariaLabel.toLowerCase().includes("next question") ||
+    ariaLabel.toLowerCase().includes("go to next question") ||
+    target.getAttribute("data-action") === "next" ||
+    Boolean(target.querySelector("svg.lucide-chevron-right"));
+
+  if (isNext && (tagName === "BUTTON" || role === "button" || tagName === "A")) {
+    return "अगला प्रश्न, बटन";
+  }
+
+  // 9. Previous Question -> "पिछला प्रश्न, बटन"
+  const isPrev =
+    text === "Previous" ||
+    text === "पिछला" ||
+    text.includes("पिछला प्रश्न") ||
+    text.toLowerCase().includes("previous question") ||
+    ariaLabel.toLowerCase().includes("previous question") ||
+    ariaLabel.toLowerCase().includes("go to previous question") ||
+    target.getAttribute("data-action") === "prev" ||
+    Boolean(target.querySelector("svg.lucide-chevron-left"));
+
+  if (isPrev && (tagName === "BUTTON" || role === "button" || tagName === "A")) {
+    return "पिछला प्रश्न, बटन";
+  }
+
+  // 10. Submit Exam -> "परीक्षा जमा करें, बटन"
+  const isSubmit =
+    text.includes("Submit Exam") ||
+    text.includes("Submit Final") ||
+    text.includes("परीक्षा जमा") ||
+    text.includes("सबमिट करें") ||
+    text.includes("अंतिम परीक्षा सबमिट") ||
+    text === "Submit" ||
+    text === "सबमिट" ||
+    ariaLabel.toLowerCase().includes("submit exam") ||
+    ariaLabel.toLowerCase().includes("submit test") ||
+    ariaLabel.toLowerCase().includes("submit final");
+
+  if (isSubmit && (tagName === "BUTTON" || role === "button")) {
+    return "परीक्षा जमा करें, बटन";
+  }
+
+  // 11. Clear Response -> "उत्तर हटाएं, बटन"
+  const isClear =
+    text.includes("उत्तर हटाएं") ||
+    text.includes("उत्तर हटाओ") ||
+    text.toLowerCase().includes("clear response") ||
+    text.toLowerCase().includes("clear answer") ||
+    ariaLabel.toLowerCase().includes("clear response") ||
+    ariaLabel.toLowerCase().includes("clear answer");
+
+  if (isClear && (tagName === "BUTTON" || role === "button")) {
+    return "उत्तर हटाएं, बटन";
+  }
+
+  // 12. Review / Flag Question -> "समीक्षा के लिए चिह्नित करें, बटन"
+  const isFlag =
+    text.includes("चिह्नित") ||
+    text.includes("समीक्षा") ||
+    text.toLowerCase().includes("flag") ||
+    text.toLowerCase().includes("review") ||
+    ariaLabel.toLowerCase().includes("flag") ||
+    ariaLabel.toLowerCase().includes("review") ||
+    Boolean(target.querySelector("svg.lucide-flag"));
+
+  if (isFlag && (tagName === "BUTTON" || role === "button")) {
+    const isPressed = target.getAttribute("aria-pressed") === "true";
+    return isPressed ? "समीक्षा के लिए चिह्नित, बटन" : "समीक्षा के लिए चिह्नित करें, बटन";
+  }
+
+  // 13. Question Number -> "प्रश्न संख्या [N]"
+  const qNumMatch =
+    ariaLabel.match(/(?:Question|Q|प्रश्न|सवाल)\s*(\d+)/i) ||
+    text.match(/^(?:Question|Q|प्रश्न|सवाल)\s*(\d+)$/i) ||
+    target.getAttribute("data-question-number")?.match(/(\d+)/);
+
+  if (qNumMatch && qNumMatch[1]) {
+    const isAnswered = ariaLabel.includes("answered") && !ariaLabel.includes("unanswered");
+    const isFlagged = ariaLabel.includes("flagged");
+    let stateSuffix = "";
+    if (isAnswered && isFlagged) stateSuffix = ", उत्तर दिया गया व समीक्षा के लिए चिह्नित";
+    else if (isAnswered) stateSuffix = ", उत्तर दिया गया";
+    else if (isFlagged) stateSuffix = ", समीक्षा के लिए चिह्नित";
+    else if (ariaLabel.includes("unanswered")) stateSuffix = ", उत्तर नहीं दिया गया";
+
+    return `प्रश्न संख्या ${qNumMatch[1]}${stateSuffix}`;
+  }
+
+  // 14. Option A/B/C/D -> "विकल्प [A/B/C/D]: [विकल्प का पाठ]"
+  const isRadio =
+    (tagName === "INPUT" && inputType === "radio") ||
+    role === "radio" ||
+    Boolean(target.closest('[role="radiogroup"] [role="radio"]')) ||
+    Boolean(target.closest('[role="radiogroup"] input[type="radio"]'));
+
+  if (isRadio) {
+    const isChecked =
+      (target as HTMLInputElement).checked ||
+      target.getAttribute("aria-checked") === "true" ||
+      target.dataset.state === "checked";
+
+    const optionContainer =
+      target.closest('div[class*="flex items-center"], label, fieldset > div') ||
+      target.parentElement;
+
+    let optionLetter = "";
+    let optionText = "";
+
+    if (optionContainer) {
+      const letterSpans = Array.from(optionContainer.querySelectorAll("span"));
+      for (const span of letterSpans) {
+        const spanText = span.textContent?.trim() || "";
+        if (/^[A-D]$/i.test(spanText)) {
+          optionLetter = spanText.toUpperCase();
+          break;
+        }
+      }
+
+      if (!optionLetter && optionContainer.parentElement) {
+        const allRadios = Array.from(
+          optionContainer.parentElement.querySelectorAll(
+            'input[type="radio"], [role="radio"]'
+          )
+        );
+        const idx = allRadios.indexOf(target);
+        if (idx >= 0 && idx < 26) {
+          optionLetter = String.fromCharCode(65 + idx);
+        }
+      }
+
+      const textElement =
+        optionContainer.querySelector(".text-foreground, label span:not([aria-hidden='true'])") ||
+        optionContainer;
+      optionText = cleanAccessibleText(textElement.textContent || "");
+
+      if (optionLetter) {
+        optionText = optionText.replace(new RegExp(`^${optionLetter}\\s*`, "i"), "");
+      }
+    }
+
+    if (!optionLetter) optionLetter = "A";
+    if (!optionText) optionText = getAssociatedLabel(target) || "विकल्प";
+
+    const cleanText = localizeTalkBackText(optionText, true);
+    const checkedSuffix = isChecked ? ", चुना गया" : "";
+    return `विकल्प ${optionLetter}: ${cleanText}${checkedSuffix}`;
+  }
+
+  // 15. Language Toggle Button (Alt+L)
+  if (
+    (text.includes("EN") && text.includes("HI")) ||
+    ariaLabel.includes("Switch language") ||
+    ariaLabel.includes("वर्तमान भाषा")
+  ) {
+    return "भाषा बदलें, बटन";
+  }
+
+  // 16. Voice Command Mic Button (Alt+V)
+  if (
+    ariaLabel.includes("Voice commands") ||
+    ariaLabel.includes("voice navigation") ||
+    ariaLabel.includes("voice examination") ||
+    text.includes("आवाज मोड") ||
+    text.includes("वॉइस मोड") ||
+    text.toLowerCase().includes("voice mode") ||
+    Boolean(target.querySelector("svg.lucide-mic")) ||
+    Boolean(target.querySelector("svg.lucide-mic-off"))
+  ) {
+    return "वॉइस कमांड, बटन";
+  }
+
+  // 17. Accessibility Settings Trigger
+  if (
+    ariaLabel.includes("Accessibility") ||
+    text.includes("Accessibility") ||
+    Boolean(target.querySelector("svg.lucide-settings-2")) ||
+    Boolean(target.querySelector("svg.lucide-sliders"))
+  ) {
+    return "सुलभता सेटिंग्स, बटन";
+  }
+
+  // 18. User Menu / Sign Out / Log In
+  if (ariaLabel.includes("User account") || ariaLabel.includes("उपयोगकर्ता")) {
+    return "उपयोगकर्ता खाता, मेनू";
+  }
+  if (text === "Sign Out" || ariaLabel.includes("Sign out")) {
+    return "लॉग आउट, बटन";
+  }
+  if (text === "Log In" || hrefAttr.endsWith("/login")) {
+    return "लॉग इन, बटन";
+  }
+
+  // 19. Checkboxes
+  const isCheckbox = (tagName === "INPUT" && inputType === "checkbox") || role === "checkbox";
+  if (isCheckbox) {
+    const isChecked =
+      (target as HTMLInputElement).checked ||
+      target.getAttribute("aria-checked") === "true" ||
+      target.dataset.state === "checked";
+    const label = getAssociatedLabel(target) || text || "चेकबॉक्स";
+    return `${localizeTalkBackText(label, true)}, चेकबॉक्स, ${isChecked ? "चिह्नित" : "नहीं चिह्नित"}`;
+  }
+
+  // 20. Text Inputs & Textareas
+  const isTextInput =
+    (tagName === "INPUT" && !["button", "submit", "reset", "radio", "checkbox", "hidden"].includes(inputType)) ||
+    tagName === "TEXTAREA";
+  if (isTextInput) {
+    const label = getAssociatedLabel(target) || ariaLabel || "टेक्स्ट इनपुट";
+    const value = (target as HTMLInputElement).value?.trim();
+    return `${localizeTalkBackText(label, true)}, टेक्स्ट इनपुट, वर्तमान मान: ${value || "खाली"}`;
+  }
+
+  // 21. Switches / Toggles
+  if (role === "switch") {
+    const isChecked = target.getAttribute("aria-checked") === "true" || target.dataset.state === "checked";
+    const label = getAssociatedLabel(target) || text || ariaLabel || "स्विच";
+    return `${localizeTalkBackText(label, true)}, स्विच, ${isChecked ? "चालू" : "बंद"}`;
+  }
+
+  // 22. Tabs
+  if (role === "tab") {
+    const isSelected = target.getAttribute("aria-selected") === "true" || target.dataset.state === "active";
+    const label = getAssociatedLabel(target) || text || ariaLabel || "टैब";
+    return `${localizeTalkBackText(label, true)}, टैब, ${isSelected ? "सक्रिय" : "निष्क्रिय"}`;
+  }
+
+  // 23. Generic Button / Link / Dropdown
+  const isBtn = tagName === "BUTTON" || role === "button";
+  if (isBtn) {
+    const rawLabel = ariaLabel || text || getAssociatedLabel(target);
+    if (!rawLabel) return null;
+    return `${localizeTalkBackText(rawLabel, true)}, बटन`;
+  }
+
+  const isLnk = tagName === "A" || role === "link";
+  if (isLnk) {
+    const rawLabel = ariaLabel || text || target.getAttribute("title");
+    if (!rawLabel) return null;
+    return `${localizeTalkBackText(rawLabel, true)}, लिंक`;
+  }
+
+  if (tagName === "SELECT" || role === "combobox") {
+    const rawLabel = getAssociatedLabel(target) || text || ariaLabel || "ड्रॉपडाउन मेनू";
+    return `${localizeTalkBackText(rawLabel, true)}, ड्रॉपडाउन मेनू`;
+  }
+
+  if (ariaLabel) {
+    return localizeTalkBackText(ariaLabel, true);
+  }
+
+  if (text) {
+    return localizeTalkBackText(text, true);
+  }
+
+  return null;
+}
+
+/**
  * Computes an accessible talk-back label for focused elements.
  */
 export function computeAccessibleLabel(target: HTMLElement): string | null {
   if (!target || typeof target.tagName !== "string") return null;
+
+  const isHi = useAccessibilityStore.getState().language === "hi";
+  if (isHi) {
+    const hindiResult = computeHindiTalkBack(target);
+    if (hindiResult) return hindiResult;
+  }
+
+  const wrap = (val: string | null): string | null => (val && isHi ? localizeTalkBackText(val, true) : val);
 
   const tagName = target.tagName.toUpperCase();
   const role = (target.getAttribute("role") || "").toLowerCase();
@@ -611,12 +1060,7 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
     if (!optionLetter) optionLetter = "A";
     if (!optionText) optionText = getAssociatedLabel(target) || "Option choice";
 
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    if (isHi) {
-      return `विकल्प ${optionLetter}, ${localizeTalkBackText(optionText, true)}, ${isChecked ? "चुना गया" : "नहीं चुना गया"}`;
-    }
-
-    return `Option ${optionLetter}, ${optionText}, ${isChecked ? "selected" : "not selected"}`;
+    return wrap(`Option ${optionLetter}, ${optionText}, ${isChecked ? "selected" : "not selected"}`);
   }
 
   // 2. CHECKBOXES
@@ -630,11 +1074,7 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       target.getAttribute("aria-checked") === "true" ||
       target.dataset.state === "checked";
     const label = getAssociatedLabel(target) || "Checkbox option";
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    if (isHi) {
-      return `${localizeTalkBackText(label, true)}, चेकबॉक्स, ${isChecked ? "चिह्नित" : "नहीं चिह्नित"}`;
-    }
-    return `${label}, checkbox, ${isChecked ? "checked" : "not checked"}`;
+    return wrap(`${label}, checkbox, ${isChecked ? "checked" : "not checked"}`);
   }
 
   // 3. TEXT INPUTS & TEXTAREAS
@@ -648,26 +1088,18 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
   if (isTextInput) {
     const label = getAssociatedLabel(target) || "Text field";
     const value = (target as HTMLInputElement).value?.trim();
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    if (isHi) {
-      return `${localizeTalkBackText(label, true)}, टेक्स्ट इनपुट, वर्तमान मान: ${value || "खाली"}`;
-    }
-    return `${label}, text input, current value: ${value || "empty"}`;
+    return wrap(`${label}, text input, current value: ${value || "empty"}`);
   }
 
   // 4. BUTTONS & ACCESSIBLE TRIGGERS
   const isButton = tagName === "BUTTON" || role === "button";
   if (isButton) {
-    const isHi = useAccessibilityStore.getState().language === "hi";
     if (role === "switch") {
       const isChecked =
         target.getAttribute("aria-checked") === "true" ||
         target.dataset.state === "checked";
       const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
-      if (isHi) {
-        return `${localizeTalkBackText(label, true)}, टॉगल स्विच, ${isChecked ? "चालू" : "बंद"}`;
-      }
-      return `${label}, toggle switch, ${isChecked ? "on" : "off"}`;
+      return wrap(`${label}, toggle switch, ${isChecked ? "on" : "off"}`);
     }
 
     if (role === "tab") {
@@ -675,10 +1107,7 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
         target.getAttribute("aria-selected") === "true" ||
         target.dataset.state === "active";
       const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
-      if (isHi) {
-        return `${localizeTalkBackText(label, true)}, टैब, ${isSelected ? "सक्रिय" : "निष्क्रिय"}`;
-      }
-      return `${label}, tab, ${isSelected ? "selected" : "not selected"}`;
+      return wrap(`${label}, tab, ${isSelected ? "selected" : "not selected"}`);
     }
 
     const label =
@@ -687,10 +1116,7 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       getAssociatedLabel(target);
 
     if (!label) return null;
-    if (isHi) {
-      return `${localizeTalkBackText(label, true)}, बटन`;
-    }
-    return `${label}, button`;
+    return wrap(`${label}, button`);
   }
 
   // 5. LINKS & NAVIGATION
@@ -702,33 +1128,23 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       target.getAttribute("title");
 
     if (!label) return null;
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    if (isHi) {
-      return `${localizeTalkBackText(label, true)}, लिंक`;
-    }
-    return `${label}, navigation link`;
+    return wrap(`${label}, navigation link`);
   }
 
   // 6. SELECT / COMBOBOX
   if (tagName === "SELECT" || role === "combobox") {
     const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    if (isHi) {
-      return `${localizeTalkBackText(label, true)}, ड्रॉपडाउन मेनू`;
-    }
-    return `${label}, dropdown selection`;
+    return wrap(`${label}, dropdown selection`);
   }
 
   // 7. LANDMARKS & REGIONS with explicit labels
   const ariaLabel = target.getAttribute("aria-label");
   if (ariaLabel && cleanAccessibleText(ariaLabel)) {
     const clean = cleanAccessibleText(ariaLabel);
-    const isHi = useAccessibilityStore.getState().language === "hi";
-    const localized = localizeTalkBackText(clean, isHi);
     if (role) {
-      return `${localized}, ${role}`;
+      return wrap(`${clean}, ${role}`);
     }
-    return localized;
+    return wrap(clean);
   }
 
   return null;
@@ -738,22 +1154,104 @@ export function localizeTalkBackText(text: string | null | undefined, isHi: bool
   if (!text) return "";
   if (!isHi) return text;
   return text
+    .replace(/\bStaff Selection Commission\b/gi, "कर्मचारी चयन आयोग")
+    .replace(/\bUnion Public Service Commission\b/gi, "संघ लोक सेवा आयोग")
+    .replace(/\bRailway Recruitment Board\b/gi, "रेलवे भर्ती बोर्ड")
+    .replace(/\bInstitute of Banking Personnel Selection\b/gi, "बैंकिंग कार्मिक चयन संस्थान")
+    .replace(/\bBanking Personnel Selection\b/gi, "बैंकिंग कार्मिक चयन")
+    .replace(/\bSSC CGL\b/gi, "एसएससी सीजीएल")
+    .replace(/\bUPSC Civil Services\b/gi, "संघ लोक सेवा आयोग सिविल सेवा")
+    .replace(/\bIBPS Banking\b/gi, "आईबीपीएस बैंकिंग")
+    .replace(/\bRRB NTPC\b/gi, "आरआरबी एनटीपीसी")
+    .replace(/\bQuantitative Aptitude\b/gi, "मात्रात्मक योग्यता")
+    .replace(/\bGeneral Intelligence\b/gi, "सामान्य बुद्धि")
+    .replace(/\bGeneral Awareness\b/gi, "सामान्य जागरूकता")
+    .replace(/\bReasoning\b/gi, "तर्कशक्ति")
+    .replace(/\bMathematics\b/gi, "गणित")
+    .replace(/\bPolity\b/gi, "राजव्यवस्था")
+    .replace(/\bHistory\b/gi, "इतिहास")
+    .replace(/\bEconomy\b/gi, "अर्थव्यवस्था")
+    .replace(/\bScience\b/gi, "विज्ञान")
+    .replace(/\bGeometry\b/gi, "ज्यामिति")
+    .replace(/\bCircuits\b/gi, "परिपथ")
+    .replace(/\bBar Charts\b/gi, "बार चार्ट")
+    .replace(/\bFlowcharts\b/gi, "फ्लोचार्ट")
+    .replace(/\bSectional Timers\b/gi, "अनुभागीय टाइमर")
+    .replace(/\bVision AI Enabled\b/gi, "विजन एआई सक्षम")
+    .replace(/\bVision AI Scribe Enabled\b/gi, "विजन एआई स्क्राइब सक्षम")
+    .replace(/\bFull Mock\b/gi, "संपूर्ण मॉक")
+    .replace(/\bSpeed Mock\b/gi, "स्पीड मॉक")
+    .replace(/\bPrelims\b/gi, "प्रारंभिक परीक्षा")
     .replace(/\bStart Practice\b/gi, "प्रैक्टिस शुरू करें")
-    .replace(/\bTake Mock Exam\b/gi, "मॉक टेस्ट दें")
+    .replace(/\bTake Mock Exam\b/gi, "मॉक परीक्षा शुरू करें")
+    .replace(/\bSelect Examination Mock\b/gi, "मॉक परीक्षा चुनें")
     .replace(/\bDashboard\b/gi, "डैशबोर्ड")
-    .replace(/\bPractice\b/gi, "अभ्यास")
+    .replace(/\bPractice\b/gi, "प्रैक्टिस")
     .replace(/\bExams\b/gi, "परीक्षा")
     .replace(/\bResults\b/gi, "परिणाम")
     .replace(/\bSettings\b/gi, "सेटिंग्स")
     .replace(/\bNext Question\b/gi, "अगला प्रश्न")
     .replace(/\bPrevious Question\b/gi, "पिछला प्रश्न")
     .replace(/\bClear Response\b/gi, "उत्तर हटाएं")
+    .replace(/\bClear Answer\b/gi, "उत्तर हटाएं")
     .replace(/\bSubmit Final Examination\b/gi, "अंतिम परीक्षा सबमिट करें")
     .replace(/\bSubmit Exam\b/gi, "परीक्षा जमा करें")
     .replace(/\bDescribe Diagram\b/gi, "चित्र का विवरण")
+    .replace(/\bStop Audio\b/gi, "ऑडियो रोकें")
+    .replace(/\bStop reading\b/gi, "पढ़ना रोकें")
+    .replace(/\bSign Out\b/gi, "लॉग आउट")
+    .replace(/\bLog In\b/gi, "लॉग इन")
+    .replace(/\bClose\b/gi, "बंद करें")
     .replace(/\bNext\b/gi, "अगला")
     .replace(/\bPrevious\b/gi, "पिछला")
-    .replace(/\bSubmit\b/gi, "सबमिट");
+    .replace(/\bSubmit\b/gi, "जमा करें")
+    .replace(/\bClear\b/gi, "हटाएं")
+    .replace(/\bOption\b/gi, "विकल्प")
+    .replace(/\bQuestion\b/gi, "प्रश्न")
+    .replace(/\bselected\b/gi, "चुना गया")
+    .replace(/\bnot selected\b/gi, "नहीं चुना गया")
+    .replace(/\bchecked\b/gi, "चिह्नित")
+    .replace(/\bnot checked\b/gi, "नहीं चिह्नित")
+    .replace(/\bbutton\b/gi, "बटन")
+    .replace(/\blink\b/gi, "लिंक")
+    .replace(/\bnavigation link\b/gi, "लिंक")
+    .replace(/\bcheckbox\b/gi, "चेकबॉक्स")
+    .replace(/\btext input\b/gi, "टेक्स्ट इनपुट")
+    .replace(/\bdropdown selection\b/gi, "ड्रॉपडाउन")
+    .replace(/\bdropdown\b/gi, "ड्रॉपडाउन")
+    .replace(/\btoggle switch\b/gi, "स्विच")
+    .replace(/\bswitch\b/gi, "स्विच")
+    .replace(/\btab\b/gi, "टैब")
+    .replace(/\bactive\b/gi, "सक्रिय")
+    .replace(/\binactive\b/gi, "निष्क्रिय")
+    .replace(/\bempty\b/gi, "खाली")
+    .replace(/\bcurrent value\b/gi, "वर्तमान मान")
+    .replace(/\bSingle Choice\b/gi, "एकल विकल्प")
+    .replace(/\bMultiple Choice\b/gi, "बहुविकल्प")
+    .replace(/\bTrue \/ False\b/gi, "सत्य या असत्य")
+    .replace(/\bShort Answer\b/gi, "संक्षिप्त उत्तर")
+    .replace(/\bFill in the Blank\b/gi, "रिक्त स्थान भरें")
+    .replace(/\bunanswered\b/gi, "उत्तर नहीं दिया गया")
+    .replace(/\banswered\b/gi, "उत्तर दिया गया")
+    .replace(/\bflagged for review\b/gi, "समीक्षा के लिए चिह्नित")
+    .replace(/\bmarked for review\b/gi, "समीक्षा के लिए चिह्नित")
+    .replace(/\bflagged\b/gi, "चिह्नित")
+    .replace(/\bReview flag removed\b/gi, "समीक्षा चिह्न हटाया गया")
+    .replace(/\bQuestion flagged for review\b/gi, "प्रश्न समीक्षा के लिए चिह्नित")
+    .replace(/\bExamination Selection Hub\b/gi, "परीक्षा चयन केंद्र")
+    .replace(/\bSearch practice topics by keyword\? Say Yes to focus search, or say No to skip\./gi, "कीवर्ड द्वारा प्रैक्टिस विषय खोजें? फोकस करने के लिए हाँ कहें, या छोड़ने के लिए नहीं कहें।")
+    .replace(/\bSearch practice topics by keyword\b/gi, "कीवर्ड द्वारा प्रैक्टिस विषय खोजें")
+    .replace(/\bSearch field focused\b/gi, "खोज फ़ील्ड केंद्रित")
+    .replace(/\bSay Yes to proceed, or say No to skip\b/gi, "आगे बढ़ने के लिए हाँ कहें, या छोड़ने के लिए नहीं कहें")
+    .replace(/\bVoice commands\b/gi, "वॉइस कमांड")
+    .replace(/\bAccessibility settings\b/gi, "सुलभता सेटिंग्स")
+    .replace(/\bSwitch language\b/gi, "भाषा बदलें")
+    .replace(/\bmins limit\b/gi, "मिनट सीमा")
+    .replace(/\bmin limit\b/gi, "मिनट सीमा")
+    .replace(/\bmins\b/gi, "मिनट")
+    .replace(/\bmin\b/gi, "मिनट")
+    .replace(/\bseconds\b/gi, "सेकंड")
+    .replace(/\bsecs\b/gi, "सेकंड");
 }
 
 /**
@@ -892,9 +1390,9 @@ class VoiceNavigationEngine {
     this.setLanguage(lang);
 
     if (lang === "hi") {
-      speak("भाषा हिंदी में बदल दी गई है। अब आप हिंदी में नेविगेट कर सकते हैं।", { lang: "hi-IN" });
+      speak("भाषा हिंदी में बदल दी गई है। अब आप हिंदी में नेविगेट कर सकते हैं।", { langOverride: "hi-IN" });
     } else {
-      speak("Language switched to English. You can now navigate in English.", { lang: "en-US" });
+      speak("Language switched to English.", { langOverride: "en-US" });
     }
   }
 
@@ -957,47 +1455,200 @@ class VoiceNavigationEngine {
     // 0. LANGUAGE SWITCHING COMMANDS (Functional & Active globally)
     // English -> Hindi
     if (
-      /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein\s+karo|hindi\s+me\s+karo|hindi\s+bhasha|hindi\s+mein|hindi\s+me|^hindi$|हिंदी|हिंदी\s+में\s+करो|हिंदी\s+भाषा|हिंदी\s+करो)/i.test(input)
+      /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein\s+karo|hindi\s+me\s+karo|hindi\s+bhasha|hindi\s+mein|hindi\s+me|hindi\s+chune|hindi\s+chuno|^hindi$|हिंदी|हिंदी\s+में\s+करो|हिंदी\s+में\s+बदलें|हिंदी\s+में\s+बदलो|हिंदी\s+चुनें|हिंदी\s+चुनो|हिंदी\s+भाषा|हिंदी\s+करो)/i.test(input)
     ) {
       this.switchLanguage("hi");
       return;
     }
 
-    // Hindi -> English
+    // Hindi -> English: "अंग्रेजी में बदलें" / "switch to English" / "English chune"
     if (
-      /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|angrezi\s+mein\s+karo|angrezi\s+me\s+karo|angrezi\s+mein|angrezi\s+me|^angrezi$|^english$|अंग्रेजी|अंग्रेजी\s+में\s+करो|अंग्रेज़ी|अंग्रेजी\s+करो)/i.test(input)
+      /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|english\s+chune|english\s+chuno|angrezi\s+chune|angrezi\s+chuno|angrezi\s+mein\s+karo|angrezi\s+me\s+karo|angrezi\s+mein|angrezi\s+me|^angrezi$|^english$|अंग्रेजी|अंग्रेज़ी|अंग्रेजी\s+में\s+बदलें|अंग्रेज़ी\s+में\s+बदलें|अंग्रेजी\s+में\s+बदलो|अंग्रेज़ी\s+में\s+बदलो|अंग्रेजी\s+चुनें|अंग्रेज़ी\s+चुनें|अंग्रेजी\s+चुनो|अंग्रेज़ी\s+चुनो|अंग्रेजी\s+में\s+करो|अंग्रेजी\s+करो)/i.test(input)
     ) {
       this.switchLanguage("en");
       return;
     }
 
-    // 1. ROUTING COMMANDS (English & Hindi)
-    if (/(?:go\s+to\s+dashboard|open\s+dashboard|show\s+dashboard|^dashboard$|डैशबोर्ड|डैशबोर्ड\s+पर\s+जाओ)/i.test(input)) {
+    // 1. NAVIGATION COMMANDS
+    // Dashboard: "डैशबोर्ड चुनें" / "dashboard chune" / "dashboard jao" -> Navigate to /dashboard
+    if (
+      /(?:go\s+to\s+dashboard|open\s+dashboard|show\s+dashboard|^dashboard$|dashboard\s+chune|dashboard\s+chuno|dashboard\s+jao|डैशबोर्ड\s+चुनें|डैशबोर्ड\s+चुनो|डैशबोर्ड\s+जाओ|डैशबोर्ड|डैशबोर्ड\s+पर\s+जाओ)/i.test(input)
+    ) {
       this.navigate("/dashboard", isHi ? "डैशबोर्ड पर जा रहे हैं" : "Navigating to Dashboard");
       return;
     }
 
-    if (/(?:go\s+to\s+practice|open\s+practice|start\s+practice|^practice$|प्रैक्टिस\s+शुरू\s+करें|अभ्यास\s+शुरू\s+करें|प्रैक्टिस|अभ्यास|practice\s+shuru\s+karo)/i.test(input)) {
-      this.navigate("/practice", isHi ? "प्रैक्टिस पर जा रहे हैं" : "Navigating to Practice");
-      return;
-    }
-
-    if (/(?:go\s+to\s+exams?|open\s+exams?|start\s+exams?|take\s+mock\s+exam|^exams?$|मॉक\s+टेस्ट\s+दें|परीक्षा\s+शुरू\s+करें|मॉक\s+टेस्ट|परीक्षा|mock\s+test\s+do|pariksha\s+shuru\s+karo)/i.test(input)) {
+    // Exams: "परीक्षा चुनें" / "exams chune" / "exam jao" -> Navigate to /exam
+    if (
+      /(?:go\s+to\s+exams?|open\s+exams?|show\s+exams?|^exams?$|exams?\s+chune|exams?\s+chuno|exams?\s+jao|exam\s+jao|परीक्षा\s+चुनें|परीक्षा\s+चुनो|परीक्षा\s+जाओ|परीक्षा\s+पोर्टल|परीक्षा)/i.test(input)
+    ) {
       this.navigate("/exam", isHi ? "परीक्षा पोर्टल पर जा रहे हैं" : "Navigating to Exams");
       return;
     }
 
-    if (/(?:open\s+results|go\s+to\s+results|show\s+results|^results?$|परिणाम|रिजल्ट|नतीजे|parinaam|result\s+dikhao)/i.test(input)) {
+    // Practice: "प्रैक्टिस चुनें" / "practice chune" -> Navigate to /practice
+    if (
+      /(?:go\s+to\s+practice|open\s+practice|show\s+practice|^practice$|practice\s+chune|practice\s+chuno|practice\s+jao|प्रैक्टिस\s+चुनें|प्रैक्टिस\s+चुनो|अभ्यास\s+चुनें|अभ्यास\s+चुनो|प्रैक्टिस\s+जाओ|अभ्यास\s+जाओ|प्रैक्टिस|अभ्यास)/i.test(input) &&
+      !/(?:shuru|start|kare|karo|शुरू)/i.test(input)
+    ) {
+      this.navigate("/practice", isHi ? "प्रैक्टिस पर जा रहे हैं" : "Navigating to Practice");
+      return;
+    }
+
+    // Results: "परिणाम चुनें" / "results chune" / "parinaam jao" -> Navigate to /results
+    if (
+      /(?:go\s+to\s+results?|open\s+results?|show\s+results?|^results?$|results?\s+chune|results?\s+chuno|parinaam\s+chune|parinaam\s+jao|result\s+jao|परिणाम\s+चुनें|परिणाम\s+चुनो|परिणाम\s+जाओ|परिणाम|रिजल्ट\s+चुनें|रिजल्ट|नतीजे)/i.test(input)
+    ) {
       this.navigate("/results", isHi ? "परिणाम पर जा रहे हैं" : "Navigating to Results");
       return;
     }
 
-    if (/(?:open\s+settings|go\s+to\s+settings|show\s+settings|^settings?$|सेटिंग्स|सेटिंग्स\s+खोलो)/i.test(input)) {
+    // Settings: "सेटिंग्स चुनें" / "settings chune" -> Navigate to /settings
+    if (
+      /(?:go\s+to\s+settings?|open\s+settings?|show\s+settings?|^settings?$|settings?\s+chune|settings?\s+chuno|settings?\s+jao|सेटिंग्स\s+चुनें|सेटिंग्स\s+चुनो|सेटिंग्स\s+जाओ|सेटिंग्स)/i.test(input)
+    ) {
       this.navigate("/settings", isHi ? "सेटिंग्स पर जा रहे हैं" : "Navigating to Settings");
       return;
     }
 
-    // 2. CONVERSATIONAL YES / CONFIRM / SELECT / SURE / HAAN
+    // 2. EXAM & PRACTICE ACTION COMMANDS
+    // Start Mock Exam: "मॉक टेस्ट शुरू करें" / "mock exam shuru kare" / "test shuru kare" -> Open mock selector / launch test
+    if (
+      /(?:take\s+mock\s+exam|start\s+mock\s+exam|start\s+mock\s+test|start\s+mock|mock\s+exam\s+shuru\s+kare|mock\s+exam\s+shuru\s+karo|mock\s+test\s+shuru\s+kare|mock\s+test\s+shuru\s+karo|test\s+shuru\s+kare|test\s+shuru\s+karo|मॉक\s+टेस्ट\s+शुरू\s+करें|मॉक\s+टेस्ट\s+शुरू\s+करो|मॉक\s+परीक्षा\s+शुरू\s+करें|मॉक\s+परीक्षा\s+शुरू\s+करो|मॉक\s+टेस्ट\s+दें|मॉक\s+टेस्ट\s+शुरू|टेस्ट\s+शुरू\s+करें|टेस्ट\s+शुरू\s+करो)/i.test(input)
+    ) {
+      const mockBtn = document.querySelector<HTMLElement>(
+        'button[aria-haspopup="dialog"], button:has-text("Take Mock Exam"), button:has-text("मॉक टेस्ट दें")'
+      );
+      if (mockBtn) {
+        mockBtn.click();
+        speak(isHi ? "मॉक परीक्षा चयन खोला जा रहा है" : "Opening mock exam selector", { langOverride: isHi ? "hi-IN" : "en-US" });
+      } else {
+        this.navigate("/exam", isHi ? "मॉक परीक्षा केंद्र पर जा रहे हैं" : "Navigating to Mock Examination Hub");
+      }
+      return;
+    }
+
+    // Start Practice: "प्रैक्टिस शुरू करें" / "practice shuru kare" -> Launch practice session
+    if (
+      /(?:start\s+practice|begin\s+practice|launch\s+practice|practice\s+shuru\s+kare|practice\s+shuru\s+karo|abhyas\s+shuru\s+kare|abhyas\s+shuru\s+karo|प्रैक्टिस\s+शुरू\s+करें|प्रैक्टिस\s+शुरू\s+करो|अभ्यास\s+शुरू\s+करें|अभ्यास\s+शुरू\s+करो|प्रैक्टिस\s+शुरू|अभ्यास\s+शुरू)/i.test(input)
+    ) {
+      const practiceLink = document.querySelector<HTMLElement>('a[href="/practice"]');
+      if (practiceLink && window.location.pathname !== "/practice") {
+        practiceLink.click();
+      } else {
+        this.navigate("/practice", isHi ? "प्रैक्टिस सत्र शुरू किया जा रहा है" : "Starting practice session");
+      }
+      return;
+    }
+
+    // Trigger Diagram Describer (Alt+D): "चित्र का विवरण दें" / "chitra ka vivaran do" / "diagram samjhao"
+    if (
+      /(?:describe\s+diagram|diagram\s+description|describe\s+image|explain\s+diagram|चित्र\s+का\s+विवरण\s+दें|चित्र\s+का\s+विवरण\s+दो|चित्र\s+का\s+विवरण|चित्र\s+समझाओ|डायग्राम\s+समझाओ|chitra\s+ka\s+vivaran\s+do|chitra\s+ka\s+vivaran\s+de|chitra\s+ka\s+vivaran|diagram\s+samjhao|chitra\s+samjhao|diagram\s+padho)/i.test(input)
+    ) {
+      const describeBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="Describe diagram" i], button[aria-label*="चित्र का विवरण" i], button:has(svg.lucide-sparkles)'
+      );
+      if (describeBtn) {
+        describeBtn.click();
+      } else {
+        window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
+          detail: { action: 'describe-diagram' }
+        }));
+      }
+      speak(isHi ? "चित्र का विवरण दिया जा रहा है" : "Describing diagram", { langOverride: isHi ? "hi-IN" : "en-US" });
+      return;
+    }
+
+    // Next Question: "अगला प्रश्न" / "agla prashn"
+    if (
+      /(?:next\s+question|go\s+next|next\s+prashn|agla\s+prashn|agla\s+prashna|agla\s+sawal|agla|अगला\s+प्रश्न|अगला\s+सवाल|अगला|आगे)/i.test(input)
+    ) {
+      this.dispatchExamAction("next");
+      const nextBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="next" i], button[aria-label*="Next question" i], button:has(svg.lucide-chevron-right)'
+      );
+      if (nextBtn && !nextBtn.hasAttribute("disabled")) {
+        nextBtn.click();
+      }
+      speak(isHi ? "अगला प्रश्न" : "Moving to next question", { langOverride: isHi ? "hi-IN" : "en-US" });
+      return;
+    }
+
+    // Previous Question: "पिछला प्रश्न" / "pichla prashn"
+    if (
+      /(?:previous\s+question|go\s+previous|go\s+back|previous\s+prashn|pichla\s+prashn|pichhla\s+prashn|pichla\s+prashna|pichhla\s+sawal|pichla\s+sawal|pichla|pichhla|पिछला\s+प्रश्न|पिछला\s+सवाल|पिछला|पीछे)/i.test(input)
+    ) {
+      this.dispatchExamAction("prev");
+      const prevBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
+      );
+      if (prevBtn && !prevBtn.hasAttribute("disabled")) {
+        prevBtn.click();
+      }
+      speak(isHi ? "पिछला प्रश्न" : "Moving to previous question", { langOverride: isHi ? "hi-IN" : "en-US" });
+      return;
+    }
+
+    // Clear Response: "उत्तर हटाएं" / "uttar hataye"
+    if (
+      /(?:clear\s+response|clear\s+answer|clear\s+selection|clear|deselect|reset\s+answer|reset|uttar\s+hataye|uttar\s+hatao|उत्तर\s+हटाएं|उत्तर\s+हटाओ|उत्तर\s+हटा|जवाब\s+हटाओ|साफ़\s+करो)/i.test(input)
+    ) {
+      this.dispatchExamAction("clear");
+      const clearBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="clear" i], button:has-text("Clear"), button:has-text("उत्तर हटाएं")'
+      );
+      if (clearBtn) clearBtn.click();
+      speak(isHi ? "उत्तर हटाया गया" : "Response cleared", { langOverride: isHi ? "hi-IN" : "en-US" });
+      return;
+    }
+
+    // Select Option A/B/C/D: "विकल्प ए / बी / सी / डी" / "option A / B / C / D"
+    // Option A
+    if (
+      /(?:विकल्प\s+(?:ए|a|1)|पहला\s+विकल्प|option\s+(?:a|1|one|ए)|vikalp\s+(?:a|1|e)|^option\s+a$|^विकल्प\s+ए$|^ए$|^a$)/i.test(input)
+    ) {
+      this.selectExamOption("A");
+      return;
+    }
+
+    // Option B
+    if (
+      /(?:विकल्प\s+(?:बी|b|2)|दूसरा\s+विकल्प|option\s+(?:b|2|two|बी)|vikalp\s+(?:b|2|bee)|^option\s+b$|^विकल्प\s+बी$|^बी$|^b$)/i.test(input)
+    ) {
+      this.selectExamOption("B");
+      return;
+    }
+
+    // Option C
+    if (
+      /(?:विकल्प\s+(?:सी|c|3)|तीसरा\s+विकल्प|option\s+(?:c|3|three|सी)|vikalp\s+(?:c|3|see)|^option\s+c$|^विकल्प\s+सी$|^सी$|^c$)/i.test(input)
+    ) {
+      this.selectExamOption("C");
+      return;
+    }
+
+    // Option D
+    if (
+      /(?:विकल्प\s+(?:डी|d|4)|चौथा\s+विकल्प|option\s+(?:d|4|four|डी)|vikalp\s+(?:d|4|dee)|^option\s+d$|^विकल्प\s+डी$|^डी$|^d$)/i.test(input)
+    ) {
+      this.selectExamOption("D");
+      return;
+    }
+
+    // Submit Exam: "परीक्षा जमा करें" / "pariksha jama kare"
+    if (
+      /(?:submit\s+exam|submit\s+test|finish\s+exam|pariksha\s+jama\s+kare|pariksha\s+jama\s+karo|jama\s+kare|jama\s+karo|परीक्षा\s+जमा\s+करें|परीक्षा\s+जमा\s+करो|परीक्षा\s+सबमिट\s+करें|सबमिट\s+करें|सबमिट\s+करो|सबमिट)/i.test(input)
+    ) {
+      this.dispatchExamAction("submit");
+      const submitBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="Submit" i], button:has-text("Submit"), button:has-text("सबमिट करें"), button:has-text("परीक्षा जमा करें")'
+      );
+      if (submitBtn) submitBtn.click();
+      speak(isHi ? "परीक्षा जमा की जा रही है" : "Submitting examination", { langOverride: isHi ? "hi-IN" : "en-US" });
+      return;
+    }
+
+    // 3. CONVERSATIONAL YES / CONFIRM / SELECT / SURE / HAAN
     if (/(?:^|\b)(?:yes|yeah|yup|sure|confirm|select|proceed|haan|sahi|thik\s*hai|हाँ|हा|पुष्टि|सही)(?:\b|$)/i.test(input)) {
       const activeEl = (document.activeElement && document.activeElement !== document.body
         ? document.activeElement
@@ -1008,7 +1659,7 @@ class VoiceNavigationEngine {
           activeEl.getAttribute("data-voice-confirm") ||
           activeEl.closest("[data-voice-confirm]")?.getAttribute("data-voice-confirm") ||
           (isHi ? "पुष्टि की गई।" : "Confirmed.");
-        speak(confirmMsg);
+        speak(confirmMsg, { langOverride: isHi ? "hi-IN" : "en-US" });
 
         // Check if element or ancestor/child is a link
         const link = (activeEl.tagName === "A"
@@ -1041,7 +1692,7 @@ class VoiceNavigationEngine {
       }
     }
 
-    // 3. CONVERSATIONAL NO / SKIP / NEXT
+    // 4. CONVERSATIONAL NO / SKIP / NEXT
     const isPracticeSection = typeof window !== "undefined" && window.location.pathname.includes("/practice");
     const activeEl = (document.activeElement && document.activeElement !== document.body
       ? document.activeElement
@@ -1052,93 +1703,19 @@ class VoiceNavigationEngine {
     const isNextInPractice = isPracticeSection && /(?:^|\b)(?:next|अगला)(?:\b|$)/i.test(input);
 
     if (isNoCommand || (isNextInPractice && hasPrompt)) {
-      speak(isHi ? "छोड़ा जा रहा है।" : "Skipping.");
+      speak(isHi ? "छोड़ा जा रहा है।" : "Skipping.", { langOverride: isHi ? "hi-IN" : "en-US" });
       this.advanceFocusToNextElement();
       return;
     }
 
-    // 4. ACTIVE EXAM / PRACTICE ACTIONS
-
-    // Next Question
-    if (/(?:next\s+question|go\s+next|next|forward|agla\s+sawal|agla\s+prashna|agla|अगला\s+प्रश्न|अगला\s+सवाल|अगला|आगे)/i.test(input)) {
-      this.dispatchExamAction("next");
-      const nextBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="next" i], button[aria-label*="Next question" i], button:has(svg.lucide-chevron-right)'
-      );
-      if (nextBtn && !nextBtn.hasAttribute("disabled")) {
-        nextBtn.click();
-      }
-      speak(isHi ? "अगला प्रश्न" : "Moving to next question");
-      return;
-    }
-
-    // Previous Question
-    if (/(?:previous\s+question|go\s+previous|go\s+back|previous|back|pichhla\s+sawal|pichla\s+sawal|pichhla|pichla|पिछला\s+प्रश्न|पिछला\s+सवाल|पिछला|पीछे)/i.test(input)) {
-      this.dispatchExamAction("prev");
-      const prevBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
-      );
-      if (prevBtn && !prevBtn.hasAttribute("disabled")) {
-        prevBtn.click();
-      }
-      speak(isHi ? "पिछला प्रश्न" : "Moving to previous question");
-      return;
-    }
-
-    // Select Option A (or 1)
-    if (/(?:select|choose|pick|option)\s+(?:a|1|one|पहला|ए)\b|^(?:option\s+)?(?:a|1|one|पहला|ए)$|^(?:पहला\s+विकल्प|विकल्प\s+ए)$/i.test(input)) {
-      this.selectExamOption("A");
-      return;
-    }
-
-    // Select Option B (or 2)
-    if (/(?:select|choose|pick|option)\s+(?:b|2|two|दूसरा|बी)\b|^(?:option\s+)?(?:b|2|two|दूसरा|बी)$|^(?:दूसरा\s+विकल्प|विकल्प\s+बी)$/i.test(input)) {
-      this.selectExamOption("B");
-      return;
-    }
-
-    // Select Option C (or 3)
-    if (/(?:select|choose|pick|option)\s+(?:c|3|three|तीसरा|सी)\b|^(?:option\s+)?(?:c|3|three|तीसरा|सी)$|^(?:तीसरा\s+विकल्प|विकल्प\s+सी)$/i.test(input)) {
-      this.selectExamOption("C");
-      return;
-    }
-
-    // Select Option D (or 4)
-    if (/(?:select|choose|pick|option)\s+(?:d|4|four|चौथा|डी)\b|^(?:option\s+)?(?:d|4|four|चौथा|डी)$|^(?:चौथा\s+विकल्प|विकल्प\s+डी)$/i.test(input)) {
-      this.selectExamOption("D");
-      return;
-    }
-
-    // Clear Response
-    if (/(?:clear\s+response|clear\s+answer|clear\s+selection|clear|deselect|reset\s+answer|reset|उत्तर\s+हटाएं|उत्तर\s+हटाओ|जवाब\s+हटाओ|साफ़\s+करो|uttar\s+hatao)/i.test(input)) {
-      this.dispatchExamAction("clear");
-      const clearBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="clear" i], button:has-text("Clear")'
-      );
-      if (clearBtn) clearBtn.click();
-      speak(isHi ? "उत्तर हटाएं" : "Response cleared");
-      return;
-    }
-
-    // Mark for Review / Flag
+    // 5. Mark for Review / Flag
     if (/(?:mark\s+for\s+review|review\s+later|review|flag\s+for\s+review|flag\s+question|flag|unflag|चिह्नित\s+करो|समीक्षा)/i.test(input)) {
       this.dispatchExamAction("flag");
       const flagBtn = document.querySelector<HTMLElement>(
         'button[aria-label*="flag" i], button[aria-label*="review" i], button:has(svg.lucide-flag)'
       );
       if (flagBtn) flagBtn.click();
-      speak(isHi ? "समीक्षा के लिए चिह्नित किया गया" : "Marked for review");
-      return;
-    }
-
-    // Submit Exam
-    if (/(?:submit\s+exam|submit\s+test|finish\s+exam|submit|परीक्षा\s+जमा\s+करें|परीक्षा\s+जमा\s+करो|सबमिट\s+करो|सबमिट|pariksha\s+jama\s+karo)/i.test(input)) {
-      this.dispatchExamAction("submit");
-      const submitBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="Submit" i], button:has-text("Submit")'
-      );
-      if (submitBtn) submitBtn.click();
-      speak(isHi ? "परीक्षा जमा करें" : "Submitting examination");
+      speak(isHi ? "समीक्षा के लिए चिह्नित किया गया" : "Marked for review", { langOverride: isHi ? "hi-IN" : "en-US" });
       return;
     }
 
@@ -1423,19 +2000,21 @@ export function initFocusTalkBack(): () => void {
 
     if (promptElement && promptElement.dataset.voicePrompt) {
       const isHi = store.language === "hi";
-      const promptText = promptElement.dataset.voicePrompt.trim();
+      const rawPrompt = promptElement.dataset.voicePrompt.trim();
+      const promptText = isHi ? localizeTalkBackText(rawPrompt, true) : rawPrompt;
       const message = /say yes|हाँ कहें/i.test(promptText)
         ? promptText
         : isHi
           ? `${promptText} आगे बढ़ने के लिए हाँ कहें, या छोड़ने के लिए नहीं कहें।`
           : `${promptText} Say Yes to proceed, or say No to skip.`;
-      speak(message, { cancelPrevious: true });
+      speak(message, { cancelPrevious: true, langOverride: isHi ? "hi-IN" : "en-US" });
       return;
     }
 
     const label = computeAccessibleLabel(target);
     if (label) {
-      speak(label, { cancelPrevious: true });
+      const isHi = store.language === "hi";
+      speak(label, { cancelPrevious: true, langOverride: isHi ? "hi-IN" : "en-US" });
     }
   };
 
