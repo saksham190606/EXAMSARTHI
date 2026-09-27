@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AccessibilityProvider } from "@/components/providers/AccessibilityProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Header } from "@/components/layout/Header";
+import { DotPattern } from "@/components/ui/dot-pattern";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,7 +42,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full flex flex-col bg-background text-foreground relative">
+        <DotPattern className="fixed inset-0 z-0 h-full w-full fill-white/10 [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)] pointer-events-none" />
+
         {/* Skip to Main Content Link for Keyboard and Screen-Reader Accessibility */}
         <a 
           href="#main-content" 
@@ -50,21 +53,23 @@ export default function RootLayout({
           Skip to main content
         </a>
 
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            <AccessibilityProvider>
-              <Header />
-              <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
-                {children}
-              </main>
-            </AccessibilityProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <AuthProvider>
+              <AccessibilityProvider>
+                <Header />
+                <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
+                  {children}
+                </main>
+              </AccessibilityProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </div>
       </body>
     </html>
   );
