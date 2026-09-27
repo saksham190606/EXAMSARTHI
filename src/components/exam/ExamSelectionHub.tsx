@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Clock, HelpCircle, ArrowRight, Sparkles, BookOpen } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import { speak } from '@/lib/accessibility/voice-companion';
+import { requestMicPermission } from '@/lib/accessibility/mic-permission';
 
 export interface ExamCatalogItem {
   id: string;
@@ -90,7 +91,10 @@ export function ExamSelectionHub() {
     );
   }, [isHindi]);
 
-  const handleSelectExam = (param: string, title: string) => {
+  const handleSelectExam = async (param: string, title: string) => {
+    // Request microphone permission on user click gesture so browser permission prompt is granted immediately
+    await requestMicPermission();
+
     speak(
       isHindi ? `${title} शुरू हो रही है।` : `Starting ${title}`,
       { cancelPrevious: true, langOverride: isHindi ? 'hi' : 'en' }

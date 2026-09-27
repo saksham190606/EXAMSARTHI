@@ -55,8 +55,8 @@ export function useVoiceMode({
   const language = useAccessibilityStore((s) => s.language);
   const voiceSpeed = useAccessibilityStore((s) => s.voiceSpeed);
 
-  const [isActive, setIsActive] = useState(false);
-  const [status, setStatus] = useState<VoiceStatus>('Ready');
+  const [isActive, setIsActive] = useState(true);
+  const [status, setStatus] = useState<VoiceStatus>('Listening');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [lastActionFeedback, setLastActionFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -79,8 +79,8 @@ export function useVoiceMode({
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isSpeakingRef = useRef(false);
-  const isActiveRef = useRef(false);
-  const statusRef = useRef<VoiceStatus>('Ready');
+  const isActiveRef = useRef(true);
+  const statusRef = useRef<VoiceStatus>('Listening');
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const speechWatchdogRef = useRef<NodeJS.Timeout | null>(null);
   const lastReadQuestionIndexRef = useRef<number | null>(null);
@@ -1256,9 +1256,77 @@ export function useVoiceMode({
     };
   }, [speak, startListening, clearRestartTimer]);
 
+  const hasAutoStartedRef = useRef(false);
+
+  // Auto-Start Listener & TalkBack on Component Mount:
+  // Automatically start recognition without manual toggle, and trigger TTS TalkBack:
+  // "Exam started. Voice mode is active. Question 1..." followed by question text and options.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (hasAutoStartedRef.current) return;
+    if (!currentQuestion) return;
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatus('Unsupported');
+      return;
+    }
+
+    hasAutoStartedRef.current = true;
+    setIsActive(true);
+    isActiveRef.current = true;
+    setStatus('Listening');
+
+    // Trigger permission dialog if not yet approved
+    if (navigator?.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+          stream.getTracks().forEach((track) => track.stop());
+        })
+        .catch((err) => {
+          console.warn('[VoiceMode] Mic permission prompt notice on auto-mount:', err);
+        });
+    }
+
+    const curLang = languageRef.current;
+    const isHindi = curLang === 'hi';
+    const curQ = currentQuestionRef.current;
+    const curState = stateRef.current;
+    const totalQ = totalQuestionsRef.current;
+    const qNum = curState.currentQuestionIndex + 1;
+    const qType = getQuestionType(curQ);
+
+    let optionsText = '';
+    if (qType === 'single-choice' || qType === 'multiple-choice') {
+      const opts = (curQ as any).options || [];
+      optionsText = opts
+        .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
+        .join(' ');
+    } else if (qType === 'true-false') {
+      optionsText = isHindi ? 'विकल्प: सत्य या असत्य।' : 'Options: True or False.';
+    }
+
+    const welcomeIntro = isHindi
+      ? `परीक्षा शुरू हो गई है। वॉइस मोड सक्रिय है। प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}। ${optionsText} ${qType === 'single-choice' ? 'आप A, B, C या D कह सकते हैं।' : ''}`
+      : `Exam started. Voice mode is active. Question ${qNum} of ${totalQ}. ${curQ.text}. ${optionsText} ${qType === 'single-choice' ? 'You can say Option A, B, C, or D.' : ''}`;
+
+    lastReadQuestionIndexRef.current = curState.currentQuestionIndex;
+
+    const timer = setTimeout(() => {
+      speak(welcomeIntro, {
+        langOverride: isHindi ? 'hi' : 'en',
+        onEnd: () => {
+          startListening();
+        }
+      });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [currentQuestion, speak, startListening]);
+
   // Auto-read question when candidate navigates to a new question
   useEffect(() => {
-    if (isActive && lastReadQuestionIndexRef.current !== state.currentQuestionIndex) {
+    if (isActive && hasAutoStartedRef.current && lastReadQuestionIndexRef.current !== state.currentQuestionIndex) {
       lastReadQuestionIndexRef.current = state.currentQuestionIndex;
       setLastActionFeedback(null);
       readCurrentQuestion();

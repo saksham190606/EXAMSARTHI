@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Volume2, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
+import { requestMicPermission } from '@/lib/accessibility/mic-permission';
 
 interface ExamBadge {
   name: string;
@@ -157,6 +158,7 @@ export default function ExamSarthiHero() {
             <Link 
               className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00] px-6 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-[#e6d500] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]" 
               href="/practice"
+              onClick={() => { requestMicPermission(); }}
             >
               {isHindi ? "प्रैक्टिस शुरू करें (Alt+P)" : "Start Practice (Alt+P)"}
               <ArrowRight className="h-4 w-4"/>
@@ -164,7 +166,10 @@ export default function ExamSarthiHero() {
 
             <button
               type="button"
-              onClick={() => setIsExamModalOpen(true)}
+              onClick={() => {
+                requestMicPermission();
+                setIsExamModalOpen(true);
+              }}
               aria-haspopup="dialog"
               className="inline-flex items-center gap-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-black dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00] cursor-pointer"
             >

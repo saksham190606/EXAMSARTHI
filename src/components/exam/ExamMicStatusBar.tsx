@@ -90,7 +90,7 @@ export function ExamMicStatusBar({
             </span>
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
               <span className="text-sm font-black text-[#ffed00] tracking-wide uppercase font-mono">
-                {isHindi ? '🟡 कमांड सुन रहा है...' : '🟡 Listening for commands...'}
+                {isHindi ? 'वॉइस नेविगेशन: सक्रिय (सुन रहा है)' : 'Voice Navigation: Active (Listening)'}
               </span>
               <span className="text-xs text-muted-foreground hidden md:inline">
                 {isHindi ? '(A, B, C, D या अगला/पिछला बोलें)' : '(Say "Option A", "B", "Next", or "Previous")'}
@@ -137,7 +137,7 @@ export function ExamMicStatusBar({
               <span className="size-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]" />
             </span>
             <span className="text-sm font-semibold text-muted-foreground">
-              {isHindi ? '🔴 माइक्रोफ़ोन: बंद / चालू करने के लिए क्लिक करें' : '🔴 Microphone: Off / Click to Enable'}
+              {isHindi ? '🔴 वॉइस नेविगेशन: म्यूट (अनम्यूट करने के लिए Alt+M दबाएं)' : '🔴 Voice Navigation: Muted (Click or Alt+M to Unmute)'}
             </span>
           </div>
         )}

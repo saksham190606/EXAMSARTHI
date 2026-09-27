@@ -498,6 +498,34 @@ function ActiveExamSession({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Active Voice Navigation Badge in Top Exam Header Bar */}
+            {isActive && status === 'Listening' ? (
+              <button
+                type="button"
+                onClick={toggleVoiceMode}
+                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ffed00]/15 text-[#ffed00] border border-[#ffed00]/50 shadow-[0_0_14px_rgba(255,237,0,0.35)] text-xs font-black tracking-wide animate-pulse hover:bg-[#ffed00]/25 transition-all cursor-pointer"
+                title="Voice Navigation is Active. Click or press Alt+M to mute"
+                aria-label="Voice Navigation: Active (Listening). Press Alt+M to mute"
+              >
+                <span className="relative flex size-2.5 items-center justify-center">
+                  <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
+                  <span className="size-2 rounded-full bg-[#ffed00]" />
+                </span>
+                <span>{language === 'hi' ? 'वॉइस नेविगेशन: सक्रिय (सुन रहा है)' : 'Voice Navigation: Active (Listening)'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleVoiceMode}
+                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-muted-foreground border border-border text-xs font-semibold hover:bg-muted transition-all cursor-pointer"
+                title="Voice Navigation is Muted. Click or press Alt+M to unmute"
+                aria-label="Voice Navigation: Muted. Press Alt+M to unmute"
+              >
+                <span className="size-2 rounded-full bg-red-500" />
+                <span>{language === 'hi' ? 'वॉइस म्यूट (Alt+M)' : 'Voice Muted (Alt+M)'}</span>
+              </button>
+            )}
+
             <ExamTimer 
               timeRemaining={state.timeRemaining} 
               tickTimer={actions.tickTimer}

@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRight, BookOpen, Clock, FileQuestion, Sparkles, Eye } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import { speak } from '@/lib/accessibility/voice-companion';
+import { requestMicPermission } from '@/lib/accessibility/mic-permission';
 
 export interface ExamOption {
   id: string;
@@ -137,7 +138,10 @@ export default function ExamSelectorModal({ isOpen, onClose }: ExamSelectorModal
     }
   }, [isOpen, onClose, isHindi]);
 
-  const handleSelectExam = (exam: ExamOption) => {
+  const handleSelectExam = async (exam: ExamOption) => {
+    // Request microphone access during user click gesture
+    await requestMicPermission();
+
     speak(
       isHindi
         ? `${exam.title} शुरू हो रहा है। परीक्षा प्रश्न तैयार किए जा रहे हैं।`
