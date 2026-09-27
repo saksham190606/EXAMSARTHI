@@ -673,16 +673,12 @@ function ActiveExamSession({
   );
 }
 
-function ExamContent() {
-  const searchParams = useSearchParams();
-  const rawSet = searchParams?.get('set') || null;
-  const rawExam = searchParams?.get('exam') || searchParams?.get('id') || null;
+interface ExamSessionLoaderProps {
+  rawSet: string | null;
+  rawExam: string | null;
+}
 
-  // Render dedicated accessible Exam Selection Hub when visiting /exam directly without active session query
-  if (!rawSet && !rawExam) {
-    return <ExamSelectionHub />;
-  }
-
+function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
   // Parse target session parameters
   let setId: string | null = null;
   let examId: string | null = null;
@@ -848,6 +844,19 @@ function ExamContent() {
       sections={sections}
     />
   );
+}
+
+function ExamContent() {
+  const searchParams = useSearchParams();
+  const rawSet = searchParams?.get('set') || null;
+  const rawExam = searchParams?.get('exam') || searchParams?.get('id') || null;
+
+  // Render dedicated accessible Exam Selection Hub when visiting /exam directly without active session query
+  if (!rawSet && !rawExam) {
+    return <ExamSelectionHub />;
+  }
+
+  return <ExamSessionLoader key={`${rawSet}-${rawExam}`} rawSet={rawSet} rawExam={rawExam} />;
 }
 
 export default function ExamPage() {
