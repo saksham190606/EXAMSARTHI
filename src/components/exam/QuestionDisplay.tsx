@@ -298,13 +298,21 @@ export function QuestionDisplay({
           currentChoice = effectiveAnswer ? 'true' : 'false';
         } else if (typeof effectiveAnswer === 'string') {
           const l = effectiveAnswer.toLowerCase().trim();
-          if (l === 'true' || l === 'false') currentChoice = l;
+          if (l === 'true' || l === 'false') {
+            currentChoice = l;
+          } else if (question.options && question.options.length >= 2) {
+            if (effectiveAnswer === question.options[0].id) currentChoice = 'true';
+            else if (effectiveAnswer === question.options[1].id) currentChoice = 'false';
+          }
         }
 
         const handleSelect = (val: string) => {
           const boolVal = val === 'true';
+          const targetOptId = (question.options && question.options.length >= 2)
+            ? (boolVal ? question.options[0].id : question.options[1].id)
+            : val;
           if (onSetAnswer) onSetAnswer(question.id, boolVal);
-          onSelectOption(question.id, val);
+          onSelectOption(question.id, targetOptId);
         };
 
         return (

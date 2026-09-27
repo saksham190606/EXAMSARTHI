@@ -69,7 +69,7 @@ export function QuestionPalette({
                 aria-label={`Question ${index + 1}: ${stateDescription}`}
                 className={`
                   relative h-11 w-full font-bold text-sm transition-all
-                  ${isFlagged ? 'border-primary/60 border-2' : ''}
+                  ${isFlagged ? 'border-amber-400 border-2' : ''}
                   ${isCurrent ? 'ring-2 ring-primary ring-offset-2 ring-offset-background font-extrabold z-10' : ''}
                 `}
               >
@@ -77,7 +77,7 @@ export function QuestionPalette({
 
                 {/* Flag indicator */}
                 {isFlagged && (
-                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-black ">
+                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-black shadow-sm">
                     <Flag className="size-2 fill-current" aria-hidden="true" />
                   </span>
                 )}
@@ -192,7 +192,7 @@ export function QuestionPalette({
                     className={`
                       relative h-9 w-full font-bold text-xs transition-all
                       ${!isClickable ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''}
-                      ${isFlagged && isClickable ? 'border-primary/60 border-2' : ''}
+                      ${isFlagged && isClickable ? 'border-amber-400 border-2' : ''}
                       ${isCurrent ? 'ring-2 ring-primary ring-offset-1 ring-offset-background font-extrabold z-10' : ''}
                     `}
                   >
@@ -200,7 +200,7 @@ export function QuestionPalette({
 
                     {/* Flag indicator */}
                     {isFlagged && (
-                      <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-primary text-black ">
+                      <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-amber-500 text-black shadow-sm">
                         <Flag className="size-1.5 fill-current" aria-hidden="true" />
                       </span>
                     )}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { ExamState, announceToScreenReader } from '@/lib/useExamEngine';
-import { CandidateQuestion } from '@/types/question';
+import { CandidateQuestion, getQuestionType } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import {
   useVoiceEngine,
@@ -155,18 +155,48 @@ export function useVoiceMode({
     }
   }, []);
 
+  // 2. FLAG / MARK FOR REVIEW:
+  // Toggle review state for the current question
+  // Audio confirmation: Speak "Marked for review" / "रिव्यू के लिए चिह्नित किया गया" (or "Unflagged" if toggled off)
+  const handleToggleFlag = useCallback(() => {
+    const q = currentQuestionRef.current;
+    if (!q) return;
+    const isCurrentlyFlagged = stateRef.current.flagged.has(q.id);
+    if (actionsRef.current.toggleFlag) {
+      actionsRef.current.toggleFlag(q.id);
+    }
+    const isHi = languageRef.current === 'hi';
+    const speechLang = isHi ? 'hi-IN' : 'en-US';
+    const feedback = isCurrentlyFlagged
+      ? (isHi ? 'रिव्यू चिह्न हटाया गया' : 'Unflagged')
+      : (isHi ? 'रिव्यू के लिए चिह्नित किया गया' : 'Marked for review');
+    setLastActionFeedback(`✓ ${feedback}`);
+    announceToScreenReader(feedback);
+    speakText(feedback, speechLang, () => {
+      if (isActiveRef.current && !userManuallyMutedRef.current) {
+        startListening(speechLang);
+      }
+    });
+  }, []);
+
+  // 2. CLEAR RESPONSE:
+  // Clear the selected option/text for current question
+  // Audio confirmation: Speak "Response cleared" / "उत्तर हटा दिया गया"
   const handleClearAnswer = useCallback(() => {
     const q = currentQuestionRef.current;
     if (!q) return;
     if (actionsRef.current.setAnswer) {
       actionsRef.current.setAnswer(q.id, '');
     }
-    const cleared = languageRef.current === 'hi' ? 'उत्तर साफ़ किया गया।' : 'Answer cleared.';
+    actionsRef.current.selectAnswer(q.id, '');
+    const isHi = languageRef.current === 'hi';
+    const speechLang = isHi ? 'hi-IN' : 'en-US';
+    const cleared = isHi ? 'उत्तर हटा दिया गया' : 'Response cleared';
     setLastActionFeedback(`✓ ${cleared}`);
     announceToScreenReader(cleared);
-    speakText(cleared, languageRef.current === 'hi' ? 'hi-IN' : 'en-US', () => {
+    speakText(cleared, speechLang, () => {
       if (isActiveRef.current && !userManuallyMutedRef.current) {
-        startListening(languageRef.current === 'hi' ? 'hi-IN' : 'en-US');
+        startListening(speechLang);
       }
     });
   }, []);
@@ -185,7 +215,8 @@ export function useVoiceMode({
     });
   }, [onOpenSubmitDialog]);
 
-  // Sequential Audio Cycle: 1. Load Question & Auto-Read
+  // 3. Question Read-Out Adaptation by Type:
+  // Update TTS reader to announce the format clearly so visually impaired candidates know how to answer
   const readQuestion = useCallback((index: number) => {
     const questionsList = questionsRef.current;
     const targetQ = (questionsList && questionsList[index]) ? questionsList[index] : currentQuestionRef.current;
@@ -193,6 +224,16 @@ export function useVoiceMode({
 
     const isHi = languageRef.current === 'hi';
     const speechLang = isHi ? 'hi-IN' : 'en-US';
+
+    const qType = getQuestionType(targetQ);
+    const isTrueFalse =
+      qType === 'true-false' ||
+      (targetQ.options && targetQ.options.length === 2 &&
+       targetQ.options.some((o) => /^(true|false|सत्य|असत्य)/i.test(o.text)));
+    const isInputQuestion =
+      qType === 'fill-blank' ||
+      qType === 'short-answer' ||
+      (!targetQ.options || targetQ.options.length === 0);
 
     const getOptText = (opt: any) => {
       if (!opt) return '';
@@ -204,14 +245,24 @@ export function useVoiceMode({
     const optC = getOptText(opts[2]);
     const optD = getOptText(opts[3]);
 
-    // Sequential Audio Cycle:
-    // Format text: "Question " + (index + 1) + ". " + questionText + ". Option A: " + optA + ". Option B: " + optB + ". Option C: " + optC + ". Option D: " + optD
     let textToRead = '';
-    if (targetQ.type === 'true-false') {
+    if (isTrueFalse) {
+      // If True/False:
+      // Speak: "Question [N]: [question text]. State whether this is True or False."
+      // Hindi: "प्रश्न [N]: [question text]। बताएं कि यह सत्य है या गलत।"
       textToRead = isHi
-        ? `प्रश्न ${index + 1}. ${targetQ.text}. विकल्प: सत्य या असत्य।`
-        : `Question ${index + 1}. ${targetQ.text}. Options: True or False.`;
+        ? `प्रश्न ${index + 1}: ${targetQ.text}। बताएं कि यह सत्य है या गलत।`
+        : `Question ${index + 1}: ${targetQ.text}. State whether this is True or False.`;
+    } else if (isInputQuestion) {
+      // If Fill in the Blank / Short Answer:
+      // Speak: "Question [N]: [question text]. Please speak your answer to fill in the blank."
+      // Hindi: "प्रश्न [N]: [question text]। खाली स्थान भरने के लिए अपना उत्तर बोलें।"
+      textToRead = isHi
+        ? `प्रश्न ${index + 1}: ${targetQ.text}। खाली स्थान भरने के लिए अपना उत्तर बोलें।`
+        : `Question ${index + 1}: ${targetQ.text}. Please speak your answer to fill in the blank.`;
     } else {
+      // If MCQ:
+      // Speak question text and all options A, B, C, D
       textToRead = isHi
         ? `प्रश्न ${index + 1}. ${targetQ.text}. ${optA ? `विकल्प ए: ${optA}. ` : ''}${optB ? `विकल्प बी: ${optB}. ` : ''}${optC ? `विकल्प सी: ${optC}. ` : ''}${optD ? `विकल्प डी: ${optD}.` : ''}`.trim()
         : `Question ${index + 1}. ${targetQ.text}. Option A: ${optA}. Option B: ${optB}. Option C: ${optC}. Option D: ${optD}.`;
@@ -221,7 +272,7 @@ export function useVoiceMode({
     setStatus('Speaking');
     setVoiceStatus('Reading question...');
 
-    // 2. Wait until speaking completely finishes before starting the mic listener!
+    // Wait until speaking completely finishes before starting the mic listener!
     speakText(textToRead, speechLang, () => {
       if (isActiveRef.current && !userManuallyMutedRef.current) {
         setStatus('Listening');
@@ -237,7 +288,7 @@ export function useVoiceMode({
     readQuestion(stateRef.current.currentQuestionIndex);
   }, [readQuestion]);
 
-  // 3. On Microphone Input: Intelligent intent & token matching
+  // Voice Input Processor with Core Command Priority and Dynamic Question Type Discrimination
   const handleCapturedSpeech = useCallback((raw: string) => {
     if (!isActiveRef.current || userManuallyMutedRef.current) return;
 
@@ -279,7 +330,195 @@ export function useVoiceMode({
       }
     }
 
-    // Exact input command tokens required:
+    const words = transcript.split(/\s+/);
+
+    // =========================================================================
+    // 2. CORE VOICE EXAM COMMANDS (Take immediate precedence across all types)
+    // =========================================================================
+
+    // REPEAT / READ AGAIN:
+    // Keywords: ["repeat", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो", "दोबारा"]
+    const repeatKeywords = [
+      "repeat", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो", "दोबारा", "again", "फिर से"
+    ];
+    if (repeatKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      playVoiceFeedbackChime();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {}
+      }
+      readCurrentQuestion();
+      return;
+    }
+
+    // FLAG / MARK FOR REVIEW:
+    // Keywords: ["flag", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग"]
+    const flagKeywords = [
+      "flag", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
+    ];
+    if (flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      playVoiceFeedbackChime();
+      handleToggleFlag();
+      return;
+    }
+
+    // CLEAR RESPONSE:
+    // Keywords: ["clear", "clear response", "unselect", "remove answer", "साफ करो", "हटाओ"]
+    const clearKeywords = [
+      "clear response", "clear answer", "unselect", "remove answer", "साफ करो", "हटाओ", "clear"
+    ];
+    if (clearKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      playVoiceFeedbackChime();
+      handleClearAnswer();
+      return;
+    }
+
+    // NEXT / PREVIOUS:
+    // Keywords for Next: ["next", "next question", "agla", "अगला", "आगे"] -> handleNextQuestion()
+    const nextKeywords = ["next", "next question", "agla", "अगला", "आगे"];
+    if (nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+      playVoiceFeedbackChime();
+      handleNextQuestion();
+      return;
+    }
+
+    // Keywords for Previous: ["previous", "back", "pichla", "पिछला", "पीछे"] -> handlePrevQuestion()
+    const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
+    if (prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+      playVoiceFeedbackChime();
+      handlePrevQuestion();
+      return;
+    }
+
+    // SUBMIT EXAM:
+    // Keywords: ["submit exam", "submit test", "finish exam", "end test", "सबमिट करो", "परीक्षा समाप्त"]
+    const submitKeywords = [
+      "submit exam", "submit test", "finish exam", "end test", "सबमिट करो", "परीक्षा समाप्त", "submit"
+    ];
+    if (submitKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      playVoiceFeedbackChime();
+      handleSubmitTrigger();
+      return;
+    }
+
+    // =========================================================================
+    // 1. DYNAMIC QUESTION TYPE DISCRIMINATION
+    // =========================================================================
+    const currentQ = currentQuestionRef.current;
+    if (!currentQ) return;
+
+    const qType = getQuestionType(currentQ);
+    const isTrueFalse =
+      qType === 'true-false' ||
+      (currentQ.options && currentQ.options.length === 2 &&
+       currentQ.options.some((o) => /^(true|false|सत्य|असत्य)/i.test(o.text)));
+    const isInputQuestion =
+      qType === 'fill-blank' ||
+      qType === 'short-answer' ||
+      (!currentQ.options || currentQ.options.length === 0);
+
+    // -------------------------------------------------------------------------
+    // A. TYPE: "TRUE_FALSE" (or questions with only 2 binary options)
+    // -------------------------------------------------------------------------
+    if (isTrueFalse) {
+      // Recognized inputs for TRUE:
+      // ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ"]
+      const trueTokens = ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ", "हा"];
+      if (trueTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+        playVoiceFeedbackChime();
+        const trueOptId = (currentQ.options && currentQ.options[0]) ? currentQ.options[0].id : "true";
+        if (actionsRef.current.setAnswer) {
+          actionsRef.current.setAnswer(currentQ.id, true);
+        }
+        actionsRef.current.selectAnswer(currentQ.id, trueOptId);
+        const conf = isHi ? "सत्य चुना गया" : "Selected True";
+        setLastActionFeedback(`✓ ${conf}`);
+        announceToScreenReader(conf);
+        speakText(conf, speechLang, () => startListening(speechLang));
+        return;
+      }
+
+      // Recognized inputs for FALSE:
+      // ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं"]
+      const falseTokens = ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं", "ना"];
+      if (falseTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+        playVoiceFeedbackChime();
+        const falseOptId = (currentQ.options && currentQ.options[1]) ? currentQ.options[1].id : "false";
+        if (actionsRef.current.setAnswer) {
+          actionsRef.current.setAnswer(currentQ.id, false);
+        }
+        actionsRef.current.selectAnswer(currentQ.id, falseOptId);
+        const conf = isHi ? "गलत चुना गया" : "Selected False";
+        setLastActionFeedback(`✓ ${conf}`);
+        announceToScreenReader(conf);
+        speakText(conf, speechLang, () => startListening(speechLang));
+        return;
+      }
+
+      // If user says A/B/C/D on a True/False question:
+      // Announce: "This is a True or False question. Please say True or False."
+      const mcqTokens = [
+        "option a", "option b", "option c", "option d",
+        "विकल्प ए", "विकल्प बी", "विकल्प सी", "विकल्प डी",
+        "a", "b", "c", "d", "ए", "बी", "सी", "डी"
+      ];
+      if (mcqTokens.some((t) => transcript === t || words.includes(t))) {
+        const warning = isHi
+          ? "यह सत्य या असत्य प्रश्न है। कृपया सत्य या असत्य कहें।"
+          : "This is a True or False question. Please say True or False.";
+        setLastActionFeedback(`⚠️ ${warning}`);
+        announceToScreenReader(warning);
+        speakText(warning, speechLang, () => startListening(speechLang));
+        return;
+      }
+
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // B. TYPE: "FILL_IN_BLANKS" / "NUMERICAL" / "INPUT"
+    // -------------------------------------------------------------------------
+    if (isInputQuestion) {
+      // Spoken command to erase:
+      // ["clear answer", "erase", "हटाओ", "खाली करो"] -> resets input to ""
+      const eraseTokens = ["clear answer", "erase", "हटाओ", "खाली करो", "साफ करो"];
+      if (eraseTokens.some((t) => transcript === t || transcript.includes(t))) {
+        playVoiceFeedbackChime();
+        if (actionsRef.current.setAnswer) {
+          actionsRef.current.setAnswer(currentQ.id, "");
+        }
+        actionsRef.current.selectAnswer(currentQ.id, "");
+        const conf = isHi ? "उत्तर खाली किया गया" : "Answer erased";
+        setLastActionFeedback(`✓ ${conf}`);
+        announceToScreenReader(conf);
+        speakText(conf, speechLang, () => startListening(speechLang));
+        return;
+      }
+
+      // Directly pipe recognized spoken transcript into text input value
+      // Remove trailing punctuation/periods that speech recognition auto-appends
+      const cleanedInput = raw.replace(/[.,;!?]+$/, '').trim();
+      if (cleanedInput) {
+        playVoiceFeedbackChime();
+        if (actionsRef.current.setAnswer) {
+          actionsRef.current.setAnswer(currentQ.id, cleanedInput);
+        }
+        actionsRef.current.selectAnswer(currentQ.id, cleanedInput);
+        // Audio confirmation: Speak "Entered: " + transcript
+        const conf = isHi ? `दर्ज किया गया: ${cleanedInput}` : `Entered: ${cleanedInput}`;
+        setLastActionFeedback(`✓ ${conf}`);
+        announceToScreenReader(conf);
+        speakText(conf, speechLang, () => startListening(speechLang));
+        return;
+      }
+
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // C. TYPE: "MCQ" (Standard 4 Options)
+    // -------------------------------------------------------------------------
     // Option A: "a", "option a", "1", "one", "पहला", "विकल्प ए" -> select Option 0. Speak "Selected A"
     const optATokens = ["option a", "विकल्प ए", "पहला", "one", "a", "1", "ए", "एक"];
     // Option B: "b", "option b", "2", "two", "दूसरा", "विकल्प बी" -> select Option 1. Speak "Selected B"
@@ -288,16 +527,6 @@ export function useVoiceMode({
     const optCTokens = ["option c", "विकल्प सी", "तीसरा", "three", "c", "3", "सी", "तीन"];
     // Option D: "d", "option d", "4", "four", "चौथा", "विकल्प डी" -> select Option 3. Speak "Selected D"
     const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "4", "डी", "चार"];
-
-    // Navigation:
-    // "next", "agla", "आगे", "अगला" -> advance to next question and auto-read it
-    const nextTokens = ["next", "agla", "आगे", "अगला"];
-    // "back", "previous", "पिछला", "पीछे" -> go to previous question and auto-read it
-    const backTokens = ["back", "previous", "पिछला", "पीछे", "piche"];
-    // "repeat", "read again", "दोबारा" -> re-run speech for the current question
-    const repeatTokens = ["repeat", "read again", "दोबारा", "फिर से"];
-
-    const words = transcript.split(/\s+/);
 
     if (optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();
@@ -335,38 +564,6 @@ export function useVoiceMode({
       return;
     }
 
-    if (nextTokens.some((t) => transcript.includes(t) || words.includes(t))) {
-      playVoiceFeedbackChime();
-      handleNextQuestion();
-      return;
-    }
-
-    if (backTokens.some((t) => transcript.includes(t) || words.includes(t))) {
-      playVoiceFeedbackChime();
-      handlePrevQuestion();
-      return;
-    }
-
-    if (repeatTokens.some((t) => transcript.includes(t) || words.includes(t))) {
-      playVoiceFeedbackChime();
-      readCurrentQuestion();
-      return;
-    }
-
-    // Clear answer command
-    if (transcript.includes('clear') || transcript.includes('remove') || transcript.includes('हटाओ')) {
-      playVoiceFeedbackChime();
-      handleClearAnswer();
-      return;
-    }
-
-    // Submit exam command
-    if (transcript.includes('submit') || transcript.includes('finish') || transcript.includes('सबमिट')) {
-      playVoiceFeedbackChime();
-      handleSubmitTrigger();
-      return;
-    }
-
     // General intent matcher fallback
     const match = matchExamIntent(transcript, false);
     if (match.type === 'SELECT_OPTION_A') {
@@ -381,22 +578,15 @@ export function useVoiceMode({
     } else if (match.type === 'SELECT_OPTION_D') {
       handleSelectOption(3);
       speakText(isHi ? "विकल्प डी चुना गया" : "Selected D", speechLang, () => startListening(speechLang));
-    } else if (match.type === 'NEXT_QUESTION') {
-      handleNextQuestion();
-    } else if (match.type === 'PREVIOUS_QUESTION') {
-      handlePrevQuestion();
-    } else if (match.type === 'READ_AGAIN') {
-      readCurrentQuestion();
-    } else if (match.type === 'CLEAR_SELECTION') {
-      handleClearAnswer();
     }
   }, [
     handleSelectOption,
     handleNextQuestion,
     handlePrevQuestion,
-    readCurrentQuestion,
+    handleToggleFlag,
     handleClearAnswer,
     handleSubmitTrigger,
+    readCurrentQuestion,
   ]);
 
   // Connect to Centralized Global Voice Engine

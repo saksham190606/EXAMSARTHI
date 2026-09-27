@@ -42,6 +42,19 @@ export type SafeQuestion = CandidateQuestion;
  * Returns the effective question type with fallback to 'single-choice'.
  */
 export function getQuestionType(question: CandidateQuestion): QuestionType {
+  if (question.type === 'true-false' || question.type === 'short-answer' || question.type === 'fill-blank' || question.type === 'multiple-choice') {
+    return question.type;
+  }
+  if (question.options && question.options.length === 2) {
+    const t0 = question.options[0]?.text?.toLowerCase()?.trim();
+    const t1 = question.options[1]?.text?.toLowerCase()?.trim();
+    if (
+      (t0 === 'true' || t0 === 'false' || t0 === 'yes' || t0 === 'no' || t0 === 'सत्य' || t0 === 'सही') &&
+      (t1 === 'true' || t1 === 'false' || t1 === 'yes' || t1 === 'no' || t1 === 'असत्य' || t1 === 'गलत')
+    ) {
+      return 'true-false';
+    }
+  }
   return question.type || 'single-choice';
 }
 

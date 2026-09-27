@@ -722,13 +722,13 @@ function ActiveExamSession({
                 aria-pressed={isFlagged}
                 className={`h-12 px-4 font-bold transition-all ${
                   isFlagged 
-                    ? 'border-primary/50 bg-primary/10 text-primary font-semibold' 
+                    ? 'border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
                     : 'border-border'
                 }`}
               >
                 <Flag 
                   className={`mr-2 size-4 transition-colors ${
-                    isFlagged ? 'text-primary fill-primary' : 'text-muted-foreground'
+                    isFlagged ? 'text-black fill-black' : 'text-muted-foreground'
                   }`} 
                   aria-hidden="true"
                 /> 

@@ -274,9 +274,13 @@ export function ExamInterface({
             variant={isFlagged ? 'secondary' : 'outline'}
             size="sm"
             onClick={() => actions.toggleFlag?.(currentQuestion.id)}
-            className="h-9 px-3 text-xs font-medium gap-1.5"
+            className={`h-9 px-3 text-xs font-medium gap-1.5 transition-all ${
+              isFlagged
+                ? 'border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)]'
+                : ''
+            }`}
           >
-            <Flag className="size-3.5" aria-hidden="true" />
+            <Flag className={`size-3.5 transition-colors ${isFlagged ? 'text-black fill-black' : ''}`} aria-hidden="true" />
             <span>{isFlagged ? (isHindi ? 'चिह्नित हटाया' : 'Unflag') : (isHindi ? 'समीक्षा के लिए' : 'Mark for Review')}</span>
           </Button>
         </div>
