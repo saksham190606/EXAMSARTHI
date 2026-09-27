@@ -92,6 +92,15 @@ export const PracticeSets: Exam[] = [
     difficulty: "Beginner",
     description: "Curated session testing all 5 accessible question types: Single Choice, Multiple Choice, True/False, Short Answer, and Fill in the Blank.",
   },
+  {
+    id: "p6",
+    title: "Diagram & Visual Interpretation (Vision AI)",
+    subject: "Multi-Format Showcase",
+    questions: 4,
+    duration: 10,
+    difficulty: "Intermediate",
+    description: "Multi-subject diagram questions covering Quant Geometry, Reasoning Bar Charts, Physics Circuit, and Process Flowcharts with Vision AI description.",
+  },
 ];
 
 export const RecentActivity = [

@@ -34,6 +34,7 @@ export function AccessibilityPanel() {
     audioAssistance, setAudioAssistance,
     autoReadQuestions, setAutoReadQuestions,
     enableVoiceCommands, setEnableVoiceCommands,
+    voiceModeEnabled, setVoiceModeEnabled,
     voiceSpeed, setVoiceSpeed
   } = useAccessibilityStore()
 
@@ -184,6 +185,28 @@ export function AccessibilityPanel() {
                 onCheckedChange={setAudioAssistance}
                 aria-label="Toggle audio assistance"
                 aria-describedby="audio-assistance-desc"
+              />
+            </div>
+          </div>
+
+          {/* Voice Companion Talk-Back & Tour */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="voice-mode-switch" className="text-base font-semibold">Voice Companion &amp; Talk-Back</Label>
+              <p id="voice-mode-desc" className="text-sm text-muted-foreground">
+                Automated audio tour and spoken feedback on Tab navigation
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className="text-sm font-medium w-6 text-right">
+                {voiceModeEnabled ? 'On' : 'Off'}
+              </span>
+              <Switch
+                id="voice-mode-switch"
+                checked={voiceModeEnabled}
+                onCheckedChange={setVoiceModeEnabled}
+                aria-label="Toggle voice companion and tab talk-back"
+                aria-describedby="voice-mode-desc"
               />
             </div>
           </div>

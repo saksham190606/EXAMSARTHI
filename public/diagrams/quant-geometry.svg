@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 450" width="100%" height="100%" aria-label="Right-angled triangle ABC with side AB = 5 cm, hypotenuse AC = 13 cm, and base BC = ?">
+  <defs>
+    <style>
+      .bg { fill: #0a0a0a; }
+      .line { stroke: #ffffff; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+      .accent-line { stroke: #ffed00; stroke-width: 4; }
+      .right-angle { fill: none; stroke: #ffed00; stroke-width: 2.5; }
+      .point { fill: #ffed00; }
+      .text-label { font-family: system-ui, -apple-system, sans-serif; font-size: 20px; font-weight: 700; fill: #ffffff; }
+      .dim-label { font-family: system-ui, -apple-system, sans-serif; font-size: 19px; font-weight: 700; fill: #ffed00; }
+      .unknown-label { font-family: system-ui, -apple-system, sans-serif; font-size: 26px; font-weight: 800; fill: #ffed00; }
+      .grid { stroke: rgba(255, 255, 255, 0.08); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="600" height="450" class="bg" rx="6" />
+
+  <!-- Subtle Blueprint Grid -->
+  <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+    <path d="M 30 0 L 0 0 0 30" fill="none" class="grid" />
+  </pattern>
+  <rect width="600" height="450" fill="url(#grid)" />
+
+  <!-- Triangle Vertices:
+       A = (120, 90)   [Top vertex]
+       B = (120, 350)  [Right-angle vertex]
+       C = (480, 350)  [Base right vertex]
+  -->
+  
+  <!-- Right Angle Square Indicator at B (120, 350) -->
+  <path d="M 120,320 L 150,320 L 150,350" class="right-angle" />
+
+  <!-- Triangle Sides -->
+  <!-- Side AB (vertical, 5 cm) -->
+  <line x1="120" y1="90" x2="120" y2="350" class="line" />
+
+  <!-- Side BC (horizontal base, ?) -->
+  <line x1="120" y1="350" x2="480" y2="350" class="line" />
+
+  <!-- Hypotenuse AC (13 cm) -->
+  <line x1="120" y1="90" x2="480" y2="350" class="accent-line" />
+
+  <!-- Vertex Dots -->
+  <circle cx="120" cy="90" r="5.5" class="point" />
+  <circle cx="120" cy="350" r="5.5" class="point" />
+  <circle cx="480" cy="350" r="5.5" class="point" />
+
+  <!-- Vertex Labels -->
+  <text x="110" y="70" class="text-label" text-anchor="middle">A</text>
+  <text x="95" y="375" class="text-label" text-anchor="middle">B (90°)</text>
+  <text x="500" y="375" class="text-label" text-anchor="middle">C</text>
+
+  <!-- Dimension Labels -->
+  <!-- Side AB = 5 cm -->
+  <rect x="25" y="205" width="80" height="32" rx="4" fill="#171717" stroke="#333333" stroke-width="1.5" />
+  <text x="65" y="228" class="dim-label" text-anchor="middle">5 cm</text>
+
+  <!-- Hypotenuse AC = 13 cm -->
+  <rect x="290" y="190" width="95" height="34" rx="4" fill="#171717" stroke="#ffed00" stroke-width="1.5" />
+  <text x="337" y="213" class="dim-label" text-anchor="middle">13 cm</text>
+
+  <!-- Base BC = ? -->
+  <rect x="275" y="365" width="60" height="36" rx="4" fill="#171717" stroke="#ffed00" stroke-width="2" />
+  <text x="305" y="392" class="unknown-label" text-anchor="middle">?</text>
+</svg>

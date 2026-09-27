@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LoaderOne } from "@/components/ui/loader-one"
 import {
   getCandidateDashboardAnalytics,
   CandidateDashboardAnalytics,
@@ -253,11 +254,8 @@ export default function DashboardPage() {
               </div>
 
               {!isLoaded ? (
-                <div className="p-8 text-center" role="status" aria-live="polite">
-                  <div className="inline-block h-8 w-8 animate-spin rounded-[46px] border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-                  <p className="text-muted-foreground text-sm font-medium mt-3">
-                    Loading official performance data...
-                  </p>
+                <div className="p-8 text-center">
+                  <LoaderOne label="Loading official performance data..." size="md" />
                 </div>
               ) : hasHistory ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

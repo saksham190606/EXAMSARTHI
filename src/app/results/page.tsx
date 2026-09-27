@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { LoaderOne } from '@/components/ui/loader-one';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -57,10 +58,7 @@ export default function ResultsPage() {
     <React.Suspense
       fallback={
         <div className="min-h-screen bg-background flex items-center justify-center p-6">
-          <div className="text-center space-y-4" role="status" aria-live="polite">
-            <div className="inline-block h-8 w-8 animate-spin rounded-[46px] border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-            <p className="text-muted-foreground text-sm font-medium">Loading evaluation...</p>
-          </div>
+          <LoaderOne label="Loading evaluation..." size="lg" />
         </div>
       }
     >

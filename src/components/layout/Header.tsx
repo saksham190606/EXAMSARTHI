@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LogIn, LogOut, LayoutDashboard, Settings } from "lucide-react"
+import { LogIn, LogOut, LayoutDashboard, Settings, Mic } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { AccessibilityPanel } from "@/components/accessibility/AccessibilityPanel"
@@ -25,9 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Language } from "@/store/useAccessibilityStore"
+import { Language, useAccessibilityStore } from "@/store/useAccessibilityStore"
 import { useTranslation } from "@/lib/i18n"
 import { useAuth } from "@/hooks/useAuth"
+import { voiceEngine } from "@/lib/accessibility/voice-companion"
 
 import { cn } from "@/lib/utils"
 
@@ -36,6 +37,7 @@ export function Header() {
   const router = useRouter()
   const { t, language, setLanguage } = useTranslation()
   const { user, profile, loading, signOut } = useAuth()
+  const isListeningCommands = useAccessibilityStore((s) => s.isListeningCommands)
 
   const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Candidate'
   const candidateInitial = candidateName.charAt(0).toUpperCase()
@@ -128,6 +130,31 @@ export function Header() {
           
           {/* Accessibility Settings */}
           <AccessibilityPanel />
+
+          {/* Voice Command Assistant Button (Alt + V) */}
+          <button
+            type="button"
+            onClick={() => voiceEngine.toggle()}
+            aria-pressed={isListeningCommands}
+            aria-label={
+              isListeningCommands
+                ? "Voice commands listening. Press to pause (Alt + V)"
+                : "Enable voice navigation commands (Alt + V)"
+            }
+            title="Voice navigation commands (Alt + V)"
+            className={cn(
+              "relative size-9 inline-flex items-center justify-center rounded-[2px] border text-xs font-bold transition-all duration-150 cursor-pointer shadow-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+              isListeningCommands
+                ? "bg-[#ffed00] text-black border-[#ffed00] shadow-[0_0_12px_rgba(255,237,0,0.5)] animate-pulse"
+                : "border-white/20 bg-black text-white hover:bg-white/10 hover:border-white/40"
+            )}
+          >
+            <Mic className="size-4" aria-hidden="true" />
+            {isListeningCommands && (
+              <span className="absolute -top-1 -right-1 size-2 bg-emerald-400 rounded-full animate-ping" />
+            )}
+          </button>
           
           {/* Authentication State */}
           {loading ? (

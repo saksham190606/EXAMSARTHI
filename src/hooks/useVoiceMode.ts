@@ -4,6 +4,7 @@ import { ExamActions, ExamState, announceToScreenReader } from '@/lib/useExamEng
 import { CandidateQuestion, getQuestionType, isQuestionAnswered } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { getTranslation } from '@/lib/i18n';
+import { formatSpeechPronunciation, getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 
 export type VoiceStatus = 
   | 'Ready' 
@@ -63,6 +64,7 @@ export function useVoiceMode({
 
   const recognitionRef = useRef<any>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isSpeakingRef = useRef(false);
   const isActiveRef = useRef(false);
   const statusRef = useRef<VoiceStatus>('Ready');
@@ -90,23 +92,9 @@ export function useVoiceMode({
     }
   };
 
-  // Select appropriate voice based on active or detected language
+  // Select appropriate voice based on active or detected language (locked to natural female voice)
   const getPreferredVoice = useCallback((targetLang: 'hi' | 'en') => {
-    if (!synthesisRef.current) return null;
-    const voices = synthesisRef.current.getVoices();
-    if (!voices || voices.length === 0) return null;
-
-    if (targetLang === 'hi') {
-      const hindiVoice = voices.find((v) => v.lang.toLowerCase().startsWith('hi'));
-      if (hindiVoice) return hindiVoice;
-    }
-
-    // Default or Indian English voice
-    const inEnglishVoice = voices.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith('en-in'));
-    if (inEnglishVoice) return inEnglishVoice;
-
-    const anyEnglishVoice = voices.find((v) => v.lang.toLowerCase().startsWith('en'));
-    return anyEnglishVoice || voices[0] || null;
+    return getNaturalFemaleVoice(targetLang);
   }, []);
 
   // Safely stop speech recognition
@@ -152,7 +140,7 @@ export function useVoiceMode({
       synthesisRef.current.cancel(); // Flush any pending utterances
     } catch (e) {}
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(formatSpeechPronunciation(text));
     
     // Set speech rate from user preference
     if (voiceSpeed === 'slow') utterance.rate = 0.85;
@@ -164,9 +152,18 @@ export function useVoiceMode({
     if (voice) {
       utterance.voice = voice;
     }
-    utterance.lang = targetLang === 'hi' ? 'hi-IN' : 'en-IN';
+    utterance.lang = targetLang === 'hi' ? 'hi-IN' : 'en-US';
+
+    utteranceRef.current = utterance;
+    if (typeof window !== 'undefined') {
+      (window as any).__voiceModeUtterance = utterance;
+    }
 
     const handleSpeechEnd = () => {
+      utteranceRef.current = null;
+      if (typeof window !== 'undefined') {
+        (window as any).__voiceModeUtterance = null;
+      }
       isSpeakingRef.current = false;
       // Allow audio buffer to flush (300ms safety buffer) before reopening microphone
       clearRestartTimer();
@@ -183,6 +180,10 @@ export function useVoiceMode({
 
     utterance.onend = handleSpeechEnd;
     utterance.onerror = () => {
+      utteranceRef.current = null;
+      if (typeof window !== 'undefined') {
+        (window as any).__voiceModeUtterance = null;
+      }
       isSpeakingRef.current = false;
       if (isActiveRef.current && !isSpeakingRef.current) {
         startListening();
@@ -190,8 +191,12 @@ export function useVoiceMode({
     };
 
     try {
+      if (synthesisRef.current.paused) {
+        synthesisRef.current.resume();
+      }
       synthesisRef.current.speak(utterance);
     } catch (e) {
+      utteranceRef.current = null;
       isSpeakingRef.current = false;
       if (isActiveRef.current) {
         startListening();

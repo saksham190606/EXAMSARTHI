@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 450" width="100%" height="100%" aria-label="Bar chart showing annual wheat production in thousand metric tons from 2018 to 2021">
+  <defs>
+    <style>
+      .bg { fill: #0a0a0a; }
+      .axis { stroke: #ffffff; stroke-width: 2.5; }
+      .grid { stroke: rgba(255, 255, 255, 0.12); stroke-dasharray: 4,4; stroke-width: 1; }
+      .bar { fill: #ffed00; rx: 2; }
+      .bar-border { stroke: #000000; stroke-width: 1; }
+      .title { font-family: system-ui, -apple-system, sans-serif; font-size: 20px; font-weight: 800; fill: #ffffff; text-anchor: middle; }
+      .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; font-weight: 600; fill: #a3a3a3; text-anchor: middle; }
+      .axis-label { font-family: system-ui, -apple-system, sans-serif; font-size: 15px; font-weight: 700; fill: #ffffff; }
+      .bar-val { font-family: system-ui, -apple-system, sans-serif; font-size: 16px; font-weight: 800; fill: #000000; text-anchor: middle; }
+      .tick { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; font-weight: 600; fill: #a3a3a3; }
+    </style>
+  </defs>
+
+  <rect width="620" height="450" class="bg" rx="6" />
+
+  <!-- Title -->
+  <text x="310" y="45" class="title">WHEAT PRODUCTION</text>
+  <text x="310" y="68" class="subtitle">(in 1000 Metric Tons)</text>
+
+  <!-- Y-Axis Grid Lines & Ticks (Scale 0 to 100, Y-origin at y=360, Y-max at y=100 -> height = 260px)
+       scale: 1 unit = 2.6px
+       100 -> y = 100
+       80  -> y = 152
+       60  -> y = 204
+       40  -> y = 256
+       20  -> y = 308
+       0   -> y = 360
+  -->
+  <line x1="85" y1="100" x2="570" y2="100" class="grid" />
+  <text x="75" y="105" class="tick" text-anchor="end">100</text>
+
+  <line x1="85" y1="152" x2="570" y2="152" class="grid" />
+  <text x="75" y="157" class="tick" text-anchor="end">80</text>
+
+  <line x1="85" y1="204" x2="570" y2="204" class="grid" />
+  <text x="75" y="209" class="tick" text-anchor="end">60</text>
+
+  <line x1="85" y1="256" x2="570" y2="256" class="grid" />
+  <text x="75" y="261" class="tick" text-anchor="end">40</text>
+
+  <line x1="85" y1="308" x2="570" y2="308" class="grid" />
+  <text x="75" y="313" class="tick" text-anchor="end">20</text>
+
+  <text x="75" y="365" class="tick" text-anchor="end">0</text>
+
+  <!-- Axes -->
+  <!-- Y-Axis -->
+  <line x1="85" y1="90" x2="85" y2="360" class="axis" />
+  <!-- X-Axis -->
+  <line x1="85" y1="360" x2="570" y2="360" class="axis" />
+
+  <!-- Bars:
+       Width = 65px. Spacing between centers = 110px
+       2018: val = 45 -> h = 45 * 2.6 = 117 -> y = 360 - 117 = 243. x = 125
+       2019: val = 60 -> h = 60 * 2.6 = 156 -> y = 360 - 156 = 204. x = 235
+       2020: val = 85 -> h = 85 * 2.6 = 221 -> y = 360 - 221 = 139. x = 345
+       2021: val = 70 -> h = 70 * 2.6 = 182 -> y = 360 - 182 = 178. x = 455
+  -->
+
+  <!-- 2018 (45) -->
+  <rect x="125" y="243" width="65" height="117" class="bar bar-border" />
+  <text x="157.5" y="268" class="bar-val">45</text>
+  <text x="157.5" y="388" class="axis-label" text-anchor="middle">2018</text>
+
+  <!-- 2019 (60) -->
+  <rect x="235" y="204" width="65" height="156" class="bar bar-border" />
+  <text x="267.5" y="229" class="bar-val">60</text>
+  <text x="267.5" y="388" class="axis-label" text-anchor="middle">2019</text>
+
+  <!-- 2020 (85) -->
+  <rect x="345" y="139" width="65" height="221" class="bar bar-border" />
+  <text x="377.5" y="164" class="bar-val">85</text>
+  <text x="377.5" y="388" class="axis-label" text-anchor="middle">2020</text>
+
+  <!-- 2021 (70) -->
+  <rect x="455" y="178" width="65" height="182" class="bar bar-border" />
+  <text x="487.5" y="203" class="bar-val">70</text>
+  <text x="487.5" y="388" class="axis-label" text-anchor="middle">2021</text>
+
+  <!-- X-Axis Label -->
+  <text x="325" y="422" class="subtitle" font-weight="700">Year</text>
+</svg>

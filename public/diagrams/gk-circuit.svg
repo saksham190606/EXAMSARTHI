@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="100%" height="100%" aria-label="Direct current electric circuit showing a 12 Volt power source with two series resistors R1 = 4 Ohms and R2 = 6 Ohms">
+  <defs>
+    <style>
+      .bg { fill: #0a0a0a; }
+      .wire { stroke: #ffffff; stroke-width: 3.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .battery-long { stroke: #ffed00; stroke-width: 4; stroke-linecap: round; }
+      .battery-short { stroke: #ffffff; stroke-width: 6; stroke-linecap: round; }
+      .resistor { stroke: #ffed00; stroke-width: 3.5; fill: none; stroke-linejoin: round; }
+      .text-title { font-family: system-ui, -apple-system, sans-serif; font-size: 18px; font-weight: 800; fill: #ffffff; text-anchor: middle; }
+      .label-main { font-family: system-ui, -apple-system, sans-serif; font-size: 18px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+      .label-val { font-family: system-ui, -apple-system, sans-serif; font-size: 19px; font-weight: 800; fill: #ffed00; text-anchor: middle; }
+      .arrow { fill: #ffed00; }
+    </style>
+  </defs>
+
+  <rect width="600" height="420" class="bg" rx="6" />
+
+  <!-- Circuit Title -->
+  <text x="300" y="45" class="text-title">SERIES DC CIRCUIT DIAGRAM</text>
+
+  <!-- Circuit Loop:
+       Left wire: x=100, y=90 to y=330
+       Bottom wire: y=330, x=100 to x=500
+       Right wire: x=500, y=90 to y=330
+       Top wire: y=90, with resistors R1 and R2
+  -->
+
+  <!-- Bottom Wire with Battery (12V) -->
+  <!-- Left segment of bottom wire -->
+  <path d="M 100,330 L 260,330" class="wire" />
+
+  <!-- Battery Symbol at center bottom (x=270 to x=310, y=330)
+       Long line (+): x=275, y=310 to y=350
+       Short line (-): x=295, y=318 to y=342
+  -->
+  <line x1="275" y1="305" x2="275" y2="355" class="battery-long" />
+  <line x1="295" y1="318" x2="295" y2="342" class="battery-short" />
+  <text x="260" y="300" class="label-val">+</text>
+  <text x="310" y="300" class="label-main">-</text>
+
+  <!-- Right segment of bottom wire -->
+  <path d="M 295,330 L 500,330" class="wire" />
+
+  <!-- Voltage Label below battery -->
+  <rect x="250" y="370" width="80" height="30" rx="4" fill="#171717" stroke="#ffed00" stroke-width="1.5" />
+  <text x="290" y="391" class="label-val">12 V</text>
+
+  <!-- Left Wire -->
+  <path d="M 100,330 L 100,90" class="wire" />
+
+  <!-- Current Direction Arrow on Left Wire (Pointing UP) -->
+  <polygon points="100,195 93,212 107,212" class="arrow" />
+  <text x="75" y="210" class="label-val">I</text>
+
+  <!-- Right Wire -->
+  <path d="M 500,330 L 500,90" class="wire" />
+
+  <!-- Top Wire with Series Resistors R1 & R2
+       Top wire segments:
+       100,90 -> 160,90
+       Resistor R1: 160,90 -> 260,90 (zigzag)
+       260,90 -> 340,90
+       Resistor R2: 340,90 -> 440,90 (zigzag)
+       440,90 -> 500,90
+  -->
+  <line x1="100" y1="90" x2="160" y2="90" class="wire" />
+
+  <!-- Resistor R1 zigzag: width 100px (160 to 260) -->
+  <path d="M 160,90 
+           L 170,72 L 185,108 L 200,72 L 215,108 L 230,72 L 245,108 L 255,90 
+           L 260,90" class="resistor" />
+
+  <!-- Label R1 = 4 Ω -->
+  <rect x="165" y="125" width="90" height="32" rx="4" fill="#171717" stroke="#333333" stroke-width="1.5" />
+  <text x="210" y="147" class="label-val">R1 = 4 Ω</text>
+
+  <!-- Interconnecting Wire between R1 and R2 -->
+  <line x1="260" y1="90" x2="340" y2="90" class="wire" />
+
+  <!-- Resistor R2 zigzag: width 100px (340 to 440) -->
+  <path d="M 340,90 
+           L 350,72 L 365,108 L 380,72 L 395,108 L 410,72 L 425,108 L 435,90 
+           L 440,90" class="resistor" />
+
+  <!-- Label R2 = 6 Ω -->
+  <rect x="345" y="125" width="90" height="32" rx="4" fill="#171717" stroke="#333333" stroke-width="1.5" />
+  <text x="390" y="147" class="label-val">R2 = 6 Ω</text>
+
+  <!-- End of Top Wire to Right -->
+  <line x1="440" y1="90" x2="500" y2="90" class="wire" />
+</svg>

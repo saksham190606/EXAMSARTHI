@@ -33,6 +33,7 @@ export interface CandidateQuestion {
   order_index?: number;
   exam_id?: string;
   section_name?: string;
+  imageUrl?: string;
 }
 
 export type SafeQuestion = CandidateQuestion;

@@ -25,6 +25,7 @@ import BuildersCommunityHero, {
   OrbitStat,
   OrbitTag,
 } from "@/components/ui/builders-community-hero"
+import ExamSarthiHero from "@/components/landing/ExamSarthiHero"
 
 const communityOrbitItems: OrbitItem[] = [
   {
@@ -112,48 +113,13 @@ export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen bg-canvas text-foreground">
       
-      {/* SECTION 1 — Hero Storytelling Band (Pure Black Canvas) */}
-      <section className="bg-black text-white px-4 pt-16 pb-20 md:pt-24 md:pb-28 border-b border-white/16">
-        <div className="max-w-5xl mx-auto flex flex-col items-center text-center space-y-8">
-          
-          {/* Brand "NEW" / System Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-[46px] bg-primary text-black text-xs font-bold tracking-[0.144px]">
-            <Sparkles className="size-3.5" aria-hidden="true" />
-            <span>WCAG 2.1 AA STANDARDIZED PLATFORM</span>
-          </div>
+      {/* SECTION 1 — Animated Hero & Exam Ticker */}
+      <ExamSarthiHero />
 
-          {/* Display-XL Headline clamped to 0.95 line height */}
-          <h1 className="font-heading font-bold text-4xl sm:text-6xl md:text-7xl tracking-tight leading-[0.95] max-w-4xl text-white">
-            LEARN. PRACTICE. COMPETE. <span className="text-primary block mt-2">INDEPENDENTLY.</span>
-          </h1>
-
-          <p className="text-base sm:text-lg md:text-xl text-white/75 max-w-2xl mx-auto font-normal leading-normal">
-            EXAMSARTHI is the accessibility-first examination platform built from the ground up for visually impaired and neurodiverse candidates. Server-evaluated scoring, hands-free voice mode, and zero barriers.
-          </p>
-
-          {/* Action CTAs: Sunlight Yellow primary (2px radius, 48px height) + Dark outline secondary */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2 w-full sm:w-auto">
-            <Button 
-              size="default" 
-              className="w-full sm:w-auto h-12 px-8 rounded-[2px] bg-primary text-black font-bold hover:bg-primary-deep tracking-[0.144px]" 
-              render={<Link href="/practice" />} 
-              nativeButton={false}
-            >
-              Start Practicing <ArrowRight className="ml-2 size-4" aria-hidden="true" />
-            </Button>
-            <Button 
-              size="default" 
-              variant="outline" 
-              className="w-full sm:w-auto h-12 px-8 rounded-[2px] border border-white text-white bg-transparent hover:bg-white hover:text-black font-bold tracking-[0.144px] transition-colors" 
-              render={<Link href="/exam?exam=e2" />} 
-              nativeButton={false}
-            >
-              Explore Sectional Exam
-            </Button>
-          </div>
-
-          {/* Candidate Intelligence & Readiness Preview Card */}
-          <div className="w-full max-w-4xl mt-12 text-left">
+      {/* SECTION 2 — Candidate Intelligence & Readiness Preview Card */}
+      <section className="bg-black text-white px-4 py-12 md:py-16 border-b border-white/16">
+        <div className="max-w-5xl mx-auto flex flex-col items-center text-center">
+          <div className="w-full max-w-4xl text-left">
             <div 
               role="region"
               aria-label="Candidate performance and recommendation overview"

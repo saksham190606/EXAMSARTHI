@@ -72,6 +72,7 @@ export function normalizePracticeSetId(rawId: string | null | undefined): string
   if (clean === 'p3' || clean.includes('reason')) return 'p3';
   if (clean === 'p4' || clean.includes('english')) return 'p4';
   if (clean === 'p5' || clean.includes('showcase') || clean.includes('multi')) return 'p5';
+  if (clean === 'p6' || clean.includes('diagram') || clean.includes('vision')) return 'p6';
   return 'p1';
 }
 
@@ -92,6 +93,7 @@ function mapSafeRowToQuestion(row: any): CandidateQuestion {
     order_index: typeof row.order_index === 'number' ? row.order_index : 0,
     exam_id: row.exam_id,
     section_name: row.section_name || undefined,
+    imageUrl: row.image_url || row.imageUrl || undefined,
   };
 }
 

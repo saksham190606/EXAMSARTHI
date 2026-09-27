@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { LoaderOne } from "@/components/ui/loader-one";
 
 export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
@@ -77,10 +78,7 @@ export default function SettingsPage() {
   if (!mounted) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center space-y-4" role="status" aria-live="polite">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent align-[-0.125em]" />
-          <p className="text-muted-foreground text-sm font-medium">Loading preferences...</p>
-        </div>
+        <LoaderOne label="Loading preferences..." size="lg" />
       </div>
     );
   }

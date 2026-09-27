@@ -19,6 +19,7 @@ import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { useExamEngine } from '@/lib/useExamEngine';
 
 import { Button } from '@/components/ui/button';
+import { LoaderOne } from '@/components/ui/loader-one';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -31,6 +32,9 @@ import { SectionAdvanceDialog } from '@/components/exam/SectionAdvanceDialog';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
 import { useTranslation } from '@/lib/i18n';
+import { ExamSelectionHub } from '@/components/exam/ExamSelectionHub';
+
+export { ExamSelectionHub };
 
 // Define the live region component outside so it mounts once
 function LiveRegion() {
@@ -62,7 +66,8 @@ function ActiveExamSession({
   sections
 }: ActiveExamSessionProps) {
   const router = useRouter();
-  const examDuration = activeConfig ? activeConfig.duration * 60 : 900;
+  const rawDuration = (activeConfig as any)?.duration ?? (activeConfig as any)?.duration_minutes;
+  const examDuration = typeof rawDuration === 'number' && rawDuration > 0 ? rawDuration * 60 : 900;
   const { t } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   const [isSectionAdvanceDialogOpen, setIsSectionAdvanceDialogOpen] = useState(false);
@@ -138,7 +143,9 @@ function ActiveExamSession({
             sectionProgressPayload
           );
           if (res.success) {
-            router.push(`/results?attemptId=${attemptId}`);
+            setTimeout(() => {
+              router.push(`/results?attemptId=${attemptId}`);
+            }, 0);
             return;
           }
           console.warn('[ExamPage] Server submission returned error, falling back:', res.error);
@@ -164,7 +171,9 @@ function ActiveExamSession({
         sessionStorage.setItem('examResultState', JSON.stringify(stateToSave));
       }
       setIsSubmitting(false);
-      router.push('/results');
+      setTimeout(() => {
+        router.push('/results');
+      }, 0);
     },
     0,
     setId || undefined,
@@ -246,6 +255,37 @@ function ActiveExamSession({
     };
   }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
 
+  // Synchronize global voice companion actions with active exam state
+  useEffect(() => {
+    const handleVoiceAction = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { action, letter, index } = customEvent.detail || {};
+
+      if (action === 'next') {
+        actions.goToNext();
+      } else if (action === 'prev') {
+        actions.goToPrevious();
+      } else if (action === 'select-option' && currentQuestion) {
+        const optionIndex = typeof index === 'number' ? index : (letter ? letter.charCodeAt(0) - 65 : -1);
+        if (currentQuestion.options && optionIndex >= 0 && optionIndex < currentQuestion.options.length) {
+          const opt = currentQuestion.options[optionIndex];
+          actions.selectAnswer(currentQuestion.id, opt.id);
+        }
+      } else if (action === 'clear' && currentQuestion) {
+        if (actions.setAnswer) {
+          actions.setAnswer(currentQuestion.id, "");
+        }
+      } else if (action === 'flag' && currentQuestion) {
+        actions.toggleFlag(currentQuestion.id);
+      }
+    };
+
+    window.addEventListener('examsarthi-voice-action', handleVoiceAction);
+    return () => {
+      window.removeEventListener('examsarthi-voice-action', handleVoiceAction);
+    };
+  }, [actions, currentQuestion]);
+
   const totalQuestions = questions.length;
   const hasSections = Boolean(sections && sections.length > 0);
 
@@ -273,8 +313,8 @@ function ActiveExamSession({
 
   if (!currentQuestion) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center text-muted-foreground font-bold">
-        Loading question...
+      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center">
+        <LoaderOne label="Loading question..." size="md" />
       </div>
     );
   }
@@ -291,9 +331,9 @@ function ActiveExamSession({
           aria-live="assertive"
           aria-label="Submitting and evaluating examination"
         >
-          <div className="bg-card border border-border  rounded-none p-6 sm:p-8 max-w-md w-full text-center space-y-4">
-            <div className="mx-auto size-12 rounded-[46px] bg-primary/10 text-primary flex items-center justify-center">
-              <span className="inline-block size-6 animate-spin rounded-[46px] border-3 border-solid border-primary border-r-transparent" />
+          <div className="bg-card border border-border rounded-[2px] p-6 sm:p-8 max-w-md w-full text-center space-y-4">
+            <div className="mx-auto py-2 flex items-center justify-center">
+              <LoaderOne label="Server-grading examination..." size="lg" />
             </div>
             <div className="space-y-1.5">
               <h2 className="text-xl font-bold text-foreground">
@@ -635,8 +675,34 @@ function ActiveExamSession({
 
 function ExamContent() {
   const searchParams = useSearchParams();
-  const setId = searchParams?.get('set') || null;
-  const examId = searchParams?.get('exam') || searchParams?.get('id') || null;
+  const rawSet = searchParams?.get('set') || null;
+  const rawExam = searchParams?.get('exam') || searchParams?.get('id') || null;
+
+  // Render dedicated accessible Exam Selection Hub when visiting /exam directly without active session query
+  if (!rawSet && !rawExam) {
+    return <ExamSelectionHub />;
+  }
+
+  // Parse target session parameters
+  let setId: string | null = null;
+  let examId: string | null = null;
+
+  if (rawSet) {
+    const s = rawSet.toLowerCase().trim();
+    if (s.startsWith('p') && (s === 'p6' || s === 'p1' || s === 'p2' || s === 'p3' || s === 'p4' || s === 'p5')) {
+      setId = s;
+    } else if (s.includes('upsc') || s.includes('csat') || s === 'e3') {
+      examId = 'e3';
+    } else if (s.includes('ibps') || s.includes('bank') || s === 'e2') {
+      examId = 'e2';
+    } else if (s.includes('cgl') || s.includes('ssc') || s.includes('rrb') || s === 'e1') {
+      examId = 'e1';
+    } else {
+      setId = s;
+    }
+  } else if (rawExam) {
+    examId = rawExam;
+  }
 
   const practiceSet = setId ? PracticeSets.find(p => p.id === setId) : null;
   const selectedExam = examId ? AvailableExams.find(e => 

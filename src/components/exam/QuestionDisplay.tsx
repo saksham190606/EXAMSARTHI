@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Check, HelpCircle } from "lucide-react";
+import { DiagramDescriber } from './DiagramDescriber';
 
 interface QuestionDisplayProps {
   question: CandidateQuestion;
@@ -79,6 +80,21 @@ export function QuestionDisplay({
           )}
         </div>
       </div>
+
+      {/* Diagram & Multimodal Vision AI Assistant */}
+      {question.imageUrl && (
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded-[2px] border border-border bg-black/90 p-4 flex items-center justify-center max-w-xl mx-auto shadow-sm">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={question.imageUrl} 
+              alt={`Examination diagram for Question ${currentIndex + 1}: ${question.text}`}
+              className="max-h-72 w-auto object-contain rounded-[2px]"
+            />
+          </div>
+          <DiagramDescriber imageUrl={question.imageUrl} questionText={question.text} />
+        </div>
+      )}
 
       {/* Render based on Question Type */}
 

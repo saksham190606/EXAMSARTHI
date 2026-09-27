@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 400" width="100%" height="100%" aria-label="Sequential four-stage industrial recycling process flowchart from Collection to Manufacturing">
+  <defs>
+    <style>
+      .bg { fill: #0a0a0a; }
+      .box { fill: #171717; stroke: #ffffff; stroke-width: 2.5; rx: 4; }
+      .accent-box { fill: #1c1c1c; stroke: #ffed00; stroke-width: 3; rx: 4; }
+      .arrow-line { stroke: #ffed00; stroke-width: 3.5; stroke-linecap: round; }
+      .arrow-head { fill: #ffed00; }
+      .title { font-family: system-ui, -apple-system, sans-serif; font-size: 20px; font-weight: 800; fill: #ffffff; text-anchor: middle; }
+      .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 13px; font-weight: 600; fill: #a3a3a3; text-anchor: middle; }
+      .stage-num { font-family: system-ui, -apple-system, sans-serif; font-size: 12px; font-weight: 800; fill: #ffed00; text-anchor: middle; text-transform: uppercase; letter-spacing: 1px; }
+      .stage-text { font-family: system-ui, -apple-system, sans-serif; font-size: 15px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="680" height="400" class="bg" rx="6" />
+
+  <!-- Title -->
+  <text x="340" y="45" class="title">INDUSTRIAL RECYCLING PROCESS</text>
+  <text x="340" y="68" class="subtitle">Sequential 4-Stage Operational Flowchart</text>
+
+  <!-- 
+    Flow: 4 boxes arranged horizontally or 2x2 grid.
+    Let's arrange in a clean serpentine or 4-column layout.
+    Total width = 680.
+    Box width = 130px, height = 110px.
+    Gap = 35px.
+    Total = 4 * 130 + 3 * 35 = 520 + 105 = 625.
+    Left offset = (680 - 625) / 2 = 27.5 ~ 28px.
+    Box 1: x = 28, y = 160
+    Box 2: x = 193, y = 160
+    Box 3: x = 358, y = 160
+    Box 4: x = 523, y = 160
+  -->
+
+  <!-- Stage 1: Collection -->
+  <g id="stage-1">
+    <rect x="28" y="150" width="130" height="110" class="box" />
+    <text x="93" y="185" class="stage-num">Stage 1</text>
+    <text x="93" y="215" class="stage-text">Collection</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <line x1="158" y1="205" x2="185" y2="205" class="arrow-line" />
+  <polygon points="193,205 183,198 183,212" class="arrow-head" />
+
+  <!-- Stage 2: Sorting & Cleaning -->
+  <g id="stage-2">
+    <rect x="193" y="150" width="130" height="110" class="accent-box" />
+    <text x="258" y="180" class="stage-num">Stage 2</text>
+    <text x="258" y="208" class="stage-text">Sorting &amp;</text>
+    <text x="258" y="230" class="stage-text">Cleaning</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <line x1="323" y1="205" x2="350" y2="205" class="arrow-line" />
+  <polygon points="358,205 348,198 348,212" class="arrow-head" />
+
+  <!-- Stage 3: Reprocessing -->
+  <g id="stage-3">
+    <rect x="358" y="150" width="130" height="110" class="box" />
+    <text x="423" y="185" class="stage-num">Stage 3</text>
+    <text x="423" y="215" class="stage-text">Reprocessing</text>
+  </g>
+
+  <!-- Arrow 3 -> 4 -->
+  <line x1="488" y1="205" x2="515" y2="205" class="arrow-line" />
+  <polygon points="523,205 513,198 513,212" class="arrow-head" />
+
+  <!-- Stage 4: Manufacturing -->
+  <g id="stage-4">
+    <rect x="523" y="150" width="130" height="110" class="box" />
+    <text x="588" y="185" class="stage-num">Stage 4</text>
+    <text x="588" y="215" class="stage-text">Manufacturing</text>
+  </g>
+
+  <!-- Process Guidance Note -->
+  <rect x="140" y="315" width="400" height="42" rx="4" fill="#141414" stroke="#333333" stroke-width="1.5" />
+  <text x="340" y="342" class="subtitle" font-size="14px">Arrows denote unidirectional sequential transition</text>
+</svg>

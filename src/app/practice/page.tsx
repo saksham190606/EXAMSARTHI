@@ -186,6 +186,8 @@ function PracticeContent() {
             className="h-12 px-6 font-medium "
             render={<Link href="/exam" />}
             nativeButton={false}
+            data-voice-prompt="Do you want to take a mock exam? Say Yes, or say No to skip."
+            data-voice-confirm="Starting Mock Exam..."
           >
             <span>{t('takeMockExam')}</span>
             <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -229,6 +231,8 @@ function PracticeContent() {
                   className="font-medium h-10 px-5 "
                   render={<Link href={topRecommendation.actionUrl} />}
                   nativeButton={false}
+                  data-voice-prompt={`Do you want to practice ${topRecommendation.title}? Say Yes, or say No to skip.`}
+                  data-voice-confirm={`Starting ${topRecommendation.title}...`}
                 >
                   <span>{topRecommendation.actionLabel}</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -257,6 +261,8 @@ function PracticeContent() {
                   className="font-medium h-10 px-5 border-border"
                   render={<Link href="/exam" />}
                   nativeButton={false}
+                  data-voice-prompt="Do you want to start building your learning profile with a mock exam? Say Yes, or say No to skip."
+                  data-voice-confirm="Starting Mock Exam..."
                 >
                   <span>Start Practicing</span>
                   <ArrowRight className="ml-2 size-4" aria-hidden="true" />
@@ -285,6 +291,8 @@ function PracticeContent() {
               size="sm"
               onClick={handleClearAllFilters}
               className="text-xs font-medium text-muted-foreground hover:text-foreground h-8 px-2.5"
+              data-voice-prompt="Clear all active practice filters? Say Yes, or say No to skip."
+              data-voice-confirm="Clearing all active filters."
             >
               {t('clearFilters')}
             </Button>
@@ -309,6 +317,8 @@ function PracticeContent() {
                 className="pl-10 h-10 text-base border-border bg-background"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                data-voice-prompt="Search practice topics by keyword? Say Yes to focus search, or say No to skip."
+                data-voice-confirm="Search field focused."
               />
               {searchQuery && (
                 <button
@@ -316,6 +326,8 @@ function PracticeContent() {
                   onClick={() => setSearchQuery("")}
                   className="absolute right-3 top-3 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                   aria-label="Clear search input"
+                  data-voice-prompt="Clear search keyword? Say Yes, or say No to skip."
+                  data-voice-confirm="Search keyword cleared."
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
@@ -332,7 +344,12 @@ function PracticeContent() {
               value={subjectFilter}
               onValueChange={(val) => setSubjectFilter(val || "all")}
             >
-              <SelectTrigger id="filter-subject" className="h-10 text-sm border-border bg-background">
+              <SelectTrigger
+                id="filter-subject"
+                className="h-10 text-sm border-border bg-background"
+                data-voice-prompt="Filter practice sets by subject? Say Yes to open options, or say No to skip."
+                data-voice-confirm="Opening subject options."
+              >
                 <SelectValue placeholder="All Subjects" />
               </SelectTrigger>
               <SelectContent>
@@ -354,7 +371,12 @@ function PracticeContent() {
               value={difficultyFilter}
               onValueChange={(val) => setDifficultyFilter(val || "all")}
             >
-              <SelectTrigger id="filter-difficulty" className="h-10 text-sm border-border bg-background">
+              <SelectTrigger
+                id="filter-difficulty"
+                className="h-10 text-sm border-border bg-background"
+                data-voice-prompt="Select difficulty level? Say Yes to open options, or say No to skip."
+                data-voice-confirm="Opening difficulty options."
+              >
                 <SelectValue placeholder="All Difficulties" />
               </SelectTrigger>
               <SelectContent>
@@ -385,6 +407,8 @@ function PracticeContent() {
                   type="button"
                   onClick={() => setSubjectFilter(cat.id)}
                   aria-pressed={isSelected}
+                  data-voice-prompt={`Filter by ${cat.label}? Say Yes, or say No for next subject.`}
+                  data-voice-confirm={`Filtering by ${cat.label}...`}
                   className={cn(
                     "inline-flex items-center px-4 py-2 rounded-[46px] text-xs md:text-sm font-bold tracking-[0.13px] transition-all duration-150 ease-[cubic-bezier(0.2,0,0,1)] motion-safe:active:scale-[0.98] border outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                     isSelected
@@ -420,6 +444,8 @@ function PracticeContent() {
                   type="button"
                   onClick={() => setSubjectFilter("all")}
                   aria-label={`Remove ${getSubjectDisplayName(subjectFilter)} filter`}
+                  data-voice-prompt={`Remove ${getSubjectDisplayName(subjectFilter)} filter? Say Yes, or say No to skip.`}
+                  data-voice-confirm={`Removed ${getSubjectDisplayName(subjectFilter)} filter.`}
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
                   <X className="size-3" aria-hidden="true" />
@@ -437,6 +463,8 @@ function PracticeContent() {
                   type="button"
                   onClick={() => setSearchQuery("")}
                   aria-label="Remove topic search filter"
+                  data-voice-prompt="Remove topic search filter? Say Yes, or say No to skip."
+                  data-voice-confirm="Removed topic search filter."
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
                   <X className="size-3" aria-hidden="true" />
@@ -454,6 +482,8 @@ function PracticeContent() {
                   type="button"
                   onClick={() => setDifficultyFilter("all")}
                   aria-label={`Remove ${difficultyFilter} difficulty filter`}
+                  data-voice-prompt={`Remove ${difficultyFilter} difficulty filter? Say Yes, or say No to skip.`}
+                  data-voice-confirm={`Removed ${difficultyFilter} filter.`}
                   className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
                 >
                   <X className="size-3" aria-hidden="true" />
@@ -528,6 +558,8 @@ function PracticeContent() {
                     className="w-full h-12 text-base font-medium "
                     render={<Link href={`/exam?set=${practice.id}`} />}
                     nativeButton={false}
+                    data-voice-prompt={`Start question ${practice.title}? Say Yes to begin, or say No to continue.`}
+                    data-voice-confirm={`Starting ${practice.title}...`}
                   >
                     <PlayCircle className="mr-2 size-5" aria-hidden="true" />
                     <span>{t('startPractice')}</span>
@@ -551,6 +583,8 @@ function PracticeContent() {
               variant="outline"
               onClick={handleClearAllFilters}
               className="font-medium border-border"
+              data-voice-prompt="No practice sets match your filter. Clear all filters? Say Yes, or say No to skip."
+              data-voice-confirm="Clearing all filters."
             >
               {t('clearFilters')}
             </Button>

@@ -14,6 +14,10 @@ interface AccessibilityState {
   autoReadQuestions: boolean;
   enableVoiceCommands: boolean;
   voiceSpeed: VoiceSpeed;
+  speechRate: number;
+  voiceModeEnabled: boolean;
+  hasAnnouncedWelcome: boolean;
+  isListeningCommands: boolean;
   language: Language;
 
   // Actions
@@ -24,6 +28,10 @@ interface AccessibilityState {
   setAutoReadQuestions: (enabled: boolean) => void;
   setEnableVoiceCommands: (enabled: boolean) => void;
   setVoiceSpeed: (speed: VoiceSpeed) => void;
+  setSpeechRate: (rate: number) => void;
+  setVoiceModeEnabled: (enabled: boolean) => void;
+  setHasAnnouncedWelcome: (announced: boolean) => void;
+  setIsListeningCommands: (listening: boolean) => void;
   setLanguage: (lang: Language) => void;
 }
 
@@ -37,6 +45,10 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       autoReadQuestions: false,
       enableVoiceCommands: false,
       voiceSpeed: 'normal',
+      speechRate: 1.0,
+      voiceModeEnabled: false,
+      hasAnnouncedWelcome: false,
+      isListeningCommands: false,
       language: 'en',
 
       setTextSize: (size) => set({ textSize: size }),
@@ -45,11 +57,33 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       setAudioAssistance: (enabled) => set({ audioAssistance: enabled }),
       setAutoReadQuestions: (enabled) => set({ autoReadQuestions: enabled }),
       setEnableVoiceCommands: (enabled) => set({ enableVoiceCommands: enabled }),
-      setVoiceSpeed: (speed) => set({ voiceSpeed: speed }),
+      setVoiceSpeed: (speed) => {
+        const speedMap: Record<VoiceSpeed, number> = {
+          slow: 0.75,
+          normal: 1.0,
+          fast: 1.5,
+        };
+        set({ voiceSpeed: speed, speechRate: speedMap[speed] || 1.0 });
+      },
+      setSpeechRate: (rate) => set({ speechRate: rate }),
+      setVoiceModeEnabled: (enabled) => set({ voiceModeEnabled: enabled }),
+      setHasAnnouncedWelcome: (announced) => set({ hasAnnouncedWelcome: announced }),
+      setIsListeningCommands: (listening) => set({ isListeningCommands: listening }),
       setLanguage: (lang) => set({ language: lang }),
     }),
     {
       name: 'examsarthi-accessibility', // unique name for localStorage key
+      partialize: (state) => ({
+        textSize: state.textSize,
+        contrast: state.contrast,
+        reducedMotion: state.reducedMotion,
+        audioAssistance: state.audioAssistance,
+        autoReadQuestions: state.autoReadQuestions,
+        enableVoiceCommands: state.enableVoiceCommands,
+        voiceSpeed: state.voiceSpeed,
+        speechRate: state.speechRate,
+        language: state.language,
+      }),
     }
   )
 );

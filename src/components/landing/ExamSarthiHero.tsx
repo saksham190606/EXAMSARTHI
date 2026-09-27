@@ -1,0 +1,188 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { motion } from 'framer-motion';
+import { ArrowRight, Volume2, ShieldCheck, Sparkles } from 'lucide-react';
+import { useAccessibilityStore } from '@/lib/store/accessibility';
+import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
+
+interface ExamBadge {
+  name: string;
+  tag: string;
+}
+
+const EXAM_BODIES: ExamBadge[] = [
+  { name: 'UPSC Civil Services', tag: 'CSE / Prelims' },
+  { name: 'Staff Selection Commission', tag: 'SSC CGL / CHSL' },
+  { name: 'IBPS Banking', tag: 'PO / Clerk / SO' },
+  { name: 'Railway Recruitment Board', tag: 'RRB NTPC / Group D' },
+  { name: 'State Public Service', tag: 'State PSC / PCS' },
+];
+
+const STUDENT_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80',
+];
+
+export function ExamTickerBar() {
+  const reducedMotion = useAccessibilityStore((state) => state.reducedMotion);
+
+  return (
+    <section className="border-t border-b border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] py-6">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <p className="text-center text-xs font-bold uppercase tracking-wider text-black/50 dark:text-white/50 mb-4">
+          Curated Question Banks & Mock Patterns For
+        </p>
+
+        <div className="relative overflow-hidden w-full">
+          {reducedMotion ? (
+            <div className="flex flex-wrap justify-center gap-4">
+              {EXAM_BODIES.map((exam, idx) => (
+                <div key={idx} className="rounded-[2px] border border-black/10 dark:border-white/10 bg-white dark:bg-black px-4 py-2 text-center">
+                  <span className="block text-xs font-bold text-black dark:text-white">{exam.name}</span>
+                  <span className="block text-[10px] text-black/60 dark:text-white/60">{exam.tag}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <motion.div
+              className="flex gap-6 w-max"
+              animate={{ x: ['0%', '-50%'] }}
+              transition={{ repeat: Infinity, ease: 'linear', duration: 25 }}
+            >
+              {[...EXAM_BODIES, ...EXAM_BODIES].map((exam, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-3 rounded-[2px] border border-black/10 dark:border-white/10 bg-white dark:bg-[#111111] px-5 py-2.5 shadow-sm"
+                >
+                  <div className="h-2 w-2 rounded-full bg-[#ffed00]" />
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-black dark:text-white leading-tight">{exam.name}</p>
+                    <p className="text-[10px] text-black/60 dark:text-white/60">{exam.tag}</p>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function ExamSarthiHero() {
+  const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+
+  return (
+    <div className="relative w-full overflow-hidden bg-white text-black dark:bg-[#0a0a0a] dark:text-white transition-colors">
+      <div 
+        aria-hidden="true" 
+        className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[#ffed00]/10 blur-[120px]" 
+      />
+
+      <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center text-center">
+          
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="inline-flex items-center gap-3 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-4 py-1.5 backdrop-blur-sm"
+          >
+            <div className="flex -space-x-2 overflow-hidden">
+              {STUDENT_AVATARS.map((src, i) => (
+                <div key={i} className="relative inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-black overflow-hidden">
+                  <Image 
+                    alt="Aspirant community member" 
+                    className="object-cover" 
+                    fill 
+                    sizes="24px" 
+                    src={src} 
+                    unoptimized 
+                  />
+                </div>
+              ))}
+            </div>
+            <span className="text-xs font-medium text-black/80 dark:text-white/80">
+              1,200+ Aspirants Preparing for UPSC, SSC & Banking
+            </span>
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl"
+          >
+            Accessible Examination & Practice for{' '}
+            <span className="relative whitespace-nowrap">
+              <span className="relative z-10 text-[#d4af37] dark:text-[#ffed00]">Every Aspirant</span>
+            </span>
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="mt-6 max-w-2xl text-base sm:text-lg text-black/70 dark:text-white/70 leading-relaxed"
+          >
+            High-contrast Computer Based Tests, conversational voice navigation, and multimodal Vision AI scribes engineered for visually impaired candidates.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="mt-8 flex flex-wrap items-center justify-center gap-4"
+          >
+            <Link className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00] px-6 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-[#e6d500] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]" href="/practice">
+              Start Practice (Alt+P)
+              <ArrowRight className="h-4 w-4"/>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setIsExamModalOpen(true)}
+              aria-haspopup="dialog"
+              className="inline-flex items-center gap-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-black dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00] cursor-pointer"
+            >
+              Take Mock Exam
+            </button>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="mt-10 flex flex-wrap items-center justify-center gap-6 text-xs text-black/60 dark:text-white/60 font-medium"
+          >
+            <div className="flex items-center gap-1.5">
+              <Volume2 className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>
+              <span>Full Voice & Screen-Reader TalkBack</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>
+              <span>Gemini Vision AI Diagram Scribe</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>
+              <span>WCAG 2.1 AA Compliant</span>
+            </div>
+          </motion.div>
+
+        </div>
+      </section>
+
+      <ExamTickerBar/>
+
+      <ExamSelectorModal
+        isOpen={isExamModalOpen}
+        onClose={() => setIsExamModalOpen(false)}
+      />
+    </div>
+  );
+}

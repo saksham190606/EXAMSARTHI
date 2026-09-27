@@ -138,6 +138,22 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     difficulty: "Beginner",
     explanation: "An equilateral triangle has all three sides congruent and internal angles equal to 60 degrees.",
   },
+  {
+    id: "quant-diagram-1",
+    type: "single-choice",
+    text: "In the given right triangle ABC, angle B is 90 degrees. If hypotenuse AC = 13 cm and side AB = 5 cm, calculate the length of base BC.",
+    imageUrl: "/diagrams/quant-geometry.svg",
+    options: [
+      { id: "qdo-1", text: "10 cm" },
+      { id: "qdo-2", text: "12 cm" },
+      { id: "qdo-3", text: "8 cm" },
+      { id: "qdo-4", text: "11 cm" },
+    ],
+    subject: "Quantitative Aptitude",
+    topic: "Geometry & Trigonometry",
+    difficulty: "Intermediate",
+    explanation: "Using the Pythagorean theorem: AC^2 = AB^2 + BC^2. 13^2 = 5^2 + BC^2 => 169 = 25 + BC^2 => BC^2 = 144 => BC = 12 cm.",
+  },
 ];
 
 // --- 2. REASONING (SAFE) ---
@@ -246,6 +262,22 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     difficulty: "Beginner",
     explanation: "Position sequence: A(1) + 2 = C(3); C(3) + 3 = F(6); F(6) + 4 = J(10); J(10) + 5 = O(15). The next letter is O.",
   },
+  {
+    id: "reason-diagram-1",
+    type: "single-choice",
+    text: "Based on the bar chart showing annual wheat production, in which year was the production highest?",
+    imageUrl: "/diagrams/reasoning-barchart.svg",
+    options: [
+      { id: "rdo-1", text: "2018" },
+      { id: "rdo-2", text: "2019" },
+      { id: "rdo-3", text: "2020" },
+      { id: "rdo-4", text: "2021" },
+    ],
+    subject: "Reasoning",
+    topic: "Data Interpretation",
+    difficulty: "Beginner",
+    explanation: "According to the bar chart: 2018 is 45, 2019 is 60, 2020 is 85, and 2021 is 70 thousand metric tons. The highest production was in 2020.",
+  },
 ];
 
 // --- 3. ENGLISH LANGUAGE (SAFE) ---
@@ -353,6 +385,22 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     topic: "Prepositions",
     difficulty: "Intermediate",
     explanation: "One agrees 'to' a proposal/plan, 'with' a person, and 'on/upon' a topic after deliberation.",
+  },
+  {
+    id: "eng-diagram-1",
+    type: "single-choice",
+    text: "According to the industrial cycle flowchart, which stage immediately follows 'Sorting & Cleaning'?",
+    imageUrl: "/diagrams/english-flowchart.svg",
+    options: [
+      { id: "edo-1", text: "Collection" },
+      { id: "edo-2", text: "Reprocessing" },
+      { id: "edo-3", text: "Manufacturing" },
+      { id: "edo-4", text: "Disposal" },
+    ],
+    subject: "English",
+    topic: "Technical Process Comprehension",
+    difficulty: "Beginner",
+    explanation: "In the 4-stage flowchart, Stage 2 (Sorting & Cleaning) points directly to Stage 3 (Reprocessing).",
   },
 ];
 
@@ -485,6 +533,22 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     topic: "Science",
     difficulty: "Beginner",
     explanation: "Gold's symbol 'Au' derives from its Latin name 'Aurum', meaning shining dawn.",
+  },
+  {
+    id: "gk-diagram-1",
+    type: "single-choice",
+    text: "In the electric circuit shown, two resistors of 4 ohms and 6 ohms are connected in series with a 12V supply. What is the total equivalent resistance?",
+    imageUrl: "/diagrams/gk-circuit.svg",
+    options: [
+      { id: "gdo-1", text: "2 ohms" },
+      { id: "gdo-2", text: "10 ohms" },
+      { id: "gdo-3", text: "24 ohms" },
+      { id: "gdo-4", text: "1.2 ohms" },
+    ],
+    subject: "General Knowledge",
+    topic: "Physics & Electronics",
+    difficulty: "Beginner",
+    explanation: "For resistors in series, equivalent resistance Req = R1 + R2 = 4 Ω + 6 Ω = 10 Ω.",
   },
 ];
 
@@ -630,6 +694,16 @@ export const SafePracticeShowcaseQuestions: CandidateQuestion[] = [
   SafeQuestionMap["quant-10"], // Fill in the Blank
 ].filter(Boolean);
 
+/**
+ * Practice Set 6 (p6): Diagram & Visual Interpretation (4 multimodal diagram questions)
+ */
+export const SafePracticeDiagramQuestions: CandidateQuestion[] = [
+  SafeQuestionMap["quant-diagram-1"],  // Geometry Right Triangle
+  SafeQuestionMap["reason-diagram-1"], // Wheat Production Bar Chart
+  SafeQuestionMap["gk-diagram-1"],     // DC Electric Circuit
+  SafeQuestionMap["eng-diagram-1"],    // Industrial Recycling Flowchart
+].filter(Boolean);
+
 export interface SafeExamContextParams {
   setId?: string | null;
   examId?: string | null;
@@ -640,6 +714,7 @@ export function getSafeQuestionsForContext(params: SafeExamContextParams): Candi
 
   if (setId) {
     const s = setId.toLowerCase().trim();
+    if (s === "p6" || s.includes("diagram") || s.includes("visual") || s.includes("vision")) return SafePracticeDiagramQuestions;
     if (s === "p1" || s.includes("quant")) return SafePracticeQuantQuestions;
     if (s === "p2" || s.includes("gk") || s.includes("general")) return SafePracticeGKQuestions;
     if (s === "p3" || s.includes("reason")) return SafePracticeReasoningQuestions;

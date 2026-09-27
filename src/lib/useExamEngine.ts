@@ -46,8 +46,13 @@ export function useExamEngine(
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialQuestionIndex);
   const [answers, setAnswers] = useState<ExamAnswers>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
-  const [timeRemaining, setTimeRemaining] = useState(initialDurationSeconds);
+  const safeInitialDuration = Number.isFinite(initialDurationSeconds) && initialDurationSeconds > 0 
+    ? initialDurationSeconds 
+    : 900;
+  const [timeRemaining, setTimeRemaining] = useState(safeInitialDuration);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const isSubmittedRef = useRef(false);
+  isSubmittedRef.current = isSubmitted;
 
   // Sectional state
   const hasSections = Array.isArray(sections) && sections.length > 0;
@@ -97,7 +102,7 @@ export function useExamEngine(
     if (activeSection) {
       return (activeSection.duration_minutes || 5) * 60;
     }
-    return initialDurationSeconds;
+    return safeInitialDuration;
   });
 
   // Track latest state for callbacks
@@ -201,6 +206,8 @@ export function useExamEngine(
   }, [currentSectionIndices, hasSections, questions.length]);
 
   const submitExam = useCallback(() => {
+    if (isSubmittedRef.current) return;
+    isSubmittedRef.current = true;
     setIsSubmitted(true);
     onExamComplete({
       currentQuestionIndex,
@@ -256,53 +263,56 @@ export function useExamEngine(
     onSectionCompleteRef.current?.(curIdx, false);
   }, []);
 
-  // Tick overall timer and section timer
+  // Tick overall timer and section timer purely by decrementing numbers
   const tickTimer = useCallback(() => {
-    if (isSubmitted) return;
+    if (isSubmittedRef.current) return;
 
-    // Overall exam timer tick
-    setTimeRemaining(prev => {
-      if (prev <= 1) {
-        submitExam();
-        return 0;
-      }
-      return prev - 1;
-    });
+    // Pure decrement: zero side effects inside updater
+    setTimeRemaining(prev => Math.max(0, prev - 1));
 
-    // Section timer tick if sections configured
     if (hasSections && sections && sections.length > 0) {
-      setSectionTimeRemaining(prevSec => {
-        if (prevSec <= 1) {
-          const curIdx = activeSectionIndexRef.current;
-          const currentSecName = sections[curIdx]?.name || `Section ${curIdx + 1}`;
-
-          if (curIdx < sections.length - 1) {
-            // Auto-advance to next section
-            const nextIdx = curIdx + 1;
-            const nextSec = sections[nextIdx];
-            setActiveSectionIndex(nextIdx);
-
-            const nextIndices = sectionQuestionIndicesRef.current[nextIdx];
-            if (nextIndices && nextIndices.length > 0) {
-              setCurrentQuestionIndex(nextIndices[0]);
-            }
-
-            announceToScreenReader(
-              `Time expired for ${currentSecName}. Auto-advancing to section: ${nextSec.name}.`
-            );
-            onSectionCompleteRef.current?.(curIdx, true);
-            return (nextSec.duration_minutes || 5) * 60;
-          } else {
-            // Last section expired: auto-submit full exam
-            announceToScreenReader(`Time expired for final section: ${currentSecName}. Submitting exam.`);
-            submitExam();
-            return 0;
-          }
-        }
-        return prevSec - 1;
-      });
+      setSectionTimeRemaining(prev => Math.max(0, prev - 1));
     }
-  }, [hasSections, isSubmitted, sections, submitExam]);
+  }, [hasSections, sections]);
+
+  // Safe auto-submission when overall time expires (runs in effect commit phase, NOT during render/updater)
+  useEffect(() => {
+    if (isSubmittedRef.current) return;
+    if (timeRemaining <= 0) {
+      submitExam();
+    }
+  }, [timeRemaining, submitExam]);
+
+  // Safe auto-advancement or auto-submission when section time expires
+  useEffect(() => {
+    if (isSubmittedRef.current || !hasSections || !sections || sections.length === 0) return;
+    if (sectionTimeRemaining <= 0) {
+      const curIdx = activeSectionIndexRef.current;
+      const currentSecName = sections[curIdx]?.name || `Section ${curIdx + 1}`;
+
+      if (curIdx < sections.length - 1) {
+        // Auto-advance to next section
+        const nextIdx = curIdx + 1;
+        const nextSec = sections[nextIdx];
+        setActiveSectionIndex(nextIdx);
+        setSectionTimeRemaining((nextSec.duration_minutes || 5) * 60);
+
+        const nextIndices = sectionQuestionIndicesRef.current[nextIdx];
+        if (nextIndices && nextIndices.length > 0) {
+          setCurrentQuestionIndex(nextIndices[0]);
+        }
+
+        announceToScreenReader(
+          `Time expired for ${currentSecName}. Auto-advancing to section: ${nextSec.name}.`
+        );
+        onSectionCompleteRef.current?.(curIdx, true);
+      } else {
+        // Last section expired: auto-submit full exam
+        announceToScreenReader(`Time expired for final section: ${currentSecName}. Submitting exam.`);
+        submitExam();
+      }
+    }
+  }, [sectionTimeRemaining, hasSections, sections, submitExam]);
 
   // Voice actions abstraction
   const voiceActions: ExamActions = {
