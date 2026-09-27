@@ -13,9 +13,12 @@ export interface ExamMicStatusBarProps {
   isSpeaking?: boolean;
   lastCommand: string | null;
   lastTranscript?: string | null;
+  lastHeardTranscript?: string | null;
+  voiceStatus?: string | null;
   lastActionFeedback?: string | null;
   errorMessage?: string | null;
   onToggle: () => void;
+  onEnableMic?: () => void;
   className?: string;
 }
 
@@ -25,15 +28,18 @@ export function ExamMicStatusBar({
   isSpeaking = false,
   lastCommand,
   lastTranscript,
+  lastHeardTranscript,
+  voiceStatus,
   lastActionFeedback,
   errorMessage,
   onToggle,
+  onEnableMic,
   className,
 }: ExamMicStatusBarProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
 
-  const transcript = lastTranscript || lastCommand;
+  const transcript = lastHeardTranscript || lastTranscript || lastCommand;
 
   // 1. Browser Mismatch / Unsupported Banner
   if (status === 'Unsupported') {
@@ -67,7 +73,7 @@ export function ExamMicStatusBar({
   const speakingActive = isSpeaking || status === 'Speaking';
   const listeningActive = isActive && status === 'Listening' && !speakingActive;
   const processingActive = isActive && (status === 'Processing' || (Boolean(transcript) && !speakingActive));
-  const isOffOrReady = !isActive;
+  const isOffOrReady = !isActive || status === 'Error' || status === 'Ready';
 
   return (
     <div
@@ -86,7 +92,7 @@ export function ExamMicStatusBar({
       )}
     >
       {/* Left side: Real-time Debug Visualizer Status Pill */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
         {/* State 1: 🔊 READING QUESTION */}
         {speakingActive && (
           <div className="flex items-center gap-2.5 min-w-0">
@@ -99,7 +105,7 @@ export function ExamMicStatusBar({
           </div>
         )}
 
-        {/* State 2: 🎙️ LISTENING */}
+        {/* State 2: 🎙️ LISTENING / MIC IS HOT */}
         {listeningActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
@@ -108,7 +114,7 @@ export function ExamMicStatusBar({
             </span>
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
               <span className="text-sm font-black text-[#ffed00] tracking-wide font-mono">
-                {isHindi ? "🎙️ सुन रहा है... (बोलें 'A', 'B', 'Next')" : "🎙️ Listening... (Say 'A', 'B', 'Next')"}
+                {voiceStatus || (isHindi ? "🎙️ सुन रहा है... (बोलें 'A', 'B', 'Next')" : "🎙️ Listening... (Say 'A', 'B', 'Next')")}
               </span>
             </div>
           </div>
@@ -134,13 +140,13 @@ export function ExamMicStatusBar({
         )}
 
         {/* State 4: 🔴 OFF / CLICK TO ENABLE */}
-        {isOffOrReady && (
+        {isOffOrReady && !speakingActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
               <span className="size-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]" />
             </span>
             <span className="text-sm font-semibold text-muted-foreground">
-              {isHindi ? '🔴 वॉइस नेविगेशन: म्यूट (अनम्यूट करने के लिए Alt+M दबाएं)' : '🔴 Voice Navigation: Muted (Click or Alt+M to Unmute)'}
+              {voiceStatus || (isHindi ? '🔴 वॉइस नेविगेशन: म्यूट' : '🔴 Voice Navigation: Muted')}
             </span>
           </div>
         )}
@@ -153,8 +159,20 @@ export function ExamMicStatusBar({
         )}
       </div>
 
-      {/* Right side: Action Toggle Button & Shortcut hint */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Right side: Action Buttons & Explicit Unlock */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        {/* 2. Explicit User-Gesture Mic Unlock Button */}
+        {onEnableMic && (!isActive || status === 'Error' || status === 'Ready') && (
+          <button
+            type="button"
+            onClick={onEnableMic}
+            className="px-3.5 py-1.5 bg-[#ffed00] hover:bg-[#e6d500] text-black font-bold rounded-lg shadow-md transition-all cursor-pointer text-xs flex items-center gap-1.5"
+          >
+            <Mic className="size-3.5 text-black" aria-hidden="true" />
+            <span>Click to Enable Microphone</span>
+          </button>
+        )}
+
         <kbd 
           className="hidden sm:inline-flex items-center px-2 py-1 text-2xs font-mono font-bold bg-muted/60 text-muted-foreground border border-border rounded-[2px]"
           title="Keyboard Shortcut"

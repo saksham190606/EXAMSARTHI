@@ -52,11 +52,13 @@ export function useVoiceMode({
   const language = useAccessibilityStore((s) => s.language);
   const lang = language === 'hi' ? 'hi' : 'en';
 
-  // Voice mode is ON BY DEFAULT for hands-free examination
+  // Voice mode state
   const [isActive, setIsActive] = useState(true);
   const [status, setStatus] = useState<VoiceStatus>('Listening');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [lastHeardTranscript, setLastHeardTranscript] = useState<string | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<string>('Listening... (mic is hot)');
   const [lastActionFeedback, setLastActionFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -153,10 +155,12 @@ export function useVoiceMode({
         recognitionRef.current.lang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
         recognitionRef.current.start();
         setStatus('Listening');
+        setVoiceStatus('Listening (mic is hot)');
       } catch (e: any) {
         // Recognition already started or transitioning
         if (e?.name === 'InvalidStateError' || e?.message?.includes('already started')) {
           setStatus('Listening');
+          setVoiceStatus('Listening (mic is hot)');
         }
       }
     }
@@ -181,6 +185,7 @@ export function useVoiceMode({
     stopRecognition();
     isSpeakingRef.current = true;
     setStatus('Speaking');
+    setVoiceStatus('Speaking...');
 
     try {
       window.speechSynthesis.cancel();
@@ -205,6 +210,7 @@ export function useVoiceMode({
         currentUtteranceRef.current = null;
         if (isActiveRef.current && !userManuallyMutedRef.current) {
           setStatus('Listening');
+          setVoiceStatus('Listening (mic is hot)');
           setTimeout(() => {
             try { recognitionRef.current?.start(); } catch (e) {}
           }, 250);
@@ -232,6 +238,7 @@ export function useVoiceMode({
             try {
               recognitionRef.current?.start();
               setStatus('Listening');
+              setVoiceStatus('Listening (mic is hot)');
             } catch (e) {}
           }
         }
@@ -298,11 +305,11 @@ export function useVoiceMode({
     (window as any).__activeUtterance = utterance;
 
     // 2. Strict Sequential Turn-Taking (Fixes Mic Abort Collision)
-    // You CANNOT listen while speaking. Use state: isSpeakingRef.current = true.
     isSpeakingRef.current = true;
     setStatus('Speaking');
+    setVoiceStatus('Reading question...');
 
-    // Before window.speechSynthesis.speak(utterance): Stop or pause recognition
+    // Before window.speechSynthesis.speak(utterance): Stop recognition
     stopRecognition();
 
     if (speechWatchdogRef.current) clearTimeout(speechWatchdogRef.current);
@@ -314,6 +321,7 @@ export function useVoiceMode({
         currentUtteranceRef.current = null;
         if (isActiveRef.current && !userManuallyMutedRef.current) {
           setStatus('Listening');
+          setVoiceStatus('Listening (mic is hot)');
           setTimeout(() => {
             try { recognitionRef.current?.start(); } catch (e) {}
           }, 250);
@@ -336,6 +344,7 @@ export function useVoiceMode({
       setTimeout(() => {
         if (!isSpeakingRef.current && isActiveRef.current && !userManuallyMutedRef.current) {
           setStatus('Listening');
+          setVoiceStatus('Listening (mic is hot)');
           try {
             recognitionRef.current?.start();
           } catch (e) {}
@@ -367,24 +376,65 @@ export function useVoiceMode({
     readQuestion(currentIndexRef.current);
   }, [readQuestion]);
 
-  // 4. Physical "Tap to Enable Voice" Unlock Handler
-  const unlockAudio = useCallback(() => {
+  // 2. EXPLICIT USER-GESTURE MIC UNLOCK BUTTON HANDLER
+  const handleManualMicActivation = useCallback(async () => {
+    setVoiceStatus('Requesting microphone permission...');
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    } catch (err: any) {
+      console.error('[Voice Error] getUserMedia failed:', err);
+      setVoiceStatus(`Mic Error: ${err?.name || err?.message || 'Permission denied'}`);
+      setErrorMessage(`Microphone access needed: ${err?.message || 'Permission blocked'}`);
+      return;
+    }
+
     setIsAudioUnlocked(true);
     if (typeof window !== 'undefined') {
       (window as any).__examsarthi_audio_unlocked = true;
       try {
         sessionStorage.setItem('examAudioUnlocked', 'true');
       } catch (e) {}
-      // Prime synthesizer
-      try {
-        window.speechSynthesis.cancel();
-        const primer = new SpeechSynthesisUtterance(' ');
-        primer.volume = 0.01;
-        window.speechSynthesis.speak(primer);
-      } catch (e) {}
     }
+
+    setIsActive(true);
+    isActiveRef.current = true;
+    userManuallyMutedRef.current = false;
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+
+      // 3. Fallback Language Configuration: Try candidate choice, fallback to en-US if needed
+      try {
+        recognitionRef.current.lang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
+        recognitionRef.current.start();
+        setVoiceStatus('Listening... (mic is hot)');
+        setStatus('Listening');
+      } catch (err: any) {
+        try {
+          recognitionRef.current.lang = 'en-US';
+          recognitionRef.current.start();
+          setVoiceStatus('Listening... (en-US fallback)');
+          setStatus('Listening');
+        } catch (e2: any) {
+          console.error('[Voice Error] Recognition start failed:', e2);
+          setVoiceStatus(`Mic Error: ${e2?.message || 'Failed to start'}`);
+        }
+      }
+    } else {
+      setVoiceStatus('SpeechRecognition not initialized');
+    }
+  }, []);
+
+  // 4. Physical "Tap to Enable Voice" Unlock Handler
+  const unlockAudio = useCallback(() => {
+    handleManualMicActivation();
     readCurrentQuestion();
-  }, [readCurrentQuestion]);
+  }, [handleManualMicActivation, readCurrentQuestion]);
 
   // Global keydown listener for Space bar to unlock voice if banner is active
   useEffect(() => {
@@ -535,30 +585,92 @@ export function useVoiceMode({
     }
   }, [speak]);
 
-  // 3. MICROPHONE RECOGNITION & DIRECT STATE BINDING
+  // 1. CONSOLE & ON-SCREEN VISUAL LOGGER & MICROPHONE ENGINE
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setStatus('Unsupported');
+      setVoiceStatus('Unsupported by browser');
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false; // Using short cycles avoids the dead-mic bug
+    recognition.continuous = false; // Discrete short cycles avoid the dead-mic bug
     recognition.interimResults = false;
-    recognition.lang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
+    
+    // 3. Fallback Language Configuration
+    const initialLang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
+    recognition.lang = initialLang;
     recognitionRef.current = recognition;
 
-    recognition.onresult = (event: any) => {
+    // 1. Explicit event listeners for audio diagnostics
+    recognition.onaudiostart = () => {
+      console.log('[Voice] Audio capture started (mic is hot)');
+      setVoiceStatus('Audio capture started (mic is hot)');
+    };
+
+    recognition.onsoundstart = () => {
+      console.log('[Voice] Sound detected in room');
+      setVoiceStatus('Sound detected in room');
+    };
+
+    recognition.onspeechstart = () => {
+      console.log('[Voice] Speech identified');
+      setVoiceStatus('Speech identified');
+    };
+
+    recognition.onspeechend = () => {
+      console.log('[Voice] Speech segment ended');
+      setVoiceStatus('Speech segment ended');
+    };
+
+    recognition.onnomatch = () => {
+      console.log('[Voice] Audio heard but no word matched');
+      setVoiceStatus('Audio heard but no word matched');
+    };
+
+    recognition.onerror = (e: any) => {
+      console.error('[Voice Error]', e.error, e.message);
+      setVoiceStatus(`Mic Error: ${e.error}`);
+
+      // Fallback: If hi-IN speech recognition fails due to missing language pack, fallback to en-US
+      if (e.error === 'language-not-supported' && recognition.lang !== 'en-US') {
+        console.warn('[Voice] Falling back to en-US speech recognition');
+        recognition.lang = 'en-US';
+        setTimeout(() => {
+          try {
+            recognition.start();
+            setVoiceStatus('Listening (en-US fallback)');
+          } catch (err) {}
+        }, 200);
+        return;
+      }
+
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setStatus('Error');
+        setErrorMessage(languageRef.current === 'hi'
+          ? 'माइक्रोफ़ोन अनुमति अस्वीकृत। कीबोर्ड मोड सक्रिय है।'
+          : 'Microphone permission denied. Keyboard controls active.'
+        );
+        setIsActive(false);
+        isActiveRef.current = false;
+      }
+    };
+
+    recognition.onresult = (e: any) => {
+      const raw = e?.results?.[0]?.[0]?.transcript || '';
+      console.log("[Voice Result Captured]:", raw);
+      setLastHeardTranscript(raw);
+      setLastCommand(raw);
+      setLastTranscript(raw);
+      setVoiceStatus(`Captured: "${raw}"`);
+
       if (isSpeakingRef.current) return;
 
       try {
-        const transcript = event.results[0][0].transcript.toLowerCase().trim();
-        console.log("Captured speech:", transcript);
-        setLastCommand(transcript);
-        setLastTranscript(transcript);
+        const transcript = (raw || '').toLowerCase().trim();
         setStatus('Processing');
 
         // Two-step confirmation active (e.g. submit exam)
@@ -697,22 +809,7 @@ export function useVoiceMode({
       }
     };
 
-    recognition.onerror = (event: any) => {
-      const err = event?.error;
-      console.warn('[VoiceMode] SpeechRecognition error:', err);
-      if (err === 'not-allowed' || err === 'service-not-allowed') {
-        setStatus('Error');
-        setErrorMessage(languageRef.current === 'hi'
-          ? 'माइक्रोफ़ोन अनुमति अस्वीकृत। कीबोर्ड मोड सक्रिय है।'
-          : 'Microphone permission denied. Keyboard controls active.'
-        );
-        setIsActive(false);
-        isActiveRef.current = false;
-      }
-    };
-
-    // On recognition.onend:
-    // If voice mode is active and !isSpeakingRef.current, automatically restart:
+    // On recognition.onend: automatically restart if active and not speaking
     recognition.onend = () => {
       setTimeout(() => {
         if (!isSpeakingRef.current && isActiveRef.current && !userManuallyMutedRef.current) {
@@ -729,6 +826,7 @@ export function useVoiceMode({
       try {
         recognition.start();
         setStatus('Listening');
+        setVoiceStatus('Listening (mic is hot)');
       } catch (e) {}
     }
 
@@ -800,12 +898,14 @@ export function useVoiceMode({
       try { window.speechSynthesis?.cancel(); } catch (e) {}
       stopRecognition();
       setStatus('Ready');
+      setVoiceStatus('Voice Muted');
       setLastActionFeedback(null);
     } else {
       userManuallyMutedRef.current = false;
       setIsActive(true);
       isActiveRef.current = true;
       setStatus('Listening');
+      setVoiceStatus('Listening (mic is hot)');
       readCurrentQuestion();
     }
   }, [isActive, stopRecognition, clearTimers, readCurrentQuestion]);
@@ -815,6 +915,7 @@ export function useVoiceMode({
     setIsActive(true);
     isActiveRef.current = true;
     setStatus('Listening');
+    setVoiceStatus('Listening (mic is hot)');
     readCurrentQuestion();
   }, [readCurrentQuestion]);
 
@@ -826,6 +927,7 @@ export function useVoiceMode({
     try { window.speechSynthesis?.cancel(); } catch (e) {}
     stopRecognition();
     setStatus('Ready');
+    setVoiceStatus('Voice Muted');
   }, [stopRecognition, clearTimers]);
 
   return {
@@ -834,6 +936,9 @@ export function useVoiceMode({
     isSpeaking: status === 'Speaking' || isSpeakingRef.current,
     lastCommand,
     lastTranscript,
+    lastHeardTranscript,
+    voiceStatus,
+    handleManualMicActivation,
     lastActionFeedback,
     errorMessage,
     isAudioUnlocked,

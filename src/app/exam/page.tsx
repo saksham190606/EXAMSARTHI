@@ -297,6 +297,9 @@ function ActiveExamSession({
     isSpeaking,
     lastCommand, 
     lastTranscript,
+    lastHeardTranscript,
+    voiceStatus,
+    handleManualMicActivation,
     lastActionFeedback, 
     errorMessage, 
     isAudioUnlocked,
@@ -517,7 +520,17 @@ function ActiveExamSession({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* 2. Explicit User-Gesture Mic Unlock Button */}
+            {(!isActive || status === 'Error' || status === 'Ready') && (
+              <button
+                onClick={handleManualMicActivation}
+                className="px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md"
+              >
+                🎙️ Click to Enable Microphone
+              </button>
+            )}
+
             {/* Subtle Real-time Status Pill (Reading / Listening / Last heard) */}
             <ExamVoiceDebugVisualizer
               status={status}
@@ -525,6 +538,9 @@ function ActiveExamSession({
               isSpeaking={isSpeaking}
               lastCommand={lastCommand}
               lastTranscript={lastTranscript}
+              lastHeardTranscript={lastHeardTranscript}
+              voiceStatus={voiceStatus}
+              onEnableMic={handleManualMicActivation}
               onClick={toggleVoiceMode}
             />
 
@@ -567,9 +583,12 @@ function ActiveExamSession({
         isSpeaking={isSpeaking}
         lastCommand={lastCommand}
         lastTranscript={lastTranscript}
+        lastHeardTranscript={lastHeardTranscript}
+        voiceStatus={voiceStatus}
         lastActionFeedback={lastActionFeedback}
         errorMessage={errorMessage}
         onToggle={toggleVoiceMode}
+        onEnableMic={handleManualMicActivation}
       />
 
       {/* SECTION 2 — Active Section Banner (shown when sections exist) */}
