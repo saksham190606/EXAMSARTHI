@@ -9,6 +9,7 @@
  */
 
 import { useAccessibilityStore } from "@/store/useAccessibilityStore";
+import { parseSpokenIntent, playVoiceFeedbackChime } from "@/lib/voice/intent-parser";
 
 /**
  * Formats text for natural speech synthesis pronunciation.
@@ -1262,12 +1263,19 @@ class VoiceNavigationEngine {
   private routerNavigate: ((path: string) => void) | null = null;
   private isListeningExplicitly = false;
   private restartTimeout: any = null;
+  private isSpeakingFeedback = false;
 
   public setRouter(navigate: (path: string) => void) {
     this.routerNavigate = navigate;
   }
 
   public navigate(path: string, confirmationText: string) {
+    playVoiceFeedbackChime();
+    this.isSpeakingFeedback = true;
+    try {
+      this.recognition?.stop();
+    } catch (_) {}
+
     speak(confirmationText, {
       onEnd: () => {
         if (this.routerNavigate) {
@@ -1275,6 +1283,14 @@ class VoiceNavigationEngine {
         } else if (typeof window !== "undefined") {
           window.location.href = path;
         }
+        setTimeout(() => {
+          this.isSpeakingFeedback = false;
+          if (this.isListeningExplicitly && this.recognition) {
+            try {
+              this.recognition.start();
+            } catch (_) {}
+          }
+        }, 300);
       },
     });
   }
@@ -1320,16 +1336,16 @@ class VoiceNavigationEngine {
       const store = useAccessibilityStore.getState();
       recognition.lang = store.language === "hi" ? "hi-IN" : "en-US";
 
-      recognition.onresult = (event: any) => {
-        // Prevent speech feedback loop if synthesized speech is actively playing
-        if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+      recognition.onresult = async (event: any) => {
+        // Prevent speech feedback loop if synthesized speech or confirmation chime is active
+        if (this.isSpeakingFeedback || (typeof window !== "undefined" && window.speechSynthesis?.speaking)) {
           return;
         }
 
         const lastIndex = event.results.length - 1;
         const transcript = event.results[lastIndex][0]?.transcript?.trim();
         if (transcript) {
-          this.processCommand(transcript);
+          await this.processCommand(transcript);
         }
       };
 
@@ -1448,204 +1464,176 @@ class VoiceNavigationEngine {
     }
   }
 
-  public processCommand(rawInput: string) {
-    const input = rawInput.toLowerCase().trim();
+  public async processCommand(rawInput: string) {
+    if (!rawInput || !rawInput.trim()) return;
+    const input = rawInput.trim();
     const isHi = useAccessibilityStore.getState().language === "hi";
 
-    // 0. LANGUAGE SWITCHING COMMANDS (Functional & Active globally)
-    // English -> Hindi
-    if (
-      /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein\s+karo|hindi\s+me\s+karo|hindi\s+bhasha|hindi\s+mein|hindi\s+me|hindi\s+chune|hindi\s+chuno|^hindi$|हिंदी|हिंदी\s+में\s+करो|हिंदी\s+में\s+बदलें|हिंदी\s+में\s+बदलो|हिंदी\s+चुनें|हिंदी\s+चुनो|हिंदी\s+भाषा|हिंदी\s+करो)/i.test(input)
-    ) {
-      this.switchLanguage("hi");
-      return;
+    // 1. Process through AI-powered Natural Speech Intent Engine (local rule + fuzzy + Gemini fallback)
+    const recognized = await parseSpokenIntent(rawInput, isHi ? "hi" : "en");
+
+    // 2. Immediate Auditory Feedback Chime for recognized commands
+    if (recognized.intent !== "UNKNOWN") {
+      playVoiceFeedbackChime();
     }
 
-    // Hindi -> English: "अंग्रेजी में बदलें" / "switch to English" / "English chune"
-    if (
-      /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|english\s+chune|english\s+chuno|angrezi\s+chune|angrezi\s+chuno|angrezi\s+mein\s+karo|angrezi\s+me\s+karo|angrezi\s+mein|angrezi\s+me|^angrezi$|^english$|अंग्रेजी|अंग्रेज़ी|अंग्रेजी\s+में\s+बदलें|अंग्रेज़ी\s+में\s+बदलें|अंग्रेजी\s+में\s+बदलो|अंग्रेज़ी\s+में\s+बदलो|अंग्रेजी\s+चुनें|अंग्रेज़ी\s+चुनें|अंग्रेजी\s+चुनो|अंग्रेज़ी\s+चुनो|अंग्रेजी\s+में\s+करो|अंग्रेजी\s+करो)/i.test(input)
-    ) {
-      this.switchLanguage("en");
-      return;
-    }
+    switch (recognized.intent) {
+      case "NAVIGATE_DASHBOARD":
+        this.navigate("/dashboard", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
 
-    // 1. NAVIGATION COMMANDS
-    // Dashboard: "डैशबोर्ड चुनें" / "dashboard chune" / "dashboard jao" -> Navigate to /dashboard
-    if (
-      /(?:go\s+to\s+dashboard|open\s+dashboard|show\s+dashboard|^dashboard$|dashboard\s+chune|dashboard\s+chuno|dashboard\s+jao|डैशबोर्ड\s+चुनें|डैशबोर्ड\s+चुनो|डैशबोर्ड\s+जाओ|डैशबोर्ड|डैशबोर्ड\s+पर\s+जाओ)/i.test(input)
-    ) {
-      this.navigate("/dashboard", isHi ? "डैशबोर्ड पर जा रहे हैं" : "Navigating to Dashboard");
-      return;
-    }
+      case "NAVIGATE_PRACTICE":
+        this.navigate("/practice", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
 
-    // Exams: "परीक्षा चुनें" / "exams chune" / "exam jao" -> Navigate to /exam
-    if (
-      /(?:go\s+to\s+exams?|open\s+exams?|show\s+exams?|^exams?$|exams?\s+chune|exams?\s+chuno|exams?\s+jao|exam\s+jao|परीक्षा\s+चुनें|परीक्षा\s+चुनो|परीक्षा\s+जाओ|परीक्षा\s+पोर्टल|परीक्षा)/i.test(input)
-    ) {
-      this.navigate("/exam", isHi ? "परीक्षा पोर्टल पर जा रहे हैं" : "Navigating to Exams");
-      return;
-    }
+      case "NAVIGATE_EXAMS":
+        this.navigate("/exam", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
 
-    // Practice: "प्रैक्टिस चुनें" / "practice chune" -> Navigate to /practice
-    if (
-      /(?:go\s+to\s+practice|open\s+practice|show\s+practice|^practice$|practice\s+chune|practice\s+chuno|practice\s+jao|प्रैक्टिस\s+चुनें|प्रैक्टिस\s+चुनो|अभ्यास\s+चुनें|अभ्यास\s+चुनो|प्रैक्टिस\s+जाओ|अभ्यास\s+जाओ|प्रैक्टिस|अभ्यास)/i.test(input) &&
-      !/(?:shuru|start|kare|karo|शुरू)/i.test(input)
-    ) {
-      this.navigate("/practice", isHi ? "प्रैक्टिस पर जा रहे हैं" : "Navigating to Practice");
-      return;
-    }
+      case "NAVIGATE_RESULTS":
+        this.navigate("/results", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
 
-    // Results: "परिणाम चुनें" / "results chune" / "parinaam jao" -> Navigate to /results
-    if (
-      /(?:go\s+to\s+results?|open\s+results?|show\s+results?|^results?$|results?\s+chune|results?\s+chuno|parinaam\s+chune|parinaam\s+jao|result\s+jao|परिणाम\s+चुनें|परिणाम\s+चुनो|परिणाम\s+जाओ|परिणाम|रिजल्ट\s+चुनें|रिजल्ट|नतीजे)/i.test(input)
-    ) {
-      this.navigate("/results", isHi ? "परिणाम पर जा रहे हैं" : "Navigating to Results");
-      return;
-    }
+      case "NAVIGATE_SETTINGS":
+        this.navigate("/settings", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
 
-    // Settings: "सेटिंग्स चुनें" / "settings chune" -> Navigate to /settings
-    if (
-      /(?:go\s+to\s+settings?|open\s+settings?|show\s+settings?|^settings?$|settings?\s+chune|settings?\s+chuno|settings?\s+jao|सेटिंग्स\s+चुनें|सेटिंग्स\s+चुनो|सेटिंग्स\s+जाओ|सेटिंग्स)/i.test(input)
-    ) {
-      this.navigate("/settings", isHi ? "सेटिंग्स पर जा रहे हैं" : "Navigating to Settings");
-      return;
-    }
+      case "NAVIGATE_BACK": {
+        const inExam = typeof window !== "undefined" && window.location.pathname.startsWith("/exam");
+        const prevBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
+        );
 
-    // 2. EXAM & PRACTICE ACTION COMMANDS
-    // Start Mock Exam: "मॉक टेस्ट शुरू करें" / "mock exam shuru kare" / "test shuru kare" -> Open mock selector / launch test
-    if (
-      /(?:take\s+mock\s+exam|start\s+mock\s+exam|start\s+mock\s+test|start\s+mock|mock\s+exam\s+shuru\s+kare|mock\s+exam\s+shuru\s+karo|mock\s+test\s+shuru\s+kare|mock\s+test\s+shuru\s+karo|test\s+shuru\s+kare|test\s+shuru\s+karo|मॉक\s+टेस्ट\s+शुरू\s+करें|मॉक\s+टेस्ट\s+शुरू\s+करो|मॉक\s+परीक्षा\s+शुरू\s+करें|मॉक\s+परीक्षा\s+शुरू\s+करो|मॉक\s+टेस्ट\s+दें|मॉक\s+टेस्ट\s+शुरू|टेस्ट\s+शुरू\s+करें|टेस्ट\s+शुरू\s+करो)/i.test(input)
-    ) {
-      const mockBtn = document.querySelector<HTMLElement>(
-        'button[aria-haspopup="dialog"], button:has-text("Take Mock Exam"), button:has-text("मॉक टेस्ट दें")'
-      );
-      if (mockBtn) {
-        mockBtn.click();
-        speak(isHi ? "मॉक परीक्षा चयन खोला जा रहा है" : "Opening mock exam selector", { langOverride: isHi ? "hi-IN" : "en-US" });
-      } else {
-        this.navigate("/exam", isHi ? "मॉक परीक्षा केंद्र पर जा रहे हैं" : "Navigating to Mock Examination Hub");
+        if (inExam && prevBtn && !prevBtn.hasAttribute("disabled")) {
+          this.dispatchExamAction("prev");
+          prevBtn.click();
+          speak(isHi ? "पिछला प्रश्न" : "Moving to previous question", { langOverride: isHi ? "hi-IN" : "en-US" });
+        } else {
+          this.isSpeakingFeedback = true;
+          try {
+            this.recognition?.stop();
+          } catch (_) {}
+          speak(isHi ? "वापस जा रहे हैं" : "Going back", {
+            langOverride: isHi ? "hi-IN" : "en-US",
+            onEnd: () => {
+              if (typeof window !== "undefined") {
+                window.history.back();
+              }
+              setTimeout(() => {
+                this.isSpeakingFeedback = false;
+                if (this.isListeningExplicitly && this.recognition) {
+                  try {
+                    this.recognition.start();
+                  } catch (_) {}
+                }
+              }, 300);
+            },
+          });
+        }
+        return;
       }
-      return;
-    }
 
-    // Start Practice: "प्रैक्टिस शुरू करें" / "practice shuru kare" -> Launch practice session
-    if (
-      /(?:start\s+practice|begin\s+practice|launch\s+practice|practice\s+shuru\s+kare|practice\s+shuru\s+karo|abhyas\s+shuru\s+kare|abhyas\s+shuru\s+karo|प्रैक्टिस\s+शुरू\s+करें|प्रैक्टिस\s+शुरू\s+करो|अभ्यास\s+शुरू\s+करें|अभ्यास\s+शुरू\s+करो|प्रैक्टिस\s+शुरू|अभ्यास\s+शुरू)/i.test(input)
-    ) {
-      const practiceLink = document.querySelector<HTMLElement>('a[href="/practice"]');
-      if (practiceLink && window.location.pathname !== "/practice") {
-        practiceLink.click();
-      } else {
-        this.navigate("/practice", isHi ? "प्रैक्टिस सत्र शुरू किया जा रहा है" : "Starting practice session");
+      case "START_EXAM": {
+        const mockBtn = document.querySelector<HTMLElement>(
+          'button[aria-haspopup="dialog"], button:has-text("Take Mock Exam"), button:has-text("मॉक टेस्ट दें")'
+        );
+        if (mockBtn) {
+          mockBtn.click();
+          speak(isHi ? "मॉक परीक्षा चयन खोला जा रहा है" : "Opening mock exam selector", { langOverride: isHi ? "hi-IN" : "en-US" });
+        } else {
+          this.navigate("/exam", isHi ? "मॉक परीक्षा केंद्र पर जा रहे हैं" : "Navigating to Mock Examination Hub");
+        }
+        return;
       }
-      return;
-    }
 
-    // Trigger Diagram Describer (Alt+D): "चित्र का विवरण दें" / "chitra ka vivaran do" / "diagram samjhao"
-    if (
-      /(?:describe\s+diagram|diagram\s+description|describe\s+image|explain\s+diagram|चित्र\s+का\s+विवरण\s+दें|चित्र\s+का\s+विवरण\s+दो|चित्र\s+का\s+विवरण|चित्र\s+समझाओ|डायग्राम\s+समझाओ|chitra\s+ka\s+vivaran\s+do|chitra\s+ka\s+vivaran\s+de|chitra\s+ka\s+vivaran|diagram\s+samjhao|chitra\s+samjhao|diagram\s+padho)/i.test(input)
-    ) {
-      const describeBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="Describe diagram" i], button[aria-label*="चित्र का विवरण" i], button:has(svg.lucide-sparkles)'
-      );
-      if (describeBtn) {
-        describeBtn.click();
-      } else {
-        window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
-          detail: { action: 'describe-diagram' }
-        }));
+      case "START_PRACTICE": {
+        const practiceLink = document.querySelector<HTMLElement>('a[href="/practice"]');
+        if (practiceLink && window.location.pathname !== "/practice") {
+          practiceLink.click();
+        } else {
+          this.navigate("/practice", isHi ? "प्रैक्टिस सत्र शुरू किया जा रहा है" : "Starting practice session");
+        }
+        return;
       }
-      speak(isHi ? "चित्र का विवरण दिया जा रहा है" : "Describing diagram", { langOverride: isHi ? "hi-IN" : "en-US" });
-      return;
-    }
 
-    // Next Question: "अगला प्रश्न" / "agla prashn"
-    if (
-      /(?:next\s+question|go\s+next|next\s+prashn|agla\s+prashn|agla\s+prashna|agla\s+sawal|agla|अगला\s+प्रश्न|अगला\s+सवाल|अगला|आगे)/i.test(input)
-    ) {
-      this.dispatchExamAction("next");
-      const nextBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="next" i], button[aria-label*="Next question" i], button:has(svg.lucide-chevron-right)'
-      );
-      if (nextBtn && !nextBtn.hasAttribute("disabled")) {
-        nextBtn.click();
+      case "DESCRIBE_DIAGRAM": {
+        const describeBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="Describe diagram" i], button[aria-label*="चित्र का विवरण" i], button:has(svg.lucide-sparkles)'
+        );
+        if (describeBtn) {
+          describeBtn.click();
+        } else {
+          window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
+            detail: { action: 'describe-diagram' }
+          }));
+        }
+        speak(isHi ? "चित्र का विवरण दिया जा रहा है" : "Describing diagram", { langOverride: isHi ? "hi-IN" : "en-US" });
+        return;
       }
-      speak(isHi ? "अगला प्रश्न" : "Moving to next question", { langOverride: isHi ? "hi-IN" : "en-US" });
-      return;
-    }
 
-    // Previous Question: "पिछला प्रश्न" / "pichla prashn"
-    if (
-      /(?:previous\s+question|go\s+previous|go\s+back|previous\s+prashn|pichla\s+prashn|pichhla\s+prashn|pichla\s+prashna|pichhla\s+sawal|pichla\s+sawal|pichla|pichhla|पिछला\s+प्रश्न|पिछला\s+सवाल|पिछला|पीछे)/i.test(input)
-    ) {
-      this.dispatchExamAction("prev");
-      const prevBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
-      );
-      if (prevBtn && !prevBtn.hasAttribute("disabled")) {
-        prevBtn.click();
+      case "NEXT_QUESTION": {
+        this.dispatchExamAction("next");
+        const nextBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="next" i], button[aria-label*="Next question" i], button:has(svg.lucide-chevron-right)'
+        );
+        if (nextBtn && !nextBtn.hasAttribute("disabled")) {
+          nextBtn.click();
+        }
+        speak(isHi ? "अगला प्रश्न" : "Moving to next question", { langOverride: isHi ? "hi-IN" : "en-US" });
+        return;
       }
-      speak(isHi ? "पिछला प्रश्न" : "Moving to previous question", { langOverride: isHi ? "hi-IN" : "en-US" });
-      return;
-    }
 
-    // Clear Response: "उत्तर हटाएं" / "uttar hataye"
-    if (
-      /(?:clear\s+response|clear\s+answer|clear\s+selection|clear|deselect|reset\s+answer|reset|uttar\s+hataye|uttar\s+hatao|उत्तर\s+हटाएं|उत्तर\s+हटाओ|उत्तर\s+हटा|जवाब\s+हटाओ|साफ़\s+करो)/i.test(input)
-    ) {
-      this.dispatchExamAction("clear");
-      const clearBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="clear" i], button:has-text("Clear"), button:has-text("उत्तर हटाएं")'
-      );
-      if (clearBtn) clearBtn.click();
-      speak(isHi ? "उत्तर हटाया गया" : "Response cleared", { langOverride: isHi ? "hi-IN" : "en-US" });
-      return;
-    }
+      case "PREVIOUS_QUESTION": {
+        this.dispatchExamAction("prev");
+        const prevBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
+        );
+        if (prevBtn && !prevBtn.hasAttribute("disabled")) {
+          prevBtn.click();
+        }
+        speak(isHi ? "पिछला प्रश्न" : "Moving to previous question", { langOverride: isHi ? "hi-IN" : "en-US" });
+        return;
+      }
 
-    // Select Option A/B/C/D: "विकल्प ए / बी / सी / डी" / "option A / B / C / D"
-    // Option A
-    if (
-      /(?:विकल्प\s+(?:ए|a|1)|पहला\s+विकल्प|option\s+(?:a|1|one|ए)|vikalp\s+(?:a|1|e)|^option\s+a$|^विकल्प\s+ए$|^ए$|^a$)/i.test(input)
-    ) {
-      this.selectExamOption("A");
-      return;
-    }
+      case "CLEAR_RESPONSE": {
+        this.dispatchExamAction("clear");
+        const clearBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="clear" i], button:has-text("Clear"), button:has-text("उत्तर हटाएं")'
+        );
+        if (clearBtn) clearBtn.click();
+        speak(isHi ? "उत्तर हटाया गया" : "Response cleared", { langOverride: isHi ? "hi-IN" : "en-US" });
+        return;
+      }
 
-    // Option B
-    if (
-      /(?:विकल्प\s+(?:बी|b|2)|दूसरा\s+विकल्प|option\s+(?:b|2|two|बी)|vikalp\s+(?:b|2|bee)|^option\s+b$|^विकल्प\s+बी$|^बी$|^b$)/i.test(input)
-    ) {
-      this.selectExamOption("B");
-      return;
-    }
+      case "SELECT_OPTION": {
+        if (recognized.optionLetter) {
+          this.selectExamOption(recognized.optionLetter);
+        }
+        return;
+      }
 
-    // Option C
-    if (
-      /(?:विकल्प\s+(?:सी|c|3)|तीसरा\s+विकल्प|option\s+(?:c|3|three|सी)|vikalp\s+(?:c|3|see)|^option\s+c$|^विकल्प\s+सी$|^सी$|^c$)/i.test(input)
-    ) {
-      this.selectExamOption("C");
-      return;
-    }
+      case "SUBMIT_EXAM": {
+        this.dispatchExamAction("submit");
+        const submitBtn = document.querySelector<HTMLElement>(
+          'button[aria-label*="Submit" i], button:has-text("Submit"), button:has-text("सबमिट करें"), button:has-text("परीक्षा जमा करें")'
+        );
+        if (submitBtn) submitBtn.click();
+        speak(isHi ? "परीक्षा जमा की जा रही है" : "Submitting examination", { langOverride: isHi ? "hi-IN" : "en-US" });
+        return;
+      }
 
-    // Option D
-    if (
-      /(?:विकल्प\s+(?:डी|d|4)|चौथा\s+विकल्प|option\s+(?:d|4|four|डी)|vikalp\s+(?:d|4|dee)|^option\s+d$|^विकल्प\s+डी$|^डी$|^d$)/i.test(input)
-    ) {
-      this.selectExamOption("D");
-      return;
-    }
+      case "SWITCH_TO_HINDI": {
+        this.switchLanguage("hi");
+        return;
+      }
 
-    // Submit Exam: "परीक्षा जमा करें" / "pariksha jama kare"
-    if (
-      /(?:submit\s+exam|submit\s+test|finish\s+exam|pariksha\s+jama\s+kare|pariksha\s+jama\s+karo|jama\s+kare|jama\s+karo|परीक्षा\s+जमा\s+करें|परीक्षा\s+जमा\s+करो|परीक्षा\s+सबमिट\s+करें|सबमिट\s+करें|सबमिट\s+करो|सबमिट)/i.test(input)
-    ) {
-      this.dispatchExamAction("submit");
-      const submitBtn = document.querySelector<HTMLElement>(
-        'button[aria-label*="Submit" i], button:has-text("Submit"), button:has-text("सबमिट करें"), button:has-text("परीक्षा जमा करें")'
-      );
-      if (submitBtn) submitBtn.click();
-      speak(isHi ? "परीक्षा जमा की जा रही है" : "Submitting examination", { langOverride: isHi ? "hi-IN" : "en-US" });
-      return;
+      case "SWITCH_TO_ENGLISH": {
+        this.switchLanguage("en");
+        return;
+      }
+
+      default:
+        break;
     }
 
     // 3. CONVERSATIONAL YES / CONFIRM / SELECT / SURE / HAAN

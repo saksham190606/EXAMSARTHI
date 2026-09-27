@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseVoiceCommand, ParsedCommand, CommandLanguage } from '@/lib/voice/voiceParser';
+import { classifyIntentLocally, playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 import { ExamActions, ExamState, announceToScreenReader } from '@/lib/useExamEngine';
 import { CandidateQuestion, getQuestionType, isQuestionAnswered } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
@@ -638,6 +639,7 @@ export function useVoiceMode({
 
     // Adapt recognition locale if clear language detected
     if (cmd.type !== 'UNKNOWN') {
+      playVoiceFeedbackChime();
       consecutiveFailuresRef.current = 0;
       if (cmd.detectedLanguage === 'hi' && currentLocaleRef.current !== 'hi-IN') {
         currentLocaleRef.current = 'hi-IN';
@@ -647,6 +649,105 @@ export function useVoiceMode({
         if (recognitionRef.current) recognitionRef.current.lang = 'en-IN';
       }
     } else {
+      // Check fallback intent classifier (keyword/fuzzy) before failing
+      const fallbackResult = classifyIntentLocally(transcript);
+      if (fallbackResult.intent !== 'UNKNOWN') {
+        playVoiceFeedbackChime();
+        consecutiveFailuresRef.current = 0;
+
+        switch (fallbackResult.intent) {
+          case 'NAVIGATE_BACK': {
+            const feedbackText = isHindi ? 'पिछले प्रश्न पर जा रहे हैं' : 'Going back';
+            announceToScreenReader(feedbackText);
+            setLastActionFeedback(`✓ ${feedbackText}`);
+            actions.goToPrevious();
+            speak(feedbackText, { langOverride: targetLang, onEnd: () => startListening() });
+            return;
+          }
+          case 'NEXT_QUESTION': {
+            const feedbackText = isHindi ? 'अगला प्रश्न' : 'Next question';
+            announceToScreenReader(feedbackText);
+            setLastActionFeedback(`✓ ${feedbackText}`);
+            actions.goToNext();
+            speak(feedbackText, { langOverride: targetLang, onEnd: () => startListening() });
+            return;
+          }
+          case 'PREVIOUS_QUESTION': {
+            const feedbackText = isHindi ? 'पिछला प्रश्न' : 'Previous question';
+            announceToScreenReader(feedbackText);
+            setLastActionFeedback(`✓ ${feedbackText}`);
+            actions.goToPrevious();
+            speak(feedbackText, { langOverride: targetLang, onEnd: () => startListening() });
+            return;
+          }
+          case 'CLEAR_RESPONSE': {
+            if (actions.setAnswer) actions.setAnswer(currentQuestion.id, "");
+            actions.selectAnswer(currentQuestion.id, "");
+            const confirmClear = isHindi ? 'उत्तर हटा दिया गया।' : 'Response cleared.';
+            setLastActionFeedback(`✓ ${confirmClear}`);
+            announceToScreenReader(confirmClear);
+            speak(confirmClear, { langOverride: targetLang, onEnd: () => startListening() });
+            return;
+          }
+          case 'DESCRIBE_DIAGRAM': {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
+                detail: { action: 'describe-diagram' }
+              }));
+            }
+            const confirmMsg = isHindi ? 'चित्र का विश्लेषण किया जा रहा है।' : 'Analyzing diagram.';
+            speak(confirmMsg, { langOverride: targetLang, onEnd: () => startListening() });
+            return;
+          }
+          case 'START_EXAM':
+          case 'START_PRACTICE': {
+            if (onStartExam) {
+              const confirmMsg = isHindi ? 'परीक्षा शुरू की जा रही है।' : 'Starting test session.';
+              speak(confirmMsg, { langOverride: targetLang, onEnd: () => onStartExam() });
+              return;
+            }
+            break;
+          }
+          case 'NAVIGATE_DASHBOARD': {
+            speak(isHindi ? 'डैशबोर्ड पर जा रहे हैं' : 'Navigating to Dashboard', {
+              langOverride: targetLang,
+              onEnd: () => { window.location.href = '/dashboard'; }
+            });
+            return;
+          }
+          case 'NAVIGATE_PRACTICE': {
+            speak(isHindi ? 'प्रैक्टिस सेक्शन खोला जा रहा है' : 'Opening Practice section', {
+              langOverride: targetLang,
+              onEnd: () => { window.location.href = '/practice'; }
+            });
+            return;
+          }
+          case 'NAVIGATE_EXAMS': {
+            speak(isHindi ? 'परीक्षा हब खोला जा रहा है' : 'Opening Exams Hub', {
+              langOverride: targetLang,
+              onEnd: () => { window.location.href = '/exam'; }
+            });
+            return;
+          }
+          case 'NAVIGATE_RESULTS': {
+            speak(isHindi ? 'परिणाम देखा जा रहा है' : 'Viewing Results', {
+              langOverride: targetLang,
+              onEnd: () => { window.location.href = '/results'; }
+            });
+            return;
+          }
+          case 'NAVIGATE_SETTINGS': {
+            speak(isHindi ? 'सेटिंग्स खोली जा रही है' : 'Opening Settings', {
+              langOverride: targetLang,
+              onEnd: () => { window.location.href = '/settings'; }
+            });
+            return;
+          }
+          default:
+            break;
+        }
+      }
+
       consecutiveFailuresRef.current++;
       // Controlled bilingual fallback: after 2 failures, toggle locale for next cycle
       if (consecutiveFailuresRef.current >= 2) {

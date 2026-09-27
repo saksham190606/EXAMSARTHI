@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { classifyIntentLocally, playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 
 // Deal with browser prefixes for SpeechRecognition
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,10 +130,55 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
 
     // Exam controls
     if (/submit(?:\s*exam)?/i.test(transcript) && !isSubmitDialogOpen) {
+      playVoiceFeedbackChime();
       onSubmitExam();
       onFeedback('Submission confirmation opened. Are you sure you want to submit the exam?');
       setStatusText('Command recognized: Submit exam');
       return;
+    }
+
+    // Intelligent local intent parser fallback (supports Hindi / bilingual / fuzzy commands)
+    const classified = classifyIntentLocally(transcript);
+    if (classified.intent !== 'UNKNOWN') {
+      playVoiceFeedbackChime();
+      switch (classified.intent) {
+        case 'NEXT_QUESTION':
+          onNext();
+          onFeedback('Next question.');
+          setStatusText('Command recognized: Next question');
+          return;
+        case 'PREVIOUS_QUESTION':
+        case 'NAVIGATE_BACK':
+          onPrev();
+          onFeedback('Previous question.');
+          setStatusText('Command recognized: Previous question');
+          return;
+        case 'SUBMIT_EXAM':
+          if (!isSubmitDialogOpen) {
+            onSubmitExam();
+            onFeedback('Submission confirmation opened. Are you sure you want to submit the exam?');
+            setStatusText('Command recognized: Submit exam');
+            return;
+          }
+          break;
+        case 'NAVIGATE_DASHBOARD':
+          if (typeof window !== 'undefined') window.location.href = '/dashboard';
+          return;
+        case 'NAVIGATE_PRACTICE':
+          if (typeof window !== 'undefined') window.location.href = '/practice';
+          return;
+        case 'NAVIGATE_EXAMS':
+          if (typeof window !== 'undefined') window.location.href = '/exam';
+          return;
+        case 'NAVIGATE_RESULTS':
+          if (typeof window !== 'undefined') window.location.href = '/results';
+          return;
+        case 'NAVIGATE_SETTINGS':
+          if (typeof window !== 'undefined') window.location.href = '/settings';
+          return;
+        default:
+          break;
+      }
     }
 
     // Unknown command
