@@ -30,6 +30,7 @@ import { useTranslation } from "@/lib/i18n"
 import { useAuth } from "@/hooks/useAuth"
 import { voiceEngine } from "@/lib/accessibility/voice-companion"
 
+import { NavigationTabs } from "@/components/layout/Navbar"
 import { cn } from "@/lib/utils"
 
 export function Header() {
@@ -41,15 +42,6 @@ export function Header() {
 
   const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Candidate'
   const candidateInitial = candidateName.charAt(0).toUpperCase()
-
-  const navItems = [
-    { href: "/dashboard", label: t('navDashboard') },
-    { href: "/practice", label: t('navPractice') },
-    { href: "/exam", label: t('navExams') },
-    { href: "/results", label: t('navResults') },
-    { href: "/settings", label: t('navSettings') },
-  ]
-
   const handleSignOut = async () => {
     await signOut()
     router.push('/login')
@@ -78,29 +70,7 @@ export function Header() {
             </span>
           </Link>
           
-          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1 text-[14px] font-bold tracking-[0.144px] ml-4">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  {...(isActive ? { "aria-current": "page" } : {})}
-                  className={cn(
-                    "relative py-2 px-3 text-sm transition-colors duration-150 rounded-[2px]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-                    "motion-safe:active:scale-[0.97] motion-reduce:transform-none",
-                    "after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:h-[2px] after:bg-[#ffed00] after:transition-all after:duration-150 after:ease-out",
-                    isActive
-                      ? "text-white font-bold after:w-full"
-                      : "text-white/70 font-medium hover:text-white after:w-0 hover:after:w-full"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </nav>
+          <NavigationTabs className="hidden md:flex ml-4" />
         </div>
 
         <div className="flex items-center gap-3">
