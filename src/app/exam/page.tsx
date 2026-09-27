@@ -511,7 +511,7 @@ function ActiveExamSession({
                   <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
                   <span className="size-2 rounded-full bg-[#ffed00]" />
                 </span>
-                <span>{language === 'hi' ? 'वॉइस नेविगेशन: सक्रिय (सुन रहा है)' : 'Voice Navigation: Active (Listening)'}</span>
+                <span>{language === 'hi' ? "🎙️ सुन रहा है | बोलें 'A', 'B', 'अगला', आदि" : "🎙️ Listening | Saying 'A', 'B', 'Next', etc."}</span>
               </button>
             ) : (
               <button

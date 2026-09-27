@@ -5,7 +5,6 @@ import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { ExamState, announceToScreenReader } from '@/lib/useExamEngine';
 import { CandidateQuestion, getQuestionType, isQuestionAnswered } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { getTranslation } from '@/lib/i18n';
 import { formatSpeechPronunciation, getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 
 export type VoiceStatus = 
@@ -55,6 +54,7 @@ export function useVoiceMode({
   const language = useAccessibilityStore((s) => s.language);
   const voiceSpeed = useAccessibilityStore((s) => s.voiceSpeed);
 
+  // Voice mode is ON BY DEFAULT for hands-free examination
   const [isActive, setIsActive] = useState(true);
   const [status, setStatus] = useState<VoiceStatus>('Listening');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
@@ -64,15 +64,18 @@ export function useVoiceMode({
   // Pending action for two-step confirmation (e.g., submit)
   const [pendingAction, setPendingAction] = useState<ParsedCommand | null>(null);
 
-  // Stale state prevention refs
+  // 1. REFS TO ELIMINATE REACT STALE CLOSURES
+  const currentIndexRef = useRef<number>(state.currentQuestionIndex);
   const currentQuestionRef = useRef<CandidateQuestion>(currentQuestion);
+  const optionsRef = useRef<any[]>(currentQuestion?.options || []);
+  const questionsRef = useRef<CandidateQuestion[] | undefined>(questions);
   const actionsRef = useRef(actions);
   const stateRef = useRef(state);
-  const questionsRef = useRef(questions);
   const languageRef = useRef(language);
   const totalQuestionsRef = useRef(totalQuestions);
   const activeSectionRef = useRef(activeSection);
   const sectionTimeRemainingRef = useRef(sectionTimeRemaining);
+  const userManuallyMutedRef = useRef(false);
   const handleCommandRef = useRef<(cmd: string) => void>(() => {});
 
   const recognitionRef = useRef<any>(null);
@@ -83,21 +86,23 @@ export function useVoiceMode({
   const statusRef = useRef<VoiceStatus>('Listening');
   const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
   const speechWatchdogRef = useRef<NodeJS.Timeout | null>(null);
-  const lastReadQuestionIndexRef = useRef<number | null>(null);
-  const consecutiveFailuresRef = useRef<number>(0);
+  const lastReadIndexRef = useRef<number | null>(null);
+  const hasInitializedMountRef = useRef<boolean>(false);
 
-  // Synchronize mutable refs with latest React props and store state
+  // Synchronize mutable refs on every state/prop change
+  useEffect(() => {
+    currentIndexRef.current = state.currentQuestionIndex;
+    stateRef.current = state;
+  }, [state]);
+
   useEffect(() => {
     currentQuestionRef.current = currentQuestion;
+    optionsRef.current = currentQuestion?.options || [];
   }, [currentQuestion]);
 
   useEffect(() => {
     actionsRef.current = actions;
   }, [actions]);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
 
   useEffect(() => {
     questionsRef.current = questions;
@@ -124,7 +129,6 @@ export function useVoiceMode({
     statusRef.current = status;
   }, [status]);
 
-  // Clean up any pending restart timer
   const clearRestartTimer = useCallback(() => {
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
@@ -139,7 +143,6 @@ export function useVoiceMode({
     }
   }, []);
 
-  // Select appropriate voice based on target language
   const getPreferredVoice = useCallback((targetLang: 'hi' | 'en') => {
     return getNaturalFemaleVoice(targetLang);
   }, []);
@@ -156,10 +159,10 @@ export function useVoiceMode({
     }
   }, [clearRestartTimer]);
 
-  // Safely start speech recognition (only if active and not speaking)
+  // Safely start speech recognition (only if active, not manually muted, and not speaking)
   const startListening = useCallback(() => {
     clearRestartTimer();
-    if (!recognitionRef.current || !isActiveRef.current || isSpeakingRef.current) {
+    if (!recognitionRef.current || !isActiveRef.current || userManuallyMutedRef.current || isSpeakingRef.current) {
       return;
     }
 
@@ -175,23 +178,23 @@ export function useVoiceMode({
     }
   }, [clearRestartTimer]);
 
-  // Speech synthesis wrapper with echo-cancellation and watchdog timer to prevent dropped onend hangs
+  // Speech synthesis wrapper: cancels audio first, pauses listener, and auto-resumes after speech ends
   const speak = useCallback((text: string, options?: { onEnd?: () => void; langOverride?: 'hi' | 'en' }) => {
     if (!synthesisRef.current || typeof window === 'undefined') return;
 
-    // Immediately stop recognition before audio output begins (prevents acoustic feedback)
+    // 1. Immediately pause recognition before TTS audio output to avoid acoustic feedback
     stopListening();
     clearSpeechWatchdog();
     isSpeakingRef.current = true;
     setStatus('Speaking');
 
     try {
-      synthesisRef.current.cancel(); // Flush any pending utterances
+      synthesisRef.current.cancel(); // Flush ongoing audio first
     } catch (e) {}
 
     const utterance = new SpeechSynthesisUtterance(formatSpeechPronunciation(text));
     
-    // Set speech rate from user preference
+    // Set speech rate
     if (voiceSpeed === 'slow') utterance.rate = 0.85;
     else if (voiceSpeed === 'fast') utterance.rate = 1.2;
     else utterance.rate = 1.0;
@@ -206,17 +209,17 @@ export function useVoiceMode({
 
     utteranceRef.current = utterance;
     if (typeof window !== 'undefined') {
-      (window as any).__voiceModeUtterance = utterance;
+      (window as any).__activeUtterance = utterance;
     }
 
-    // Safety watchdog timer: SpeechSynthesisUtterance in Chrome/Edge can occasionally drop onend
-    const estimatedDurationMs = Math.min(12000, Math.max(3000, (text.length / 12) * 1000 + 2000));
+    // Safety watchdog: prevent Chrome SpeechSynthesis hang from permanently dropping mic capture
+    const estimatedDurationMs = Math.min(14000, Math.max(3000, (text.length / 12) * 1000 + 2000));
     speechWatchdogRef.current = setTimeout(() => {
       if (isSpeakingRef.current) {
-        console.warn('[VoiceMode] Speech watchdog timeout expired - resetting speech state to listening');
+        console.warn('[VoiceMode] Speech watchdog timeout expired - resetting speech state');
         isSpeakingRef.current = false;
         utteranceRef.current = null;
-        if (isActiveRef.current) {
+        if (isActiveRef.current && !userManuallyMutedRef.current) {
           startListening();
         }
       }
@@ -226,20 +229,21 @@ export function useVoiceMode({
       clearSpeechWatchdog();
       utteranceRef.current = null;
       if (typeof window !== 'undefined') {
-        (window as any).__voiceModeUtterance = null;
+        (window as any).__activeUtterance = null;
       }
       isSpeakingRef.current = false;
-      // Allow audio buffer to flush (300ms safety buffer) before reopening microphone
+
+      // Allow 200ms audio buffer to flush before reopening recognition
       clearRestartTimer();
       restartTimerRef.current = setTimeout(() => {
-        if (isActiveRef.current && !isSpeakingRef.current) {
+        if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
           if (options?.onEnd) {
             options.onEnd();
           } else {
             startListening();
           }
         }
-      }, 300);
+      }, 200);
     };
 
     utterance.onend = handleSpeechEnd;
@@ -248,10 +252,10 @@ export function useVoiceMode({
       clearSpeechWatchdog();
       utteranceRef.current = null;
       if (typeof window !== 'undefined') {
-        (window as any).__voiceModeUtterance = null;
+        (window as any).__activeUtterance = null;
       }
       isSpeakingRef.current = false;
-      if (isActiveRef.current && !isSpeakingRef.current) {
+      if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
         startListening();
       }
     };
@@ -265,162 +269,57 @@ export function useVoiceMode({
       clearSpeechWatchdog();
       utteranceRef.current = null;
       isSpeakingRef.current = false;
-      if (isActiveRef.current) {
+      if (isActiveRef.current && !userManuallyMutedRef.current) {
         startListening();
       }
     }
   }, [voiceSpeed, getPreferredVoice, stopListening, startListening, clearRestartTimer, clearSpeechWatchdog]);
 
-  // Read current question out loud
-  const readCurrentQuestion = useCallback((langPref?: 'hi' | 'en') => {
-    const curQ = currentQuestionRef.current;
+  // 2. DEDICATED HELPER: readQuestion(index)
+  // Cancels ongoing audio, formats standard script, pauses recognition, and auto-resumes listening
+  const readQuestion = useCallback((index: number, options?: { langOverride?: 'hi' | 'en' }) => {
+    const questionsList = questionsRef.current;
+    const targetQ = (questionsList && questionsList[index]) ? questionsList[index] : currentQuestionRef.current;
+    if (!targetQ) return;
+
     const curLang = languageRef.current;
-    const curState = stateRef.current;
-    const totalQ = totalQuestionsRef.current;
-    if (!curQ) return;
+    const isHindi = options?.langOverride ? options.langOverride === 'hi' : curLang === 'hi';
+    const qNum = index + 1;
+    const qType = getQuestionType(targetQ);
 
-    const isHindi = langPref ? langPref === 'hi' : curLang === 'hi';
-    const qNum = curState.currentQuestionIndex + 1;
-    const qType = getQuestionType(curQ);
+    let speechScript = '';
 
-    let promptText = '';
-
-    if (qType === 'single-choice') {
-      const opts = (curQ as any).options || [];
-      const optionsText = opts
-        .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
-        .join(' ');
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}। विकल्प: ${optionsText} आप A, B, C या D कह सकते हैं।`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}. Options: ${optionsText} You can say Option A, B, C, or D.`;
-    } else if (qType === 'multiple-choice') {
-      const opts = (curQ as any).options || [];
-      const optionsText = opts
-        .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
-        .join(' ');
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। सभी सही उत्तर चुनें। ${curQ.text}। विकल्प: ${optionsText}`
-        : `Question ${qNum} of ${totalQ}. Select all correct answers. ${curQ.text}. Options: ${optionsText}`;
-    } else if (qType === 'true-false') {
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}। आप सत्य या असत्य कह सकते हैं।`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}. You can answer true or false.`;
-    } else if (qType === 'short-answer') {
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}। कृपया अपना उत्तर बोलें।`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}. Please speak your answer.`;
-    } else if (qType === 'fill-blank') {
-      const speechText = curQ.text.replace(/_{2,}/g, isHindi ? 'रिक्त स्थान' : 'blank');
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। वाक्य पूरा करें। ${speechText}। कृपया अपना उत्तर बोलें।`
-        : `Question ${qNum} of ${totalQ}. Complete the sentence. ${speechText}. Please speak your answer.`;
-    } else {
-      promptText = isHindi
-        ? `प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}।`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}.`;
-    }
-
-    speak(promptText, {
-      langOverride: isHindi ? 'hi' : 'en',
-      onEnd: () => startListening()
-    });
-  }, [speak, startListening]);
-
-  // Read everything (question + all options completely)
-  const readEverything = useCallback((langPref?: 'hi' | 'en') => {
-    const curQ = currentQuestionRef.current;
-    const curLang = languageRef.current;
-    const curState = stateRef.current;
-    const totalQ = totalQuestionsRef.current;
-    if (!curQ) return;
-
-    const isHindi = langPref ? langPref === 'hi' : curLang === 'hi';
-    const qNum = curState.currentQuestionIndex + 1;
-    const qType = getQuestionType(curQ);
-
-    let promptText = '';
     if (qType === 'single-choice' || qType === 'multiple-choice') {
-      const opts = (curQ as any).options || [];
+      const opts = (targetQ as any).options || [];
       const optionsText = opts
         .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
         .join(' ');
-      promptText = isHindi
-        ? `प्रश्न ${qNum} का ${totalQ}। ${curQ.text}। सभी विकल्प हैं: ${optionsText}`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}. All options are: ${optionsText}`;
+      
+      speechScript = isHindi
+        ? `प्रश्न ${qNum}: ${targetQ.text}। ${optionsText} ${qType === 'single-choice' ? 'आप A, B, C या D बोल सकते हैं।' : ''}`
+        : `Question ${qNum}: ${targetQ.text}. ${optionsText} ${qType === 'single-choice' ? 'You can say Option A, B, C, or D.' : ''}`;
     } else if (qType === 'true-false') {
-      promptText = isHindi
-        ? `प्रश्न ${qNum} का ${totalQ}। ${curQ.text}। विकल्प: सत्य या असत्य।`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}. Options: True or False.`;
+      speechScript = isHindi
+        ? `प्रश्न ${qNum}: ${targetQ.text}। विकल्प: सत्य या असत्य।`
+        : `Question ${qNum}: ${targetQ.text}. Options: True or False.`;
     } else {
-      promptText = isHindi
-        ? `प्रश्न ${qNum} का ${totalQ}। ${curQ.text}`
-        : `Question ${qNum} of ${totalQ}. ${curQ.text}`;
+      speechScript = isHindi
+        ? `प्रश्न ${qNum}: ${targetQ.text}।`
+        : `Question ${qNum}: ${targetQ.text}.`;
     }
 
-    speak(promptText, {
+    lastReadIndexRef.current = index;
+
+    speak(speechScript, {
       langOverride: isHindi ? 'hi' : 'en',
-      onEnd: () => startListening()
+      onEnd: () => {
+        startListening();
+      }
     });
   }, [speak, startListening]);
 
-  // Initialize Speech APIs once on mount and guard against browser mismatches
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    synthesisRef.current = window.speechSynthesis;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-      recognition.lang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
-      recognitionRef.current = recognition;
-
-      if (statusRef.current === 'Unsupported' || statusRef.current === 'Ready') {
-        setStatus('Ready');
-      }
-    } else {
-      setStatus('Unsupported');
-    }
-
-    return () => {
-      clearRestartTimer();
-      clearSpeechWatchdog();
-      if (synthesisRef.current) {
-        try { synthesisRef.current.cancel(); } catch (e) {}
-      }
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (e) {}
-      }
-    };
-  }, [clearRestartTimer, clearSpeechWatchdog]);
-
-  // Update recognition language dynamically based on platform's active language setting
-  useEffect(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-US';
-    }
-  }, [language]);
-
-  // Deactivate Voice Mode cleanly
-  const deactivateVoiceMode = useCallback(() => {
-    setIsActive(false);
-    isActiveRef.current = false;
-    lastReadQuestionIndexRef.current = null;
-    setPendingAction(null);
-    setLastActionFeedback(null);
-    clearRestartTimer();
-    clearSpeechWatchdog();
-    try { synthesisRef.current?.cancel(); } catch (e) {}
-    stopListening();
-    setStatus('Ready');
-    setErrorMessage(null);
-  }, [stopListening, clearRestartTimer, clearSpeechWatchdog]);
-
-  // Direct option selection and answer locking helper (avoids stale closures via refs)
-  const handleOptionSelect = useCallback((optionIndex: number) => {
+  // Option selection action executor (guarantees accurate state via refs)
+  const handleSelectOption = useCallback((optionIndex: number) => {
     const curQ = currentQuestionRef.current;
     const curActions = actionsRef.current;
     const curLang = languageRef.current;
@@ -442,20 +341,16 @@ export function useVoiceMode({
           curActions.selectAnswer(curQ.id, option.id);
         }
 
-        // Immediate visual & custom event notification
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
             detail: { action: 'select-option', index: optionIndex, letter }
           }));
         }
 
-        const confirmMsg = isHindi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`;
-        setLastActionFeedback(`✓ ${confirmMsg}`);
-        announceToScreenReader(confirmMsg);
-        speak(confirmMsg, { langOverride: targetLang, onEnd: () => startListening() });
-      } else {
-        const notAvail = isHindi ? `विकल्प ${letter} उपलब्ध नहीं है।` : `Option ${letter} is not available.`;
-        speak(notAvail, { langOverride: targetLang, onEnd: () => startListening() });
+        const confirmText = isHindi ? `${letter} चुना गया` : `Selected ${letter}`;
+        setLastActionFeedback(`✓ ${confirmText}`);
+        announceToScreenReader(confirmText);
+        speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
       }
     } else if (qType === 'single-choice') {
       const opts = (curQ as any)?.options || [];
@@ -466,20 +361,16 @@ export function useVoiceMode({
         }
         curActions.selectAnswer(curQ.id, option.id);
 
-        // Immediate visual & custom event notification
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
             detail: { action: 'select-option', index: optionIndex, letter }
           }));
         }
 
-        const confirmMsg = isHindi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`;
-        setLastActionFeedback(`✓ ${confirmMsg}`);
-        announceToScreenReader(confirmMsg);
-        speak(confirmMsg, { langOverride: targetLang, onEnd: () => startListening() });
-      } else {
-        const notAvail = isHindi ? `विकल्प ${letter} उपलब्ध नहीं है।` : `Option ${letter} is not available.`;
-        speak(notAvail, { langOverride: targetLang, onEnd: () => startListening() });
+        const confirmText = isHindi ? `${letter} चुना गया` : `Selected ${letter}`;
+        setLastActionFeedback(`✓ ${confirmText}`);
+        announceToScreenReader(confirmText);
+        speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
       }
     } else if (qType === 'true-false') {
       // 0 = True, 1 = False
@@ -495,368 +386,107 @@ export function useVoiceMode({
         }));
       }
 
-      const confirmMsg = boolVal
+      const confirmText = boolVal
         ? (isHindi ? 'सत्य चुना गया' : 'True selected')
         : (isHindi ? 'असत्य चुना गया' : 'False selected');
-      setLastActionFeedback(`✓ ${confirmMsg}`);
-      announceToScreenReader(confirmMsg);
-      speak(confirmMsg, { langOverride: targetLang, onEnd: () => startListening() });
+      setLastActionFeedback(`✓ ${confirmText}`);
+      announceToScreenReader(confirmText);
+      speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+    }
+  }, [speak, startListening]);
+
+  // Navigation action handlers
+  const handleNextQuestion = useCallback(() => {
+    const curActions = actionsRef.current;
+    const curIdx = currentIndexRef.current;
+    const totalQ = totalQuestionsRef.current;
+    const isHindi = languageRef.current === 'hi';
+    const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
+
+    if (curIdx < totalQ - 1) {
+      setLastActionFeedback(null);
+      curActions.goToNext();
     } else {
       speak(
-        isHindi ? 'कृपया अपना उत्तर बोलें।' : 'Please speak your answer.',
+        isHindi ? 'आप अंतिम प्रश्न पर हैं।' : 'You are on the last question.',
         { langOverride: targetLang, onEnd: () => startListening() }
       );
     }
   }, [speak, startListening]);
 
-  // Command execution router for system/navigation/reading controls
-  const executeCommand = useCallback((cmd: ParsedCommand) => {
+  const handlePrevQuestion = useCallback(() => {
     const curActions = actionsRef.current;
-    const curState = stateRef.current;
-    const curQ = currentQuestionRef.current;
-    const totalQ = totalQuestionsRef.current;
-    const curLang = languageRef.current;
-    const actSec = activeSectionRef.current;
-    const secTime = sectionTimeRemainingRef.current;
-
-    const isHindi = cmd.detectedLanguage === 'hi' || (cmd.detectedLanguage === 'mixed' && curLang === 'hi');
+    const curIdx = currentIndexRef.current;
+    const isHindi = languageRef.current === 'hi';
     const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
 
-    switch (cmd.type) {
-      case 'NEXT':
-        setLastActionFeedback(null);
-        if (curState.currentQuestionIndex < totalQ - 1) {
-          curActions.goToNext();
-        } else {
-          speak(
-            isHindi ? 'आप अंतिम प्रश्न पर हैं।' : 'You are on the last question.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'PREVIOUS':
-        setLastActionFeedback(null);
-        if (curState.currentQuestionIndex > 0) {
-          curActions.goToPrevious();
-        } else {
-          speak(
-            isHindi ? 'आप पहले प्रश्न पर हैं।' : 'You are on the first question.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'NEXT_SECTION':
-        setLastActionFeedback(null);
-        if (curActions.goToNextSection) {
-          curActions.goToNextSection();
-          speak(
-            isHindi ? 'अगले सेक्शन पर जा रहे हैं।' : 'Advancing to the next section.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        } else {
-          speak(
-            isHindi ? 'इस परीक्षा में कोई अन्य सेक्शन नहीं है।' : 'This exam has no additional sections.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'CURRENT_SECTION':
-        setLastActionFeedback(null);
-        if (actSec) {
-          const secMins = Math.floor((secTime ?? 0) / 60);
-          const secSecs = (secTime ?? 0) % 60;
-          const qCountText = actSec.question_count ? ` इसमें ${actSec.question_count} प्रश्न हैं।` : '';
-          const qCountTextEn = actSec.question_count ? ` It has ${actSec.question_count} questions.` : '';
-          speak(
-            isHindi
-              ? `वर्तमान सेक्शन है ${actSec.name}।${qCountText} इसमें ${secMins} मिनट और ${secSecs} सेकंड का समय शेष है।`
-              : `Current section is ${actSec.name}.${qCountTextEn} It has ${secMins} minutes and ${secSecs} seconds remaining.`,
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        } else {
-          speak(
-            isHindi ? 'वर्तमान परीक्षा में अलग-अलग सेक्शन नहीं हैं।' : 'This exam has no separate sections.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'GOTO':
-        setLastActionFeedback(null);
-        const targetIndex = cmd.questionNumber - 1;
-        if (targetIndex >= 0 && targetIndex < totalQ) {
-          if (targetIndex === curState.currentQuestionIndex) {
-            readCurrentQuestion(targetLang);
-          } else {
-            curActions.goToQuestion(targetIndex);
-          }
-        } else {
-          speak(
-            isHindi ? `प्रश्न संख्या ${cmd.questionNumber} उपलब्ध नहीं है।` : `Question ${cmd.questionNumber} is not available.`,
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'TIME_LEFT':
-        const mins = Math.floor(curState.timeRemaining / 60);
-        const secs = curState.timeRemaining % 60;
-        speak(
-          isHindi
-            ? `आपके पास ${mins} मिनट और ${secs} सेकंड का समय शेष है।`
-            : `You have ${mins} minutes and ${secs} seconds remaining.`,
-          { langOverride: targetLang, onEnd: () => startListening() }
-        );
-        break;
-
-      case 'REPEAT':
-        readCurrentQuestion(targetLang);
-        break;
-
-      case 'READ_QUESTION':
-        if (curQ) {
-          speak(curQ.text, {
-            langOverride: targetLang,
-            onEnd: () => startListening()
-          });
-        }
-        break;
-
-      case 'READ_OPTIONS': {
-        if (!curQ) break;
-        const qType = getQuestionType(curQ);
-        if (qType === 'single-choice' || qType === 'multiple-choice') {
-          const opts = (curQ as any).options || [];
-          const optionsText = opts
-            .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
-            .join(' ');
-          speak(optionsText, {
-            langOverride: targetLang,
-            onEnd: () => startListening()
-          });
-        } else if (qType === 'true-false') {
-          speak(isHindi ? 'विकल्प: सत्य या असत्य।' : 'Options: True or False.', {
-            langOverride: targetLang,
-            onEnd: () => startListening()
-          });
-        } else {
-          speak(
-            isHindi ? 'यह एक टेक्स्ट उत्तर प्रश्न है, कोई विकल्प नहीं हैं। कृपया अपना उत्तर बोलें।' : 'This is a text answer question without options. Please speak your answer.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-      }
-
-      case 'READ_ALL':
-        readEverything(targetLang);
-        break;
-
-      case 'FLAG_QUESTION':
-        if (curQ && curActions.toggleFlag) {
-          const wasFlagged = curState.flagged.has(curQ.id);
-          curActions.toggleFlag(curQ.id);
-          speak(
-            wasFlagged 
-              ? (isHindi ? 'समीक्षा चिह्न हटा दिया गया।' : 'Review flag removed.')
-              : (isHindi ? 'प्रश्न समीक्षा के लिए चिह्नित किया गया।' : 'Question flagged for review.'),
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'START_EXAM':
-        if (onStartExam) {
-          onStartExam();
-        } else {
-          speak(
-            isHindi ? 'परीक्षा पहले से चल रही है।' : 'The exam is already in progress.',
-            { langOverride: targetLang, onEnd: () => startListening() }
-          );
-        }
-        break;
-
-      case 'ENABLE_VOICE':
-        speak(
-          isHindi ? 'सुन रहा हूँ।' : 'Listening.',
-          { langOverride: targetLang, onEnd: () => startListening() }
-        );
-        break;
-
-      case 'DISABLE_VOICE':
-        speak(
-          isHindi ? 'वॉइस मोड बंद किया गया।' : 'Voice mode disabled.',
-          {
-            langOverride: targetLang,
-            onEnd: () => deactivateVoiceMode()
-          }
-        );
-        break;
-
-      case 'SWITCH_TO_HINDI': {
-        useAccessibilityStore.getState().setLanguage('hi');
-        if (recognitionRef.current) {
-          recognitionRef.current.lang = 'hi-IN';
-        }
-        speak(
-          'भाषा हिंदी में बदल दी गई है। अब आप हिंदी में नेविगेट कर सकते हैं।',
-          { langOverride: 'hi', onEnd: () => startListening() }
-        );
-        break;
-      }
-
-      case 'SWITCH_TO_ENGLISH': {
-        useAccessibilityStore.getState().setLanguage('en');
-        if (recognitionRef.current) {
-          recognitionRef.current.lang = 'en-US';
-        }
-        speak(
-          'Language switched to English.',
-          { langOverride: 'en', onEnd: () => startListening() }
-        );
-        break;
-      }
-
-      case 'NAVIGATE': {
-        const targetPath = cmd.path;
-        speak(
-          isHindi ? `${cmd.labelHi} पर जा रहे हैं` : `Navigating to ${cmd.labelEn}`,
-          {
-            langOverride: targetLang,
-            onEnd: () => {
-              if (typeof window !== 'undefined') {
-                window.location.href = targetPath;
-              }
-            }
-          }
-        );
-        break;
-      }
-
-      case 'HELP': {
-        const helpText = isHindi
-          ? "आप 'विकल्प ए', 'विकल्प बी', 'अगला', 'पिछला' या 'दोबारा पढ़ो' बोल सकते हैं।"
-          : "You can say 'Option A', 'Option B', 'Next', 'Previous', or 'Repeat question'.";
-        speak(helpText, { langOverride: targetLang, onEnd: () => startListening() });
-        break;
-      }
-
-      case 'CLEAR_RESPONSE': {
-        if (curQ) {
-          if (curActions.setAnswer) {
-            curActions.setAnswer(curQ.id, "");
-          }
-          curActions.selectAnswer(curQ.id, "");
-          const confirmClear = isHindi ? 'उत्तर हटा दिया गया।' : 'Response cleared.';
-          setLastActionFeedback(`✓ ${confirmClear}`);
-          announceToScreenReader(confirmClear);
-          speak(confirmClear, { langOverride: targetLang, onEnd: () => startListening() });
-        }
-        break;
-      }
-
-      case 'DESCRIBE_DIAGRAM': {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
-            detail: { action: 'describe-diagram' }
-          }));
-        }
-        break;
-      }
-
-      case 'UNKNOWN': {
-        const errorMsg = isHindi
-          ? "आदेश समझ नहीं आया। 'अगला', 'पिछला' या 'विकल्प ए' बोलें।"
-          : "Command not recognized. Say 'Next', 'Previous', or an option like 'Option A'.";
-        setLastActionFeedback(errorMsg);
-        speak(errorMsg, { langOverride: targetLang, onEnd: () => startListening() });
-        break;
-      }
-
-      default:
-        startListening();
-        break;
+    if (curIdx > 0) {
+      setLastActionFeedback(null);
+      curActions.goToPrevious();
+    } else {
+      speak(
+        isHindi ? 'आप पहले प्रश्न पर हैं।' : 'You are on the first question.',
+        { langOverride: targetLang, onEnd: () => startListening() }
+      );
     }
-  }, [
-    speak, 
-    startListening, 
-    readCurrentQuestion, 
-    readEverything,
-    onStartExam,
-    deactivateVoiceMode
-  ]);
+  }, [speak, startListening]);
 
-  // Handle recognized transcript with high-priority direct option matching and fuzzy intent classification
-  const handleCommand = useCallback((transcript: string) => {
+  const handleClearAnswer = useCallback(() => {
     const curQ = currentQuestionRef.current;
     const curActions = actionsRef.current;
-    const curState = stateRef.current;
+    const isHindi = languageRef.current === 'hi';
+    const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
+
+    if (curQ) {
+      if (curActions.setAnswer) {
+        curActions.setAnswer(curQ.id, "");
+      }
+      curActions.selectAnswer(curQ.id, "");
+      const confirmClear = isHindi ? 'उत्तर हटा दिया गया।' : 'Response cleared.';
+      setLastActionFeedback(`✓ ${confirmClear}`);
+      announceToScreenReader(confirmClear);
+      speak(confirmClear, { langOverride: targetLang, onEnd: () => startListening() });
+    }
+  }, [speak, startListening]);
+
+  // 4. COMPREHENSIVE FUZZY KEYWORD MATCHING
+  const handleCommand = useCallback((transcript: string) => {
+    // Ignore results if system TTS is speaking
+    if (isSpeakingRef.current) return;
+
+    // Normalize transcript: lowercase, trim, strip punctuation
+    const text = transcript
+      .toLowerCase()
+      .trim()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+
+    if (!text) return;
+
     const curLang = languageRef.current;
     const isHindi = curLang === 'hi';
     const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
 
-    if (!curQ) return;
-    const qType = getQuestionType(curQ);
-
-    const clean = transcript.trim().toLowerCase().replace(/[.,!?;:]/g, '');
-
-    // 1. HIGH-PRIORITY DIRECT OPTION MATCHING (English, Hindi, Hinglish, Digits, Devanagari)
-    // - Match "A", "Option A", "One", "First", "ए", "विकल्प ए", "पहला": -> handleOptionSelect(0)
-    // - Match "B", "Option B", "Two", "Second", "बी", "विकल्प बी", "दूसरा": -> handleOptionSelect(1)
-    // - Match "C", "Option C", "Three", "Third", "सी", "विकल्प सी", "तीसरा": -> handleOptionSelect(2)
-    // - Match "D", "Option D", "Four", "Fourth", "डी", "विकल्प डी", "चौथा": -> handleOptionSelect(3)
-    const optionAMatches = ["a", "option a", "one", "first", "1", "ए", "विकल्प ए", "पहला", "ऑप्शन ए", "एक", "option ek"];
-    const optionBMatches = ["b", "option b", "two", "second", "2", "बी", "विकल्प बी", "दूसरा", "ऑप्शन बी", "दो", "option do"];
-    const optionCMatches = ["c", "option c", "three", "third", "3", "सी", "विकल्प सी", "तीसरा", "ऑप्शन सी", "तीन", "option teen"];
-    const optionDMatches = ["d", "option d", "four", "fourth", "4", "डी", "विकल्प डी", "चौथा", "ऑप्शन डी", "चार", "option char"];
-
-    if (optionAMatches.includes(clean)) {
-      playVoiceFeedbackChime();
-      handleOptionSelect(0);
-      return;
-    }
-    if (optionBMatches.includes(clean)) {
-      playVoiceFeedbackChime();
-      handleOptionSelect(1);
-      return;
-    }
-    if (optionCMatches.includes(clean)) {
-      playVoiceFeedbackChime();
-      handleOptionSelect(2);
-      return;
-    }
-    if (optionDMatches.includes(clean)) {
-      playVoiceFeedbackChime();
-      handleOptionSelect(3);
-      return;
-    }
-
-    // 2. Intelligent Exam Intent Matcher (fuzzy + phonetic)
-    const examMatch = matchExamIntent(transcript, !!pendingAction);
-
-    // Two-step confirmation active (e.g. submit exam verbal confirmation)
+    // Two-step confirmation active (e.g., submit verbal confirmation)
     if (pendingAction) {
       if (
-        examMatch.type === 'CONFIRM_SUBMIT' || 
-        /^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि)/i.test(clean)
+        /^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि)/i.test(text)
       ) {
         playVoiceFeedbackChime();
         setPendingAction(null);
         if (onCloseSubmitDialog) onCloseSubmitDialog();
-        curActions.submitExam();
+        actionsRef.current.submitExam();
         const confMsg = isHindi ? 'परीक्षा सबमिट कर दी गई है।' : 'Exam submitted.';
         setLastActionFeedback(`✓ ${confMsg}`);
         speak(confMsg, {
           langOverride: targetLang,
-          onEnd: () => deactivateVoiceMode()
+          onEnd: () => {
+            setIsActive(false);
+            isActiveRef.current = false;
+          }
         });
         return;
       } else if (
-        examMatch.type === 'CANCEL_SUBMIT' || 
-        /^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो)/i.test(clean)
+        /^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो)/i.test(text)
       ) {
         playVoiceFeedbackChime();
         setPendingAction(null);
@@ -874,523 +504,399 @@ export function useVoiceMode({
       }
     }
 
+    const words = text.split(/\s+/);
+
+    // OPTION A
+    if (
+      text === 'a' || 
+      text === 'option a' || 
+      text === '1' || 
+      text === 'option 1' || 
+      text.includes('विकल्प ए') || 
+      text.includes('पहला') || 
+      words.includes('a') ||
+      text === 'ए' ||
+      text === 'एक'
+    ) {
+      playVoiceFeedbackChime();
+      handleSelectOption(0);
+      return;
+    }
+
+    // OPTION B
+    if (
+      text === 'b' || 
+      text === 'option b' || 
+      text === '2' || 
+      text === 'option 2' || 
+      text.includes('विकल्प बी') || 
+      text.includes('दूसरा') || 
+      words.includes('b') ||
+      text === 'बी' ||
+      text === 'दो'
+    ) {
+      playVoiceFeedbackChime();
+      handleSelectOption(1);
+      return;
+    }
+
+    // OPTION C
+    if (
+      text === 'c' || 
+      text === 'option c' || 
+      text === '3' || 
+      text === 'option 3' || 
+      text.includes('विकल्प सी') || 
+      text.includes('तीसरा') || 
+      words.includes('c') ||
+      text === 'सी' ||
+      text === 'तीन'
+    ) {
+      playVoiceFeedbackChime();
+      handleSelectOption(2);
+      return;
+    }
+
+    // OPTION D
+    if (
+      text === 'd' || 
+      text === 'option d' || 
+      text === '4' || 
+      text === 'option 4' || 
+      text.includes('विकल्प डी') || 
+      text.includes('चौथा') || 
+      words.includes('d') ||
+      text === 'डी' ||
+      text === 'चार'
+    ) {
+      playVoiceFeedbackChime();
+      handleSelectOption(3);
+      return;
+    }
+
+    // NEXT / AAGE
+    if (
+      text.includes('next') || 
+      text.includes('अगला') || 
+      text.includes('aage') || 
+      text.includes('आगे')
+    ) {
+      playVoiceFeedbackChime();
+      const feedback = isHindi ? 'अगला प्रश्न' : 'Next question';
+      setLastActionFeedback(`✓ ${feedback}`);
+      handleNextQuestion();
+      return;
+    }
+
+    // PREVIOUS / BACK / PICHLA
+    if (
+      text.includes('previous') || 
+      text.includes('back') || 
+      text.includes('पिछला') || 
+      text.includes('piche')
+    ) {
+      playVoiceFeedbackChime();
+      const feedback = isHindi ? 'पिछला प्रश्न' : 'Previous question';
+      setLastActionFeedback(`✓ ${feedback}`);
+      handlePrevQuestion();
+      return;
+    }
+
+    // REPEAT / READ AGAIN
+    if (
+      text.includes('repeat') || 
+      text.includes('again') || 
+      text.includes('dobara') || 
+      text.includes('दोबारा') || 
+      text.includes('फिर से')
+    ) {
+      playVoiceFeedbackChime();
+      readQuestion(currentIndexRef.current);
+      return;
+    }
+
+    // CLEAR / REMOVE
+    if (
+      text.includes('clear') || 
+      text.includes('remove') || 
+      text.includes('हटाओ')
+    ) {
+      playVoiceFeedbackChime();
+      handleClearAnswer();
+      return;
+    }
+
+    // SUBMIT
+    if (
+      text.includes('submit') || 
+      text.includes('finish') || 
+      text.includes('सबमिट')
+    ) {
+      playVoiceFeedbackChime();
+      setPendingAction({ type: 'SUBMIT' } as any);
+      if (onOpenSubmitDialog) onOpenSubmitDialog();
+      const confirmPrompt = isHindi 
+        ? 'क्या आप परीक्षा जमा करना चाहते हैं? पुष्टि के लिए "हां सबमिट करो" कहें।'
+        : 'Are you sure you want to submit the exam? Say "confirm submit" to proceed.';
+      speak(confirmPrompt, { langOverride: targetLang, onEnd: () => startListening() });
+      return;
+    }
+
+    // Fallback: check matchExamIntent
+    const examMatch = matchExamIntent(transcript, false);
     if (examMatch.type !== 'UNKNOWN') {
       playVoiceFeedbackChime();
-      consecutiveFailuresRef.current = 0;
-
       switch (examMatch.type) {
         case 'SELECT_OPTION_A':
-          handleOptionSelect(0);
+          handleSelectOption(0);
           return;
         case 'SELECT_OPTION_B':
-          handleOptionSelect(1);
+          handleSelectOption(1);
           return;
         case 'SELECT_OPTION_C':
-          handleOptionSelect(2);
+          handleSelectOption(2);
           return;
         case 'SELECT_OPTION_D':
-          handleOptionSelect(3);
+          handleSelectOption(3);
           return;
-
-        case 'NEXT_QUESTION': {
-          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          setLastActionFeedback(`✓ ${confirmText}`);
-          announceToScreenReader(confirmText);
-          curActions.goToNext();
-          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+        case 'NEXT_QUESTION':
+          handleNextQuestion();
           return;
-        }
-
-        case 'PREVIOUS_QUESTION': {
-          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          setLastActionFeedback(`✓ ${confirmText}`);
-          announceToScreenReader(confirmText);
-          curActions.goToPrevious();
-          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+        case 'PREVIOUS_QUESTION':
+          handlePrevQuestion();
           return;
-        }
-
-        case 'CLEAR_SELECTION': {
-          if (curActions.setAnswer) {
-            curActions.setAnswer(curQ.id, "");
-          }
-          curActions.selectAnswer(curQ.id, "");
-          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          setLastActionFeedback(`✓ ${confirmText}`);
-          announceToScreenReader(confirmText);
-          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+        case 'CLEAR_SELECTION':
+          handleClearAnswer();
           return;
-        }
-
-        case 'MARK_FOR_REVIEW': {
-          if (curActions.toggleFlag) {
-            curActions.toggleFlag(curQ.id);
-          }
-          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          setLastActionFeedback(`✓ ${confirmText}`);
-          announceToScreenReader(confirmText);
-          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+        case 'READ_AGAIN':
+          readQuestion(currentIndexRef.current);
           return;
-        }
-
-        case 'READ_AGAIN': {
-          readEverything(targetLang);
-          return;
-        }
-
-        case 'DESCRIBE_DIAGRAM': {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
-              detail: { action: 'describe-diagram' }
-            }));
-          }
-          const describeBtn = typeof document !== 'undefined'
-            ? document.querySelector<HTMLElement>('button[aria-label*="Describe diagram" i], button:has(svg.lucide-sparkles)')
-            : null;
-          if (describeBtn) {
-            describeBtn.click();
-          }
-          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
-          return;
-        }
-
-        case 'SUBMIT_EXAM': {
-          setPendingAction({ type: 'SUBMIT' } as any);
-          if (onOpenSubmitDialog) onOpenSubmitDialog();
-          const confirmPrompt = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
-          speak(confirmPrompt, { langOverride: targetLang, onEnd: () => startListening() });
-          return;
-        }
-
         default:
           break;
       }
     }
-
-    // 3. Fallback to voiceParser (for true/false, text input, navigation)
-    const cmd = parseVoiceCommand(transcript, {
-      questionType: qType,
-      currentQuestion: curQ,
-      isPendingConfirmation: !!pendingAction
-    });
-
-    if (cmd.type !== 'UNKNOWN') {
-      playVoiceFeedbackChime();
-      consecutiveFailuresRef.current = 0;
-    } else {
-      // Check fallback intent classifier before failing
-      const fallbackResult = classifyIntentLocally(transcript);
-      if (fallbackResult.intent !== 'UNKNOWN') {
-        playVoiceFeedbackChime();
-        consecutiveFailuresRef.current = 0;
-
-        switch (fallbackResult.intent) {
-          case 'NAVIGATE_BACK':
-          case 'PREVIOUS_QUESTION': {
-            const feedbackText = isHindi ? 'पिछला प्रश्न' : 'Previous question';
-            announceToScreenReader(feedbackText);
-            setLastActionFeedback(`✓ ${feedbackText}`);
-            curActions.goToPrevious();
-            speak(feedbackText, { langOverride: targetLang, onEnd: () => startListening() });
-            return;
-          }
-          case 'NEXT_QUESTION': {
-            const feedbackText = isHindi ? 'अगला प्रश्न' : 'Next question';
-            announceToScreenReader(feedbackText);
-            setLastActionFeedback(`✓ ${feedbackText}`);
-            curActions.goToNext();
-            speak(feedbackText, { langOverride: targetLang, onEnd: () => startListening() });
-            return;
-          }
-          case 'CLEAR_RESPONSE': {
-            if (curActions.setAnswer) curActions.setAnswer(curQ.id, "");
-            curActions.selectAnswer(curQ.id, "");
-            const confirmClear = isHindi ? 'उत्तर हटा दिया गया।' : 'Response cleared.';
-            setLastActionFeedback(`✓ ${confirmClear}`);
-            announceToScreenReader(confirmClear);
-            speak(confirmClear, { langOverride: targetLang, onEnd: () => startListening() });
-            return;
-          }
-          default:
-            break;
-        }
-      }
-    }
-
-    // Submit dialog initiation
-    if (cmd.type === 'SUBMIT') {
-      const activeQList = questionsRef.current && questionsRef.current.length > 0 ? questionsRef.current : [];
-      const answered = activeQList.filter(q => isQuestionAnswered(q, curState.answers[q.id])).length;
-      const unanswered = totalQuestionsRef.current - answered;
-      setPendingAction(cmd);
-      if (onOpenSubmitDialog) onOpenSubmitDialog();
-
-      const confirmPrompt = isHindi
-        ? `आपके ${unanswered} अनुत्तरित प्रश्न हैं। क्या आप परीक्षा सबमिट करना चाहते हैं? हाँ या नहीं कहें।`
-        : `You have ${unanswered} unanswered questions. Are you sure you want to submit the exam? Say yes or no.`;
-      
-      speak(confirmPrompt, {
-        langOverride: targetLang,
-        onEnd: () => startListening()
-      });
-      return;
-    }
-
-    // True/False answer
-    if (cmd.type === 'TRUE_FALSE') {
-      if (curActions.setAnswer) {
-        curActions.setAnswer(curQ.id, cmd.value);
-      }
-      curActions.selectAnswer(curQ.id, cmd.value ? 'true' : 'false');
-      
-      const confirmText = cmd.value
-        ? (isHindi ? 'सत्य चुना गया।' : 'True selected.')
-        : (isHindi ? 'असत्य चुना गया।' : 'False selected.');
-      const visualFeedback = cmd.value ? '✓ True selected' : '✓ False selected';
-
-      setLastActionFeedback(visualFeedback);
-      announceToScreenReader(confirmText);
-
-      speak(confirmText, {
-        langOverride: targetLang,
-        onEnd: () => startListening()
-      });
-      return;
-    }
-
-    // Text answer
-    if (cmd.type === 'TEXT_ANSWER') {
-      if (curActions.setAnswer) {
-        curActions.setAnswer(curQ.id, cmd.text);
-      }
-      curActions.selectAnswer(curQ.id, cmd.text);
-
-      const confirmText = isHindi 
-        ? `उत्तर दर्ज किया गया: ${cmd.text}।` 
-        : `Answer entered: ${cmd.text}.`;
-      const visualFeedback = `✓ Answer entered: ${cmd.text}`;
-
-      setLastActionFeedback(visualFeedback);
-      announceToScreenReader(confirmText);
-
-      speak(confirmText, {
-        langOverride: targetLang,
-        onEnd: () => startListening()
-      });
-      return;
-    }
-
-    // Multiple selection
-    if (cmd.type === 'SELECT_MULTIPLE_OPTIONS') {
-      const opts = (curQ as any).options || [];
-      const currentSelected: string[] = Array.isArray(curState.answers[curQ.id])
-        ? (curState.answers[curQ.id] as string[])
-        : [];
-
-      const targetOptionIds: string[] = [];
-      const letterNames: string[] = [];
-
-      for (const idx of cmd.letterIndices) {
-        if (opts[idx]) {
-          targetOptionIds.push(opts[idx].id);
-          letterNames.push(String.fromCharCode(65 + idx));
-        }
-      }
-
-      if (targetOptionIds.length > 0) {
-        const newSelection = Array.from(new Set([...currentSelected, ...targetOptionIds]));
-        if (curActions.setAnswer) {
-          curActions.setAnswer(curQ.id, newSelection);
-        }
-
-        const lettersStr = letterNames.join(' and ');
-        const confirmText = isHindi 
-          ? `विकल्प ${letterNames.join(' और ')} चुने गए।` 
-          : `Options ${lettersStr} selected.`;
-        const visualFeedback = `✓ Options ${lettersStr} selected`;
-
-        setLastActionFeedback(visualFeedback);
-        announceToScreenReader(confirmText);
-
-        speak(confirmText, {
-          langOverride: targetLang,
-          onEnd: () => startListening()
-        });
-      }
-      return;
-    }
-
-    // Single option selection via parser
-    if (cmd.type === 'SELECT_OPTION') {
-      handleOptionSelect(cmd.letterIndex);
-      return;
-    }
-
-    // Route other standard commands
-    executeCommand(cmd);
   }, [
-    handleOptionSelect,
-    executeCommand,
+    handleSelectOption,
+    handleNextQuestion,
+    handlePrevQuestion,
+    handleClearAnswer,
+    readQuestion,
     pendingAction,
     onOpenSubmitDialog,
     onCloseSubmitDialog,
     speak,
-    startListening,
-    readEverything,
-    deactivateVoiceMode
+    startListening
   ]);
 
-  // Always keep handleCommandRef pointing to current handleCommand callback
+  // Keep handleCommandRef synchronized
   useEffect(() => {
     handleCommandRef.current = handleCommand;
   }, [handleCommand]);
 
-  // Bind Web Speech API recognition event handlers
+  // 3. ROBUST SPEECH-TO-TEXT RECOGNITION LOOP
   useEffect(() => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
+    if (typeof window === 'undefined') return;
 
-    recognition.onresult = (event: any) => {
-      // Echo-cancellation guard: ignore input while TTS / screen reader is speaking to prevent false self-triggers
-      if (
-        isSpeakingRef.current || 
-        (synthesisRef.current && synthesisRef.current.speaking) ||
-        (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking)
-      ) {
-        return;
-      }
+    synthesisRef.current = window.speechSynthesis;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-      consecutiveFailuresRef.current = 0;
-      const resultIndex = event.resultIndex !== undefined ? event.resultIndex : event.results.length - 1;
-      const transcript = event.results?.[resultIndex]?.[0]?.transcript?.trim();
-      if (!transcript) {
-        return;
-      }
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = languageRef.current === 'hi' ? 'hi-IN' : 'en-US';
+      recognitionRef.current = recognition;
 
-      setLastCommand(transcript);
-      setStatus('Processing');
-      if (handleCommandRef.current) {
-        handleCommandRef.current(transcript);
-      }
-    };
+      recognition.onresult = (event: any) => {
+        // Strict guard: ignore results if TTS is speaking
+        if (isSpeakingRef.current) return;
 
-    recognition.onerror = (event: any) => {
-      const error = event.error;
-      console.warn('[VoiceMode] Speech recognition error encountered:', error);
+        const resultIndex = event.resultIndex !== undefined ? event.resultIndex : event.results.length - 1;
+        const transcript = event.results?.[resultIndex]?.[0]?.transcript?.trim();
+        if (!transcript) return;
 
-      // Fatal microphone permission denied or revoked mid-exam
-      if (error === 'not-allowed' || error === 'service-not-allowed') {
-        setStatus('Error');
-        const fallbackMsg = languageRef.current === 'hi'
-          ? 'माइक्रोफ़ोन अनुमति अस्वीकृत या निरस्त। कीबोर्ड मोड सक्रिय है, और आपकी परीक्षा प्रगति पूरी तरह सुरक्षित है।'
-          : 'Microphone permission denied or revoked. Voice mode disabled. Keyboard controls remain active, and your exam progress is safely preserved.';
-        
-        setErrorMessage(fallbackMsg);
-        setIsActive(false);
-        isActiveRef.current = false;
-        announceToScreenReader(fallbackMsg);
-        speak(fallbackMsg, { langOverride: languageRef.current === 'hi' ? 'hi' : 'en' });
-        return;
-      }
+        setLastCommand(transcript);
+        setStatus('Processing');
+        if (handleCommandRef.current) {
+          handleCommandRef.current(transcript);
+        }
+      };
 
-      // CRITICAL: 'no-speech' is normal silence while candidate is thinking. Auto-recover silently.
-      if (error === 'no-speech') {
-        if (isActiveRef.current && !isSpeakingRef.current) {
-          setStatus('Listening');
+      recognition.onerror = (event: any) => {
+        const error = event.error;
+        console.warn('[VoiceMode] SpeechRecognition error:', error);
+
+        if (error === 'not-allowed' || error === 'service-not-allowed') {
+          setStatus('Error');
+          const fallbackMsg = languageRef.current === 'hi'
+            ? 'माइक्रोफ़ोन अनुमति अस्वीकृत। कीबोर्ड मोड सक्रिय है।'
+            : 'Microphone permission denied. Keyboard controls active.';
+          setErrorMessage(fallbackMsg);
+          setIsActive(false);
+          isActiveRef.current = false;
+          return;
+        }
+
+        // Silence recovery without stopping voice mode
+        if (error === 'no-speech') {
+          if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
+            setStatus('Listening');
+            clearRestartTimer();
+            restartTimerRef.current = setTimeout(() => {
+              if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
+                startListening();
+              }
+            }, 250);
+          }
+          return;
+        }
+
+        if (error === 'network') {
+          if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
+            clearRestartTimer();
+            restartTimerRef.current = setTimeout(() => {
+              if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
+                startListening();
+              }
+            }, 500);
+          }
+          return;
+        }
+
+        // Other transient errors
+        if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
           clearRestartTimer();
           restartTimerRef.current = setTimeout(() => {
-            if (isActiveRef.current && !isSpeakingRef.current) {
+            if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
               startListening();
             }
           }, 300);
         }
-        return;
-      }
+      };
 
-      if (error === 'aborted') {
-        return;
-      }
-
-      if (error === 'network') {
-        console.warn('[VoiceMode] Transient network speech service error, auto-recovering...');
-        if (isActiveRef.current && !isSpeakingRef.current) {
+      // Silence / Drop Recovery loop
+      recognition.onend = () => {
+        if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current) {
           clearRestartTimer();
           restartTimerRef.current = setTimeout(() => {
-            if (isActiveRef.current && !isSpeakingRef.current) {
-              startListening();
+            if (isActiveRef.current && !userManuallyMutedRef.current && !isSpeakingRef.current && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+                setStatus('Listening');
+              } catch (e) {
+                // Already running or in transition
+              }
             }
-          }, 500);
+          }, 150);
         }
-        return;
-      }
+      };
 
-      // Non-fatal transient errors: quietly recover to listening state
-      if (isActiveRef.current && !isSpeakingRef.current) {
+      if (statusRef.current === 'Unsupported' || statusRef.current === 'Ready') {
         setStatus('Listening');
-        clearRestartTimer();
-        restartTimerRef.current = setTimeout(() => {
-          if (isActiveRef.current && !isSpeakingRef.current) {
-            startListening();
-          }
-        }, 300);
+      }
+    } else {
+      setStatus('Unsupported');
+    }
+
+    return () => {
+      clearRestartTimer();
+      clearSpeechWatchdog();
+      if (synthesisRef.current) {
+        try { synthesisRef.current.cancel(); } catch (e) {}
+      }
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
       }
     };
+  }, [clearRestartTimer, clearSpeechWatchdog, startListening]);
 
-    recognition.onend = () => {
-      // Continuous listening loop: automatically re-invoke recognition.start() within 300ms timeout
-      // so momentary pauses or silence do not kill the listener permanently.
-      if (isActiveRef.current && !isSpeakingRef.current) {
-        clearRestartTimer();
-        restartTimerRef.current = setTimeout(() => {
-          if (isActiveRef.current && !isSpeakingRef.current && recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-              setStatus('Listening');
-            } catch (e: any) {
-              // Ignore if already started or transitioning
-            }
-          }
-        }, 300);
-      }
-    };
-  }, [speak, startListening, clearRestartTimer]);
+  // Update recognition language dynamically
+  useEffect(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.lang = language === 'hi' ? 'hi-IN' : 'en-US';
+    }
+  }, [language]);
 
-  const hasAutoStartedRef = useRef(false);
-
-  // Auto-Start Listener & TalkBack on Component Mount:
-  // Automatically start recognition without manual toggle, and trigger TTS TalkBack:
-  // "Exam started. Voice mode is active. Question 1..." followed by question text and options.
+  // 1 & 2. SOLVE BROWSER AUTOPLAY & AUTO-READ FIRST QUESTION ON MOUNT
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (hasAutoStartedRef.current) return;
+    if (hasInitializedMountRef.current) return;
     if (!currentQuestion) return;
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setStatus('Unsupported');
-      return;
-    }
-
-    hasAutoStartedRef.current = true;
+    hasInitializedMountRef.current = true;
     setIsActive(true);
     isActiveRef.current = true;
+    userManuallyMutedRef.current = false;
     setStatus('Listening');
 
-    // Trigger permission dialog if not yet approved
-    if (navigator?.mediaDevices?.getUserMedia) {
+    // Trigger explicit mic permission check if not already granted
+    if (navigator?.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
-        .then((stream) => {
-          stream.getTracks().forEach((track) => track.stop());
-        })
-        .catch((err) => {
-          console.warn('[VoiceMode] Mic permission prompt notice on auto-mount:', err);
-        });
+        .then((stream) => stream.getTracks().forEach((track) => track.stop()))
+        .catch((err) => console.warn('[VoiceMode] Auto-permission notice on mount:', err));
     }
 
-    const curLang = languageRef.current;
-    const isHindi = curLang === 'hi';
-    const curQ = currentQuestionRef.current;
-    const curState = stateRef.current;
-    const totalQ = totalQuestionsRef.current;
-    const qNum = curState.currentQuestionIndex + 1;
-    const qType = getQuestionType(curQ);
-
-    let optionsText = '';
-    if (qType === 'single-choice' || qType === 'multiple-choice') {
-      const opts = (curQ as any).options || [];
-      optionsText = opts
-        .map((opt: any, i: number) => `${isHindi ? 'विकल्प' : 'Option'} ${String.fromCharCode(65 + i)}: ${opt.text}.`)
-        .join(' ');
-    } else if (qType === 'true-false') {
-      optionsText = isHindi ? 'विकल्प: सत्य या असत्य।' : 'Options: True or False.';
-    }
-
-    const welcomeIntro = isHindi
-      ? `परीक्षा शुरू हो गई है। वॉइस मोड सक्रिय है। प्रश्न संख्या ${qNum} का ${totalQ}। ${curQ.text}। ${optionsText} ${qType === 'single-choice' ? 'आप A, B, C या D कह सकते हैं।' : ''}`
-      : `Exam started. Voice mode is active. Question ${qNum} of ${totalQ}. ${curQ.text}. ${optionsText} ${qType === 'single-choice' ? 'You can say Option A, B, C, or D.' : ''}`;
-
-    lastReadQuestionIndexRef.current = curState.currentQuestionIndex;
-
+    // Auto-read question 1 after 350ms buffer
     const timer = setTimeout(() => {
-      speak(welcomeIntro, {
-        langOverride: isHindi ? 'hi' : 'en',
-        onEnd: () => {
-          startListening();
-        }
-      });
+      readQuestion(state.currentQuestionIndex);
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [currentQuestion, speak, startListening]);
+  }, [currentQuestion, readQuestion, state.currentQuestionIndex]);
 
-  // Auto-read question when candidate navigates to a new question
+  // 2. TRIGGER readQuestion(currentQuestionIndex) WHENEVER currentQuestionIndex CHANGES
   useEffect(() => {
-    if (isActive && hasAutoStartedRef.current && lastReadQuestionIndexRef.current !== state.currentQuestionIndex) {
-      lastReadQuestionIndexRef.current = state.currentQuestionIndex;
+    if (!hasInitializedMountRef.current) return;
+    if (userManuallyMutedRef.current || !isActive) return;
+
+    if (lastReadIndexRef.current !== state.currentQuestionIndex) {
+      lastReadIndexRef.current = state.currentQuestionIndex;
       setLastActionFeedback(null);
-      readCurrentQuestion();
+      readQuestion(state.currentQuestionIndex);
     }
-  }, [isActive, state.currentQuestionIndex, readCurrentQuestion]);
+  }, [state.currentQuestionIndex, isActive, readQuestion]);
 
-  // Explicit Microphone Permission & Initialization:
-  // Before starting recognition, invoke navigator.mediaDevices.getUserMedia({ audio: true })
-  // to force the browser permission dialog if not yet granted.
-  const enableVoiceMode = useCallback(async () => {
-    if (typeof window === 'undefined') return;
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setStatus('Unsupported');
-      return;
-    }
-
-    setStatus('RequestingPermission');
-    setErrorMessage(null);
-
-    // Explicit browser permission request
-    if (navigator?.mediaDevices?.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Immediately release media stream tracks so SpeechRecognition has sole access to the microphone
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (err: any) {
-        console.warn('[VoiceMode] getUserMedia permission denied or failed:', err);
-        setStatus('Error');
-        const errText = languageRef.current === 'hi'
-          ? 'माइक्रोफ़ोन अनुमति अस्वीकृत। आप कीबोर्ड का उपयोग जारी रख सकते हैं।'
-          : 'Microphone permission denied. You can continue using keyboard controls.';
-        setErrorMessage(errText);
-        setIsActive(false);
-        isActiveRef.current = false;
-        speak(errText, { langOverride: languageRef.current === 'hi' ? 'hi' : 'en' });
-        return;
-      }
-    }
-
-    setIsActive(true);
-    isActiveRef.current = true;
-    lastReadQuestionIndexRef.current = stateRef.current.currentQuestionIndex;
-
-    const isHindi = languageRef.current === 'hi';
-    const welcome = isHindi ? 'वॉइस मोड सक्षम किया गया।' : 'Voice mode enabled.';
-
-    speak(welcome, {
-      langOverride: isHindi ? 'hi' : 'en',
-      onEnd: () => {
-        readCurrentQuestion();
-      }
-    });
-  }, [speak, readCurrentQuestion]);
-
-  // User-driven Voice Mode toggle
+  // Manual Toggle / Mute Override (Alt+M)
   const toggleVoiceMode = useCallback(() => {
     if (isActive) {
-      deactivateVoiceMode();
+      // Mute voice mode
+      userManuallyMutedRef.current = true;
+      setIsActive(false);
+      isActiveRef.current = false;
+      clearRestartTimer();
+      clearSpeechWatchdog();
+      try { synthesisRef.current?.cancel(); } catch (e) {}
+      stopListening();
+      setStatus('Ready');
+      setLastActionFeedback(null);
     } else {
-      enableVoiceMode();
+      // Unmute / Enable voice mode
+      userManuallyMutedRef.current = false;
+      setIsActive(true);
+      isActiveRef.current = true;
+      setStatus('Listening');
+      readQuestion(currentIndexRef.current);
     }
-  }, [isActive, enableVoiceMode, deactivateVoiceMode]);
+  }, [isActive, stopListening, clearRestartTimer, clearSpeechWatchdog, readQuestion]);
+
+  const enableVoiceMode = useCallback(() => {
+    userManuallyMutedRef.current = false;
+    setIsActive(true);
+    isActiveRef.current = true;
+    setStatus('Listening');
+    readQuestion(currentIndexRef.current);
+  }, [readQuestion]);
+
+  const deactivateVoiceMode = useCallback(() => {
+    userManuallyMutedRef.current = true;
+    setIsActive(false);
+    isActiveRef.current = false;
+    clearRestartTimer();
+    clearSpeechWatchdog();
+    try { synthesisRef.current?.cancel(); } catch (e) {}
+    stopListening();
+    setStatus('Ready');
+  }, [stopListening, clearRestartTimer, clearSpeechWatchdog]);
 
   return {
     isActive,
@@ -1398,6 +904,7 @@ export function useVoiceMode({
     lastCommand,
     lastActionFeedback,
     errorMessage,
+    readQuestion,
     toggleVoiceMode,
     enableVoiceMode,
     disableVoiceMode: deactivateVoiceMode

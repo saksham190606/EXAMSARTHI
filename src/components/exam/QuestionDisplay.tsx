@@ -130,7 +130,7 @@ export function QuestionDisplay({
                       relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
+                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/15 border-[#ffed00] text-white font-bold shadow-[0_0_16px_rgba(255,237,0,0.25)]' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -223,7 +223,7 @@ export function QuestionDisplay({
                       relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
+                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/15 border-[#ffed00] text-white font-bold shadow-[0_0_16px_rgba(255,237,0,0.25)]' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -325,7 +325,7 @@ export function QuestionDisplay({
                   relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'true' 
-                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
+                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/15 border-[#ffed00] text-white font-bold shadow-[0_0_16px_rgba(255,237,0,0.25)]' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
@@ -371,7 +371,7 @@ export function QuestionDisplay({
                   relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'false' 
-                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
+                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/15 border-[#ffed00] text-white font-bold shadow-[0_0_16px_rgba(255,237,0,0.25)]' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
