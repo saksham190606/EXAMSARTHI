@@ -341,6 +341,23 @@ export function QuestionReviewList({
     setIndividualPlayingId(null);
   }, [clearAudioTimers]);
 
+  // Explicitly start or re-arm the microphone listener safely
+  const startListeningSafely = useCallback(() => {
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.abort();
+      setTimeout(() => {
+        try {
+          recognitionRef.current?.start();
+        } catch (err) {
+          console.warn("Recognition already active or starting", err);
+        }
+      }, 100);
+    } catch (err) {
+      console.warn("Recognition already active or starting", err);
+    }
+  }, []);
+
   // 2. STRUCTURED AUDIO SCRIPT BUILDER & SYNTHESIZER
   const readQuestionReview = useCallback((questionIndex: number, isWalkthrough: boolean = false) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -403,6 +420,7 @@ export function QuestionReviewList({
       if (isAudioReviewActiveRef.current) {
         setIsSpeaking(false);
         setIsWaitingForConsent(true);
+        startListeningSafely();
       } else {
         setIndividualPlayingId(null);
       }
@@ -420,6 +438,7 @@ export function QuestionReviewList({
         // STRICT SINGLE-QUESTION ISOLATION:
         // No auto-advancing loops! Stop TTS completely and wait for candidate command.
         setIsWaitingForConsent(true);
+        startListeningSafely();
       } else {
         setIndividualPlayingId(null);
       }
@@ -432,6 +451,7 @@ export function QuestionReviewList({
       activeUtteranceRef.current = null;
       if (isWalkthrough && isAudioReviewActiveRef.current) {
         setIsWaitingForConsent(true);
+        startListeningSafely();
       } else {
         setIndividualPlayingId(null);
       }
@@ -596,6 +616,12 @@ export function QuestionReviewList({
     }, 1000);
   }, [clearAudioTimers, readQuestionReview]);
 
+  const handlePrev = handlePrevQuestionReview;
+  const handleRepeat = handleRepeatQuestionReview;
+  const handleTogglePause = togglePauseResume;
+  const handleNext = handleNextQuestionReview;
+  const handleStop = stopAudioWalkthrough;
+
   const goToPreviousQuestion = handlePrevQuestionReview;
   const goToNextQuestion = handleNextQuestionReview;
 
@@ -644,64 +670,16 @@ export function QuestionReviewList({
     let recognition: any = null;
     let isDisposed = false;
 
-    const processBargeInTranscript = (transcriptText: string) => {
-      const raw = transcriptText.toLowerCase().trim();
-      if (!raw) return;
+    const nextCommands = ["next", "agla", "आगे", "अगला", "yes"];
+    const prevCommands = ["previous", "back", "pichla", "पिछला"];
+    const repeatCommands = ["repeat", "again", "dobara", "दोबारा"];
+    const pauseCommands = ["pause", "wait", "रुको"];
+    const stopCommands = ["stop", "close", "बंद करो"];
 
-      const now = Date.now();
-      if (now - lastActionTimestampRef.current < 500) {
-        return;
-      }
-
-      const words = raw.split(/\s+/);
-
-      // PAUSE: Keywords: ["pause", "stop", "रुको"] -> pauses TTS
-      const pauseKeywords = ["pause", "stop", "रुको", "रुकिए", "wait", "hold", "पॉज़", "stop speaking"];
-      if (isSpeakingRef.current && !isPausedRef.current && pauseKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        handlePause();
-        return;
-      }
-
-      // RESUME: Keywords: ["resume", "play", "चालू करो"] -> resumes TTS
-      const resumeKeywords = ["resume", "play", "चालू करो", "चालू", "जारी रखें", "start", "आगे बोलो"];
-      if (isPausedRef.current && resumeKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        handleResume();
-        return;
-      }
-
-      // EXIT / CLOSE REVIEW
-      const exitKeywords = ["close review", "exit", "band karo", "बंद करो", "stop review"];
-      if (exitKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        stopAudioWalkthrough();
-        return;
-      }
-
-      // REPEAT CURRENT: Keywords: ["repeat", "again", "dobara", "फिर से", "दोबारा"]
-      const repeatKeywords = ["repeat", "again", "dobara", "फिर से", "दोबारा", "re-read", "एक बार फिर", "दोबारा बोलो", "फिर से पढ़ो"];
-      if (repeatKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        handleRepeatQuestionReview();
-        return;
-      }
-
-      // MOVE TO PREVIOUS: Keywords: ["previous", "back", "pichla", "पिछला", "पीछे"]
-      const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche", "prev"];
-      if (prevKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        handlePrevQuestionReview();
-        return;
-      }
-
-      // PROCEED TO NEXT: Keywords: ["next", "yes", "proceed", "continue", "go ahead", "agla", "अगला", "हाँ", "आगे"]
-      const nextKeywords = ["next", "yes", "proceed", "continue", "go ahead", "agla", "अगला", "हाँ", "आगे", "haan", "ha", "sure", "sahi"];
-      if (nextKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
-        lastActionTimestampRef.current = now;
-        handleNextQuestionReview();
-        return;
-      }
+    const matchesList = (phrase: string, keywords: string[]) => {
+      if (!phrase) return false;
+      const words = phrase.split(/\s+/);
+      return keywords.some((k) => phrase === k || phrase.includes(k) || words.includes(k));
     };
 
     const startRecognitionInstance = () => {
@@ -731,14 +709,32 @@ export function QuestionReviewList({
 
         recognition.onresult = (event: any) => {
           if (!isAudioReviewActiveRef.current && !isSpeakingRef.current && !isWaitingForConsentRef.current) return;
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const result = event.results[i];
-            for (let j = 0; j < result.length; j++) {
-              const alt = result[j];
-              if (alt?.transcript) {
-                processBargeInTranscript(alt.transcript);
-              }
-            }
+          if (!event.results || !event.results[0] || !event.results[0][0]) return;
+
+          const cmd = event.results[0][0].transcript.toLowerCase().trim();
+          const latestResult = event.results[event.results.length - 1];
+          const latestCmd = latestResult && latestResult[0] ? latestResult[0].transcript.toLowerCase().trim() : '';
+
+          const now = Date.now();
+          if (now - lastActionTimestampRef.current < 500) {
+            return;
+          }
+
+          if (matchesList(cmd, nextCommands) || matchesList(latestCmd, nextCommands)) {
+            lastActionTimestampRef.current = now;
+            handleNext();
+          } else if (matchesList(cmd, prevCommands) || matchesList(latestCmd, prevCommands)) {
+            lastActionTimestampRef.current = now;
+            handlePrev();
+          } else if (matchesList(cmd, repeatCommands) || matchesList(latestCmd, repeatCommands)) {
+            lastActionTimestampRef.current = now;
+            handleRepeat();
+          } else if (matchesList(cmd, pauseCommands) || matchesList(latestCmd, pauseCommands)) {
+            lastActionTimestampRef.current = now;
+            handleTogglePause();
+          } else if (matchesList(cmd, stopCommands) || matchesList(latestCmd, stopCommands)) {
+            lastActionTimestampRef.current = now;
+            handleStop();
           }
         };
 
@@ -751,29 +747,42 @@ export function QuestionReviewList({
 
         recognition.onend = () => {
           isRecognitionStartingRef.current = false;
-          if (isDisposed || (!isAudioReviewActiveRef.current && !isSpeakingRef.current && !isWaitingForConsentRef.current)) return;
+          if (isDisposed) return;
 
-          // Loop & Error Guard: restart within 150ms
-          if (restartTimerRef.current) {
-            clearTimeout(restartTimerRef.current);
-          }
-          restartTimerRef.current = setTimeout(() => {
-            if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current || isWaitingForConsentRef.current)) {
-              startRecognitionInstance();
+          const isWalkthroughActive = isAudioReviewActiveRef.current;
+          const isSpeakingNow = isSpeakingRef.current;
+
+          // Auto-reconnect in recognition.onend: if isWalkthroughActive is true and !isSpeaking, restart listening after a 200ms delay.
+          if (isWalkthroughActive && !isSpeakingNow) {
+            if (restartTimerRef.current) {
+              clearTimeout(restartTimerRef.current);
             }
-          }, 150);
+            restartTimerRef.current = setTimeout(() => {
+              if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
+                try {
+                  recognitionRef.current?.start();
+                } catch (err) {
+                  try {
+                    startRecognitionInstance();
+                  } catch (reErr) {
+                    console.warn("Recognition already active or starting", err);
+                  }
+                }
+              }
+            }, 200);
+          }
         };
 
         isRecognitionStartingRef.current = true;
         recognition.start();
       } catch (err: any) {
         isRecognitionStartingRef.current = false;
-        if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current || isWaitingForConsentRef.current)) {
+        if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
           restartTimerRef.current = setTimeout(() => {
-            if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current || isWaitingForConsentRef.current)) {
+            if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
               startRecognitionInstance();
             }
-          }, 150);
+          }, 200);
         }
       }
     };
@@ -797,7 +806,7 @@ export function QuestionReviewList({
       recognitionRef.current = null;
       isRecognitionStartingRef.current = false;
     };
-  }, [isAudioReviewActive, isSpeaking, isWaitingForConsent, handlePause, handleResume, handleNextQuestionReview, handlePrevQuestionReview, handleRepeatQuestionReview, stopAudioWalkthrough]);
+  }, [isAudioReviewActive, isSpeaking, isWaitingForConsent, handleNext, handlePrev, handleRepeat, handleTogglePause, handleStop]);
 
   // Keyboard Shortcuts: Alt+A (Toggle Walkthrough), Alt+P (Prev), Alt+N (Next), Alt+R (Repeat), Space (Pause/Resume), Escape (Stop)
   useEffect(() => {
@@ -934,149 +943,69 @@ export function QuestionReviewList({
     ? filteredQuestions[activeReviewIndex]?.questionId
     : null;
 
+  const currentIndex = activeReviewIndex;
+  const totalQuestions = filteredQuestions.length;
+
   return (
     <section 
       aria-labelledby="question-review-heading" 
-      className="space-y-6 pt-4 border-t border-border/60 relative"
+      className="space-y-6 pt-4 border-t border-border/60 relative pb-28"
     >
       {/* 3. Floating / Sticky Playback Controls Bar */}
       {isAudioReviewActive && activeReviewIndex >= 0 && (
         <div
           role="toolbar"
           aria-label="Audio review walkthrough controls"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_30px_rgba(255,237,0,0.35)] rounded-full backdrop-blur-md text-foreground max-w-2xl w-[96%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-full bg-neutral-950/90 backdrop-blur-md border border-[#ffed00]/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(255,237,0,0.2)] text-white max-w-[96vw] overflow-x-auto"
         >
-          <div className="flex items-center gap-2 pr-2.5 sm:pr-3 border-r border-white/20">
-            <span className="relative flex size-3 items-center justify-center">
-              <span className={cn(
-                "absolute -inset-1 rounded-full opacity-75 animate-ping",
-                isWaitingForConsent ? "bg-emerald-400" : "bg-[#ffed00]"
-              )} />
-              <span className={cn(
-                "size-2.5 rounded-full",
-                isWaitingForConsent ? "bg-emerald-400" : "bg-[#ffed00]"
-              )} />
-            </span>
-            <div className="flex flex-col">
-              <span className="text-xs font-mono font-bold text-[#ffed00] whitespace-nowrap">
-                Q{activeReviewIndex + 1} of {filteredQuestions.length}
-              </span>
-              <span className={cn(
-                "text-2xs hidden sm:inline font-medium whitespace-nowrap",
-                isWaitingForConsent ? "text-emerald-400 font-semibold" : "text-yellow-300 font-semibold"
-              )}>
-                {isPaused
-                  ? 'Paused'
-                  : isWaitingForConsent
-                  ? "Waiting: Say 'Next' or 'Repeat'"
-                  : `Explaining Q${activeReviewIndex + 1}...`}
-              </span>
-            </div>
+          {/* Left Segment: Question counter badge */}
+          <span className="text-xs font-mono font-bold text-[#ffed00] bg-[#ffed00]/10 border border-[#ffed00]/30 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
+            Q{currentIndex + 1} of {totalQuestions}
+          </span>
+
+          {/* Center Status Pill */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/40 text-xs font-medium text-emerald-300 whitespace-nowrap shrink-0">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{isSpeaking ? "Explaining..." : "Listening (Say 'Next', 'Previous', 'Repeat')"}</span>
           </div>
 
-          {/* Indicator inside the pill */}
-          <div className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-2xs font-semibold whitespace-nowrap shadow-inner transition-all",
-            isWaitingForConsent
-              ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-300 animate-pulse"
-              : "bg-white/10 border-white/15 text-white"
-          )}>
-            <span className="relative flex size-2 items-center justify-center">
-              <span className={cn(
-                "absolute -inset-0.5 rounded-full opacity-75 animate-ping",
-                isWaitingForConsent ? "bg-emerald-400" : "bg-[#ffed00]"
-              )} />
-              <span className={cn(
-                "size-1.5 rounded-full",
-                isWaitingForConsent ? "bg-emerald-400" : "bg-[#ffed00]"
-              )} />
-            </span>
-            {isWaitingForConsent ? (
-              <span className="flex items-center gap-1 font-bold">
-                <Mic className="size-3 text-emerald-400 animate-bounce" aria-hidden="true" />
-                <span>Waiting: Say &apos;Next&apos; or &apos;Repeat&apos;</span>
-              </span>
-            ) : (
-              <span>🎙️ Explaining Q{activeReviewIndex + 1} (Say &apos;Next&apos;, &apos;Repeat&apos;, or &apos;Pause&apos;)</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <Button
+          {/* Right Controls (Grouped neatly) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={handlePrevQuestionReview}
-              disabled={activeReviewIndex === 0}
-              className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10 cursor-pointer"
-              title="Previous Question (Alt+P)"
-              aria-label="Previous Question (Alt+P)"
+              onClick={handlePrev}
+              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
             >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline ml-1">Previous</span>
-            </Button>
-
-            <Button
+              ‹ Prev
+            </button>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRepeatQuestionReview}
-              className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10 cursor-pointer"
-              title="Repeat Current Question (Alt+R)"
-              aria-label="Repeat Current Question (Alt+R)"
+              onClick={handleRepeat}
+              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
             >
-              <RotateCcw className="size-3.5 mr-1" aria-hidden="true" />
-              <span className="hidden sm:inline">Repeat</span>
-            </Button>
-
-            <Button
+              ↻ Repeat
+            </button>
+            <button
               type="button"
-              variant="default"
-              size="sm"
-              onClick={togglePauseResume}
-              className="h-8 px-3 text-xs font-bold bg-[#ffed00] text-black hover:bg-[#ffed00]/90 shadow-[0_0_10px_rgba(255,237,0,0.4)] cursor-pointer"
-              title="Pause / Resume (Space)"
-              aria-label={isPaused ? "Resume walkthrough (Space)" : "Pause walkthrough (Space)"}
+              onClick={handleTogglePause}
+              className="px-4 py-1.5 text-xs font-bold bg-[#ffed00] text-black hover:bg-[#ffe100] rounded-lg cursor-pointer"
             >
-              {isPaused ? (
-                <>
-                  <Play className="size-3.5 mr-1 fill-black" aria-hidden="true" />
-                  <span>Resume</span>
-                </>
-              ) : (
-                <>
-                  <Pause className="size-3.5 mr-1 fill-black" aria-hidden="true" />
-                  <span>Pause</span>
-                </>
-              )}
-            </Button>
-
-            <Button
+              {isPaused ? "▶ Resume" : "⏸ Pause"}
+            </button>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleNextQuestionReview}
-              disabled={activeReviewIndex >= filteredQuestions.length - 1}
-              className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10 cursor-pointer"
-              title="Next Question (Alt+N)"
-              aria-label="Next Question (Alt+N)"
+              onClick={handleNext}
+              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
             >
-              <span className="hidden sm:inline mr-1">Next</span>
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-
-            <Button
+              Next ›
+            </button>
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              onClick={stopAudioWalkthrough}
-              className="h-8 px-2.5 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 ml-1 cursor-pointer"
-              title="Stop Walkthrough (Escape)"
-              aria-label="Stop Walkthrough (Escape)"
+              onClick={handleStop}
+              className="px-3 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-900/40 bg-rose-950/20 rounded-lg cursor-pointer"
             >
-              <Square className="size-3.5 mr-1" aria-hidden="true" />
-              <span>Stop</span>
-            </Button>
+              ✕ Stop
+            </button>
           </div>
         </div>
       )}
