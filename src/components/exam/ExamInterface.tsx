@@ -6,10 +6,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
 import { ExamMicStatusBar } from '@/components/exam/ExamMicStatusBar';
+import { ExamVoiceDebugVisualizer } from '@/components/exam/ExamVoiceDebugVisualizer';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { CandidateQuestion } from '@/types/question';
-import { ExamActions, ExamState } from '@/lib/useExamEngine';
+import { ExamState } from '@/lib/useExamEngine';
 import { ArrowLeft, ArrowRight, Flag, Trash2 } from 'lucide-react';
 
 export interface ExamInterfaceActions {
@@ -50,9 +51,13 @@ export function ExamInterface({
   const {
     isActive,
     status,
+    isSpeaking,
     lastCommand,
+    lastTranscript,
     lastActionFeedback,
     errorMessage,
+    isAudioUnlocked,
+    unlockAudio,
     toggleVoiceMode,
   } = useVoiceMode({
     actions,
@@ -127,11 +132,25 @@ export function ExamInterface({
       <ExamMicStatusBar
         isActive={isActive}
         status={status}
+        isSpeaking={isSpeaking}
         lastCommand={lastCommand}
+        lastTranscript={lastTranscript}
         lastActionFeedback={lastActionFeedback}
         errorMessage={errorMessage}
         onToggle={toggleVoiceMode}
       />
+
+      {/* Header Real-time Debug Visualizer Status Pill */}
+      <div className="flex items-center justify-between gap-3 px-1">
+        <ExamVoiceDebugVisualizer
+          status={status}
+          isActive={isActive}
+          isSpeaking={isSpeaking}
+          lastCommand={lastCommand}
+          lastTranscript={lastTranscript}
+          onClick={toggleVoiceMode}
+        />
+      </div>
 
       {/* Active Glowing Sunlight Yellow Mic Indicator Floating Pulse */}
       {isActive && status === 'Listening' && (
@@ -149,8 +168,26 @@ export function ExamInterface({
         </div>
       )}
 
-      {/* Main Question Card with Voice Assistive Panel */}
+      {/* Main Question Card with Voice Assistive Panel & Physical Unlock Banner */}
       <Card className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50">
+        {/* 4. Physical "Tap to Enable Voice" Unlock Banner */}
+        {!isAudioUnlocked && (
+          <button
+            type="button"
+            onClick={unlockAudio}
+            className="w-full group relative flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-amber-500/25 via-[#ffed00]/30 to-amber-500/25 border-b-2 border-[#ffed00] text-foreground shadow-[0_0_24px_rgba(255,237,0,0.35)] hover:bg-[#ffed00]/40 transition-all cursor-pointer text-center animate-pulse"
+            aria-label="Click anywhere or press space to activate voice companion"
+          >
+            <span className="text-xl sm:text-2xl" aria-hidden="true">🔊</span>
+            <span className="font-heading font-black text-sm sm:text-base tracking-wide text-foreground">
+              [ 🔊 Click Anywhere or Press Space to Activate Voice Companion ]
+            </span>
+            <kbd className="hidden sm:inline-block px-2 py-0.5 text-xs font-mono font-bold bg-black/70 text-[#ffed00] border border-[#ffed00]/50 rounded-[2px]">
+              Space
+            </kbd>
+          </button>
+        )}
+
         <section aria-label="Voice examination controls">
           <VoiceExamPanel
             isActive={isActive}

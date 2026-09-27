@@ -32,6 +32,7 @@ import { SectionAdvanceDialog } from '@/components/exam/SectionAdvanceDialog';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
 import { ExamMicStatusBar } from '@/components/exam/ExamMicStatusBar';
+import { ExamVoiceDebugVisualizer } from '@/components/exam/ExamVoiceDebugVisualizer';
 import { useTranslation } from '@/lib/i18n';
 import { ExamSelectionHub } from '@/components/exam/ExamSelectionHub';
 
@@ -290,7 +291,19 @@ function ActiveExamSession({
   const totalQuestions = questions.length;
   const hasSections = Boolean(sections && sections.length > 0);
 
-  const { isActive, status, lastCommand, lastActionFeedback, errorMessage, toggleVoiceMode } = useVoiceMode({
+  const { 
+    isActive, 
+    status, 
+    isSpeaking,
+    lastCommand, 
+    lastTranscript,
+    lastActionFeedback, 
+    errorMessage, 
+    isAudioUnlocked,
+    unlockAudio,
+    readCurrentQuestion,
+    toggleVoiceMode 
+  } = useVoiceMode({
     actions,
     state,
     currentQuestion,
@@ -302,11 +315,18 @@ function ActiveExamSession({
     onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
   });
 
-  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Toggle Mic), 1-4 (Options)
+  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Toggle Mic), 1-4 (Options), Space (Unlock Audio)
   useEffect(() => {
     const handleExamKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Space -> Unlock audio if banner is active
+      if (!isAudioUnlocked && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        unlockAudio();
         return;
       }
 
@@ -349,7 +369,7 @@ function ActiveExamSession({
     return () => {
       window.removeEventListener('keydown', handleExamKeyDown);
     };
-  }, [actions, currentQuestion, toggleVoiceMode]);
+  }, [actions, currentQuestion, toggleVoiceMode, isAudioUnlocked, unlockAudio]);
 
   const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
   const answeredCount = questions.filter(q => isQuestionAnswered(q, state.answers[q.id])).length;
@@ -498,33 +518,15 @@ function ActiveExamSession({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Active Voice Navigation Badge in Top Exam Header Bar */}
-            {isActive && status === 'Listening' ? (
-              <button
-                type="button"
-                onClick={toggleVoiceMode}
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ffed00]/15 text-[#ffed00] border border-[#ffed00]/50 shadow-[0_0_14px_rgba(255,237,0,0.35)] text-xs font-black tracking-wide animate-pulse hover:bg-[#ffed00]/25 transition-all cursor-pointer"
-                title="Voice Navigation is Active. Click or press Alt+M to mute"
-                aria-label="Voice Navigation: Active (Listening). Press Alt+M to mute"
-              >
-                <span className="relative flex size-2.5 items-center justify-center">
-                  <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
-                  <span className="size-2 rounded-full bg-[#ffed00]" />
-                </span>
-                <span>{language === 'hi' ? "🎙️ सुन रहा है | बोलें 'A', 'B', 'अगला', आदि" : "🎙️ Listening | Saying 'A', 'B', 'Next', etc."}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={toggleVoiceMode}
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-muted-foreground border border-border text-xs font-semibold hover:bg-muted transition-all cursor-pointer"
-                title="Voice Navigation is Muted. Click or press Alt+M to unmute"
-                aria-label="Voice Navigation: Muted. Press Alt+M to unmute"
-              >
-                <span className="size-2 rounded-full bg-red-500" />
-                <span>{language === 'hi' ? 'वॉइस म्यूट (Alt+M)' : 'Voice Muted (Alt+M)'}</span>
-              </button>
-            )}
+            {/* Subtle Real-time Status Pill (Reading / Listening / Last heard) */}
+            <ExamVoiceDebugVisualizer
+              status={status}
+              isActive={isActive}
+              isSpeaking={isSpeaking}
+              lastCommand={lastCommand}
+              lastTranscript={lastTranscript}
+              onClick={toggleVoiceMode}
+            />
 
             <ExamTimer 
               timeRemaining={state.timeRemaining} 
@@ -562,7 +564,9 @@ function ActiveExamSession({
       <ExamMicStatusBar
         isActive={isActive}
         status={status}
+        isSpeaking={isSpeaking}
         lastCommand={lastCommand}
+        lastTranscript={lastTranscript}
         lastActionFeedback={lastActionFeedback}
         errorMessage={errorMessage}
         onToggle={toggleVoiceMode}
@@ -614,7 +618,25 @@ function ActiveExamSession({
         <div className="lg:col-span-8 flex flex-col space-y-6 w-full">
           
           {/* Main Question Card - Primary Visual Focus */}
-          <Card className="border-2 border-border/90 bg-card  rounded-none overflow-hidden ring-1 ring-border/50">
+          <Card className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50">
+            {/* 4. Physical "Tap to Enable Voice" Unlock Banner */}
+            {!isAudioUnlocked && (
+              <button
+                type="button"
+                onClick={unlockAudio}
+                className="w-full group relative flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-amber-500/25 via-[#ffed00]/30 to-amber-500/25 border-b-2 border-[#ffed00] text-foreground shadow-[0_0_24px_rgba(255,237,0,0.35)] hover:bg-[#ffed00]/40 transition-all cursor-pointer text-center animate-pulse"
+                aria-label="Click anywhere or press space to activate voice companion"
+              >
+                <span className="text-xl sm:text-2xl" aria-hidden="true">🔊</span>
+                <span className="font-heading font-black text-sm sm:text-base tracking-wide text-foreground">
+                  [ 🔊 Click Anywhere or Press Space to Activate Voice Companion ]
+                </span>
+                <kbd className="hidden sm:inline-block px-2 py-0.5 text-xs font-mono font-bold bg-black/70 text-[#ffed00] border border-[#ffed00]/50 rounded-[2px]">
+                  Space
+                </kbd>
+              </button>
+            )}
+
             {/* Voice Examination Mode Assistive Panel */}
             <section aria-label="Voice examination controls">
               <VoiceExamPanel 

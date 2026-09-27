@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Mic, MicOff, AlertCircle, Radio, CheckCircle, Volume2, Loader2 } from 'lucide-react';
+import { Mic, MicOff, AlertCircle, Volume2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { VoiceStatus } from '@/hooks/useVoiceMode';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
@@ -10,7 +10,9 @@ import { cn } from '@/lib/utils';
 export interface ExamMicStatusBarProps {
   isActive: boolean;
   status: VoiceStatus;
+  isSpeaking?: boolean;
   lastCommand: string | null;
+  lastTranscript?: string | null;
   lastActionFeedback?: string | null;
   errorMessage?: string | null;
   onToggle: () => void;
@@ -20,7 +22,9 @@ export interface ExamMicStatusBarProps {
 export function ExamMicStatusBar({
   isActive,
   status,
+  isSpeaking = false,
   lastCommand,
+  lastTranscript,
   lastActionFeedback,
   errorMessage,
   onToggle,
@@ -28,6 +32,8 @@ export function ExamMicStatusBar({
 }: ExamMicStatusBarProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
+
+  const transcript = lastTranscript || lastCommand;
 
   // 1. Browser Mismatch / Unsupported Banner
   if (status === 'Unsupported') {
@@ -58,9 +64,9 @@ export function ExamMicStatusBar({
   }
 
   // 2. Microphone Active / Inactive States
-  const isListening = isActive && status === 'Listening';
-  const isProcessing = isActive && (status === 'Processing' || (Boolean(lastCommand) && status !== 'Speaking'));
-  const isSpeaking = isActive && status === 'Speaking';
+  const speakingActive = isSpeaking || status === 'Speaking';
+  const listeningActive = isActive && status === 'Listening' && !speakingActive;
+  const processingActive = isActive && (status === 'Processing' || (Boolean(transcript) && !speakingActive));
   const isOffOrReady = !isActive;
 
   return (
@@ -69,20 +75,32 @@ export function ExamMicStatusBar({
       aria-label={isHindi ? "माइक्रोफ़ोन स्थिति बार" : "Microphone status bar"}
       className={cn(
         "w-full flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-none border transition-all duration-200",
-        isListening
+        speakingActive
+          ? "bg-sky-950/40 border-sky-500/50 shadow-[0_0_18px_rgba(56,189,248,0.2)]"
+          : listeningActive
           ? "bg-neutral-950/90 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.25)] ring-1 ring-[#ffed00]/50"
-          : isProcessing
+          : processingActive
           ? "bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_18px_rgba(16,185,129,0.2)]"
-          : isSpeaking
-          ? "bg-primary/10 border-primary/40 shadow-xs"
           : "bg-card/90 border-border/80",
         className
       )}
     >
-      {/* Left side: Status Indicator */}
+      {/* Left side: Real-time Debug Visualizer Status Pill */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        {/* State 1: 🟡 LISTENING */}
-        {isListening && (
+        {/* State 1: 🔊 READING QUESTION */}
+        {speakingActive && (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex size-3.5 shrink-0 items-center justify-center">
+              <Volume2 className="size-4 text-sky-400 animate-pulse" />
+            </span>
+            <span className="text-sm font-bold text-sky-300 font-mono tracking-wide">
+              {isHindi ? "🔊 प्रश्न पढ़ रहा है..." : "🔊 Reading question..."}
+            </span>
+          </div>
+        )}
+
+        {/* State 2: 🎙️ LISTENING */}
+        {listeningActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
               <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
@@ -90,21 +108,21 @@ export function ExamMicStatusBar({
             </span>
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
               <span className="text-sm font-black text-[#ffed00] tracking-wide font-mono">
-                {isHindi ? "🎙️ सुन रहा है | बोलें 'A', 'B', 'अगला', आदि" : "🎙️ Listening | Saying 'A', 'B', 'Next', etc."}
+                {isHindi ? "🎙️ सुन रहा है... (बोलें 'A', 'B', 'Next')" : "🎙️ Listening... (Say 'A', 'B', 'Next')"}
               </span>
             </div>
           </div>
         )}
 
-        {/* State 2: 🟢 RECOGNIZED */}
-        {isProcessing && (
+        {/* State 3: 🟢 LAST HEARD / RECOGNIZED */}
+        {processingActive && !speakingActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
               <span className="size-3 rounded-full bg-emerald-400 ring-4 ring-emerald-400/30 shadow-[0_0_10px_#34d399]" />
             </span>
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className="text-sm font-bold text-emerald-400">
-                {isHindi ? `🟢 पहचाना गया: "${lastCommand}"` : `🟢 Recognized: "${lastCommand}"`}
+              <span className="text-sm font-bold text-emerald-400 font-mono">
+                Last heard: &ldquo;{transcript}&rdquo;
               </span>
               {lastActionFeedback && (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-[2px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
@@ -112,18 +130,6 @@ export function ExamMicStatusBar({
                 </span>
               )}
             </div>
-          </div>
-        )}
-
-        {/* State 3: 🔵 SPEAKING (TALKBACK) */}
-        {isSpeaking && (
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="relative flex size-3.5 shrink-0 items-center justify-center">
-              <Volume2 className="size-4 text-primary animate-pulse" />
-            </span>
-            <span className="text-sm font-semibold text-primary">
-              {isHindi ? '🔵 बोल रहा है (स्क्रीन रीडर)...' : '🔵 Speaking (Screen Reader)...'}
-            </span>
           </div>
         )}
 
@@ -164,7 +170,7 @@ export function ExamMicStatusBar({
           disabled={status === 'RequestingPermission'}
           className={cn(
             "h-8 px-3 text-xs font-bold gap-1.5 transition-all",
-            isActive && isListening
+            isActive && listeningActive
               ? "bg-[#ffed00] hover:bg-[#ffed00]/90 text-black border-[#ffed00] shadow-[0_0_12px_rgba(255,237,0,0.4)]"
               : isActive
               ? "border-border"
