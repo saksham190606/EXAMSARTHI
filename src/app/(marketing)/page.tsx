@@ -111,19 +111,19 @@ const communityTags: OrbitTag[] = [
 
 export default function LandingPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-canvas text-foreground">
+    <div className="flex flex-col min-h-screen bg-transparent text-foreground">
       
       {/* SECTION 1 — Animated Hero & Exam Ticker */}
       <ExamSarthiHero />
 
       {/* SECTION 2 — Candidate Intelligence & Readiness Preview Card */}
-      <section className="bg-black text-white px-4 py-12 md:py-16 border-b border-white/16">
+      <section className="bg-transparent text-white px-4 py-12 md:py-16 border-b border-white/16">
         <div className="max-w-5xl mx-auto flex flex-col items-center text-center">
           <div className="w-full max-w-4xl text-left">
             <div 
               role="region"
               aria-label="Candidate performance and recommendation overview"
-              className="rounded-[2px] border border-[rgba(255,255,255,0.16)] bg-black p-6 sm:p-8 space-y-6 shadow-none"
+              className="rounded-[2px] border border-[rgba(255,255,255,0.16)] bg-black/60 backdrop-blur-sm p-6 sm:p-8 space-y-6 shadow-none"
             >
               {/* Card Header */}
               <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-[rgba(255,255,255,0.16)]">
@@ -234,7 +234,7 @@ export default function LandingPage() {
       </section>
 
       {/* SUB-NAVIGATION PILL RAIL (Between Hero and Content Body) */}
-      <section className="border-b border-neutral-200 dark:border-white/16 bg-white dark:bg-black py-4 px-4 overflow-x-auto">
+      <section className="border-b border-neutral-200 dark:border-white/16 bg-transparent py-4 px-4 overflow-x-auto">
         <div className="max-w-7xl mx-auto flex items-center gap-3 justify-center sm:justify-start">
           <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 mr-2 hidden md:inline">Quick Access</span>
           <Link href="/practice" className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[46px] border border-black bg-white text-black hover:bg-black hover:text-white dark:border-white dark:bg-black dark:text-white dark:hover:bg-white dark:hover:text-black text-xs font-bold tracking-[0.13px] whitespace-nowrap transition-all duration-150 ease-[cubic-bezier(0.2,0,0,1)] active:scale-[0.98]">
@@ -272,7 +272,7 @@ export default function LandingPage() {
       />
 
       {/* SECTION 3 — Pure White Canvas Browsing Mode (Square Tiles with Crisp Dividers) */}
-      <section className="py-20 md:py-28 px-4 md:px-8 max-w-7xl mx-auto w-full bg-white dark:bg-black">
+      <section className="py-20 md:py-28 px-4 md:px-8 max-w-7xl mx-auto w-full bg-transparent">
         <div className="text-center mb-16 space-y-4">
           <h2 className="font-heading text-3xl md:text-5xl font-bold tracking-tight text-foreground leading-[0.95]">
             Built for Accessibility First
@@ -348,7 +348,7 @@ export default function LandingPage() {
       <BentoFeatureSection />
 
       {/* SECTION 4 — Institutional Quality Band (Deep Black Canvas #111111) */}
-      <section className="py-20 md:py-28 bg-[#111111] text-white border-t border-white/16 px-4 md:px-8">
+      <section className="py-20 md:py-28 bg-transparent text-white border-t border-white/16 px-4 md:px-8">
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
             <div className="space-y-3">
@@ -376,7 +376,7 @@ export default function LandingPage() {
           </div>
 
           {/* Diagnostic Metric Preview Card (Square 0px radius, 1px border) */}
-          <div className="bg-black rounded-none p-6 sm:p-8 border border-white/16 space-y-6">
+          <div className="bg-black/60 backdrop-blur-sm rounded-none p-6 sm:p-8 border border-white/16 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-white/16">
               <h3 className="font-heading font-bold text-lg text-white">Diagnostic Candidate Profile</h3>
               <span className="text-xs font-bold text-primary border border-primary/40 px-2.5 py-0.5 rounded-[46px]">
@@ -412,7 +412,7 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 5 — Global Footer (Pure Black Canvas #000000, 64px padding, 3-column layout) */}
-      <footer className="py-16 bg-black text-white border-t border-white/16 px-4 sm:px-8">
+      <footer className="py-16 bg-black/70 backdrop-blur-sm text-white border-t border-white/16 px-4 sm:px-8">
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             

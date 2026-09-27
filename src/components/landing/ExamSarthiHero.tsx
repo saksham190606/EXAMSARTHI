@@ -32,7 +32,7 @@ export function ExamTickerBar() {
   const reducedMotion = useAccessibilityStore((state) => state.reducedMotion);
 
   return (
-    <section className="border-t border-b border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] py-6">
+    <section className="border-t border-b border-black/10 dark:border-white/10 bg-transparent py-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <p className="text-center text-xs font-bold uppercase tracking-wider text-black/50 dark:text-white/50 mb-4">
           Curated Question Banks & Mock Patterns For
@@ -80,7 +80,7 @@ export default function ExamSarthiHero() {
   const isHindi = language === 'hi';
 
   return (
-    <div className="relative w-full overflow-hidden bg-white text-black dark:bg-[#0a0a0a] dark:text-white transition-colors">
+    <div className="relative w-full overflow-hidden bg-transparent text-black dark:text-white transition-colors">
       <div 
         aria-hidden="true" 
         className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[#ffed00]/10 blur-[120px]" 

@@ -43,7 +43,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground relative">
-        <DotPattern className="fixed inset-0 z-0 h-full w-full fill-white/10 [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)] pointer-events-none" />
+        <DotPattern className="fixed inset-0 z-[1] h-full w-full fill-white/20 [mask-image:radial-gradient(ellipse_at_center,white_60%,transparent_100%)] pointer-events-none" />
 
         {/* Skip to Main Content Link for Keyboard and Screen-Reader Accessibility */}
         <a 
@@ -53,7 +53,7 @@ export default function RootLayout({
           Skip to main content
         </a>
 
-        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+        <div className="relative z-[2] flex min-h-full flex-1 flex-col bg-transparent">
           <ThemeProvider
             attribute="class"
             defaultTheme="light"
@@ -63,7 +63,7 @@ export default function RootLayout({
             <AuthProvider>
               <AccessibilityProvider>
                 <Header />
-                <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none">
+                <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none bg-transparent">
                   {children}
                 </main>
               </AccessibilityProvider>

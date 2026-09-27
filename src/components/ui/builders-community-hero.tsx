@@ -282,7 +282,7 @@ export default function BuildersCommunityHero({
     <section
       aria-label="Platform Highlights & Accessibility Performance"
       className={cn(
-        "w-full flex flex-col items-center justify-center overflow-hidden bg-white px-4 pt-12 pb-16 text-foreground border-b border-border/80 dark:bg-black dark:text-white dark:border-white/16",
+        "w-full flex flex-col items-center justify-center overflow-hidden bg-transparent px-4 pt-12 pb-16 text-foreground border-b border-border/80 dark:text-white dark:border-white/16",
         className
       )}
     >
