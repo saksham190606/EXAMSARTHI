@@ -4,9 +4,8 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Clock, HelpCircle, ArrowRight, Sparkles, BookOpen, Volume2, Mic, MicOff } from 'lucide-react';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { speak, getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
-import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import { EXAM_VOICE_ROUTES, matchExamVoiceRoute, ExamVoiceRoute } from '@/lib/voice/exam-router';
+import { useVoiceEngine } from '@/lib/voice/useVoiceEngine';
+import { EXAM_VOICE_ROUTES, matchExamTokens, matchExamVoiceRoute, ExamVoiceRoute } from '@/lib/voice/exam-router';
 import { cn } from '@/lib/utils';
 
 export interface ExamCatalogItem {
@@ -81,216 +80,84 @@ export function ExamSelectionHub() {
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
 
-  // Voice Router States
-  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true);
   const [highlightedExamId, setHighlightedExamId] = useState<string | null>(null);
   const [launchingTitle, setLaunchingTitle] = useState<string | null>(null);
-  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
-
-  const recognitionRef = useRef<any>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const isLaunchingRef = useRef<boolean>(false);
-  const isSpeakingRef = useRef<boolean>(false);
-  const isVoiceActiveRef = useRef<boolean>(true);
-  const isHindiRef = useRef<boolean>(isHindi);
 
-  useEffect(() => {
-    isVoiceActiveRef.current = isVoiceActive;
-  }, [isVoiceActive]);
+  // 1. Centralized Global Voice Hook Connection
+  const {
+    isListening,
+    isSpeaking,
+    transcript,
+    hasMicPermission,
+    startListening,
+    stopListening,
+    speakText,
+    requestMicAccess,
+  } = useVoiceEngine({
+    lang: isHindi ? 'hi-IN' : 'en-US',
+    autoStart: true,
+    onTranscript: (capturedText) => {
+      if (isLaunchingRef.current) return;
 
-  useEffect(() => {
-    isHindiRef.current = isHindi;
-  }, [isHindi]);
+      // 2. Token Matching:
+      // SSC CGL: ["cgl", "ssc", "staff selection", "सीजीएल", "एसएससी"]
+      // UPSC: ["upsc", "cse", "prelims", "civil services", "यूपीएससी", "प्रीलिम्स"]
+      // IBPS / Banking: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ"]
+      // Railway: ["rrb", "ntpc", "railway", "railways", "रेलवे", "एनटीपीसी"]
+      // Vision AI: ["vision", "diagram", "visual", "विज़न", "डायग्राम"]
+      const match =
+        matchExamTokens(capturedText) ||
+        (matchExamVoiceRoute(capturedText)
+          ? { route: matchExamVoiceRoute(capturedText)!, examName: matchExamVoiceRoute(capturedText)!.title }
+          : null);
+
+      if (match) {
+        launchExam(match.route, match.examName);
+      }
+    },
+  });
 
   // Announce the exam selection screen upon landing
   useEffect(() => {
-    speak(
-      isHindi
-        ? 'परीक्षा चयन केंद्र। कोई भी परीक्षा चुनने के लिए उसका नाम बोलें—जैसे यूपीएससी, सीजीएल, बैंक पीओ या रेलवे।'
-        : 'Exam Selection Hub. Say any exam title to launch—such as UPSC, CGL, Bank PO, Railway, or Vision AI.',
-      { cancelPrevious: true, langOverride: isHindi ? 'hi' : 'en' }
-    );
-  }, [isHindi]);
+    const welcome = isHindi
+      ? 'परीक्षा चयन केंद्र। कोई भी परीक्षा चुनने के लिए उसका नाम बोलें—जैसे यूपीएससी, सीजीएल, बैंक पीओ या रेलवे।'
+      : 'Exam Selection Hub. Say any exam title to launch—such as UPSC, CGL, Bank PO, Railway, or Vision AI.';
+    speakText(welcome, isHindi ? 'hi-IN' : 'en-US', () => {
+      startListening(isHindi ? 'hi-IN' : 'en-US');
+    });
+  }, [isHindi, speakText, startListening]);
 
   // 3. Instant Launch & Auditory Feedback
-  const launchExam = useCallback(async (route: { id: string; param: string; title: string }) => {
-    if (isLaunchingRef.current) return;
-    isLaunchingRef.current = true;
+  const launchExam = useCallback(
+    (route: { id: string; param: string; title: string }, examName?: string) => {
+      if (isLaunchingRef.current) return;
+      isLaunchingRef.current = true;
+      const targetName = examName || route.title;
 
-    // 1. Stop speech listener to avoid audio collisions
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
+      setLaunchingTitle(targetName);
+      setHighlightedExamId(route.id);
 
-    setLaunchingTitle(route.title);
-    setHighlightedExamId(route.id);
-
-    // 4. Smoothly focus and scroll to the exam card
-    const cardEl = document.getElementById(`exam-card-${route.id}`);
-    if (cardEl) {
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    // 2. Announce immediately via speech synthesis
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch (e) {}
-
-      const announcement = isHindiRef.current
-        ? `${route.title} शुरू किया जा रहा है...`
-        : `Opening ${route.title}...`;
-
-      const utterance = new SpeechSynthesisUtterance(announcement);
-      utterance.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
-      utterance.rate = 1.0;
-
-      const voice = getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
-      if (voice) {
-        utterance.voice = voice;
+      // Smoothly focus and scroll to the exam card
+      const cardEl = document.getElementById(`exam-card-${route.id}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      utteranceRef.current = utterance;
-      (window as any).__activeUtterance = utterance;
-      isSpeakingRef.current = true;
-
-      utterance.onend = async () => {
-        isSpeakingRef.current = false;
-        utteranceRef.current = null;
-        try {
-          await requestMicPermission();
-        } catch (e) {}
+      // 1. Call speakText("Opening " + examName)
+      // 2. Transition immediately to that exam URL
+      const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
+      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
         router.push(`/exam?set=${route.param}`);
-      };
+      });
 
-      utterance.onerror = async () => {
-        isSpeakingRef.current = false;
-        utteranceRef.current = null;
-        try {
-          await requestMicPermission();
-        } catch (e) {}
-        router.push(`/exam?set=${route.param}`);
-      };
-
-      try {
-        window.speechSynthesis.speak(utterance);
-      } catch (e) {
-        isSpeakingRef.current = false;
-        router.push(`/exam?set=${route.param}`);
-      }
-    } else {
-      router.push(`/exam?set=${route.param}`);
-    }
-
-    // Fallback safety timeout if utterance end does not fire
-    setTimeout(async () => {
-      try {
-        await requestMicPermission();
-      } catch (e) {}
-      router.push(`/exam?set=${route.param}`);
-    }, 1400);
-  }, [router]);
-
-  // Safe Recognition Start
-  const startListening = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    if (isLaunchingRef.current || isSpeakingRef.current || !isVoiceActiveRef.current) return;
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
-        recognitionRef.current.start();
-      } catch (e: any) {
-        // Ignore InvalidStateError if already listening
-      }
-    }
-  }, []);
-
-  // Safe Recognition Stop
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
-  }, []);
-
-  // Toggle voice recognition
-  const toggleVoiceMode = useCallback(() => {
-    if (isVoiceActive) {
-      setIsVoiceActive(false);
-      isVoiceActiveRef.current = false;
-      stopListening();
-    } else {
-      setIsVoiceActive(true);
-      isVoiceActiveRef.current = true;
-      startListening();
-    }
-  }, [isVoiceActive, stopListening, startListening]);
-
-  // 4. Page-Level Voice Listener Initialization
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false; // Short discrete cycles avoid Windows Chromium dead-mic bug
-    recognition.interimResults = false;
-    recognition.lang = isHindi ? 'hi-IN' : 'en-US';
-    recognitionRef.current = recognition;
-
-    recognition.onresult = (event: any) => {
-      if (isLaunchingRef.current || isSpeakingRef.current) return;
-
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-      if (!transcript) return;
-
-      setLastTranscript(transcript);
-      console.log('[ExamSelectionHub VoiceRouter] Captured speech:', transcript);
-
-      // 2. Match via robust partial / fuzzy matching algorithm
-      const matched = matchExamVoiceRoute(transcript);
-      if (matched) {
-        launchExam(matched);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      console.warn('[ExamSelectionHub VoiceRouter] Recognition notice:', event?.error);
-    };
-
-    // On recognition.onend: automatically restart listening if user remains on selection screen
-    recognition.onend = () => {
+      // Safety transition fallback if TTS completion lags
       setTimeout(() => {
-        if (
-          isVoiceActiveRef.current && 
-          !isLaunchingRef.current && 
-          !isSpeakingRef.current && 
-          recognitionRef.current
-        ) {
-          try {
-            recognitionRef.current.start();
-          } catch (e) {}
-        }
-      }, 150);
-    };
-
-    if (isVoiceActiveRef.current && !isLaunchingRef.current) {
-      try {
-        recognition.start();
-      } catch (e) {}
-    }
-
-    return () => {
-      try {
-        recognition.abort();
-      } catch (e) {}
-    };
-  }, [isHindi, launchExam]);
+        router.push(`/exam?set=${route.param}`);
+      }, 2000);
+    },
+    [isHindi, router, speakText]
+  );
 
   // Alt+M Keyboard Shortcut to toggle Voice Router
   useEffect(() => {
@@ -302,13 +169,17 @@ export function ExamSelectionHub() {
 
       if (e.altKey && (e.key === 'm' || e.key === 'M' || e.code === 'KeyM')) {
         e.preventDefault();
-        toggleVoiceMode();
+        if (isListening) {
+          stopListening();
+        } else {
+          startListening(isHindi ? 'hi-IN' : 'en-US');
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleVoiceMode]);
+  }, [isHindi, isListening, startListening, stopListening]);
 
   return (
     <div className="min-h-screen bg-black text-white px-4 py-12 sm:px-6 lg:px-8">
@@ -317,45 +188,48 @@ export function ExamSelectionHub() {
         <div className="mb-10 text-left">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
             <div className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00]/10 border border-[#ffed00]/30 px-3 py-1 text-xs font-bold text-[#ffed00]">
-              <BookOpen className="h-3.5 w-3.5" aria-hidden="true"/>
+              <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
               <span>OFFICIAL MOCK PORTAL</span>
             </div>
 
-            {/* 4. Page-Level Voice Status Pill */}
-            <div className="flex items-center gap-2">
-              {isVoiceActive ? (
+            {/* 4. UI Diagnostics & Manual Recovery Banner */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {!hasMicPermission ? (
                 <button
                   type="button"
-                  onClick={toggleVoiceMode}
-                  className={cn(
-                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono font-bold transition-all cursor-pointer select-none",
-                    launchingTitle
-                      ? "bg-emerald-950/90 text-emerald-300 border-2 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] animate-pulse"
-                      : "bg-neutral-950/90 text-[#ffed00] border-2 border-[#ffed00] shadow-[0_0_18px_rgba(255,237,0,0.35)] animate-pulse hover:bg-[#ffed00]/15"
-                  )}
-                  title="Intelligent Voice Router Active. Click or press Alt+M to mute"
-                  aria-label="Intelligent Voice Router: Active. Say UPSC, CGL, Bank PO, Railway, or Vision AI"
+                  onClick={async () => {
+                    const granted = await requestMicAccess();
+                    if (granted) {
+                      startListening(isHindi ? 'hi-IN' : 'en-US');
+                    }
+                  }}
+                  className="px-4 py-2 bg-[#ffed00] hover:bg-[#e6d500] text-black font-bold rounded-lg shadow-md transition cursor-pointer text-xs sm:text-sm animate-pulse flex items-center gap-2"
+                >
+                  <Mic className="size-4" />
+                  <span>🎙️ Tap to Enable Voice &amp; Mic</span>
+                </button>
+              ) : isSpeaking ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-sky-950/90 text-sky-300 border-2 border-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.35)] animate-pulse"
+                >
+                  <span className="size-2 rounded-full bg-sky-400 animate-ping" />
+                  <span>🔊 Reading Question...</span>
+                </div>
+              ) : isListening ? (
+                <button
+                  type="button"
+                  onClick={() => stopListening()}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-neutral-950/90 text-[#ffed00] border-2 border-[#ffed00] shadow-[0_0_18px_rgba(255,237,0,0.35)] animate-pulse hover:bg-[#ffed00]/15 cursor-pointer"
+                  title="Click or press Alt+M to mute"
                 >
                   <span className="relative flex size-2.5 items-center justify-center">
-                    <span className={cn(
-                      "absolute -inset-1 rounded-full animate-ping opacity-75",
-                      launchingTitle ? "bg-emerald-400" : "bg-[#ffed00]"
-                    )} />
-                    <span className={cn(
-                      "size-2 rounded-full",
-                      launchingTitle ? "bg-emerald-400" : "bg-[#ffed00]"
-                    )} />
+                    <span className="absolute -inset-1 rounded-full animate-ping opacity-75 bg-[#ffed00]" />
+                    <span className="size-2 rounded-full bg-[#ffed00]" />
                   </span>
                   <span className="truncate max-w-[280px] sm:max-w-md">
-                    {launchingTitle ? (
-                      isHindi ? `🟢 ${launchingTitle} शुरू हो रहा है...` : `🟢 Opening ${launchingTitle}...`
-                    ) : lastTranscript ? (
-                      `🎙️ Heard: "${lastTranscript}" · Say 'UPSC', 'CGL', 'Bank PO', 'Railway', 'Vision AI'`
-                    ) : (
-                      isHindi 
-                        ? "🎙️ सुन रहा है... (बोलें 'UPSC', 'CGL', 'Bank PO', 'Railway', या 'Vision AI')" 
-                        : "🎙️ Listening... (Say 'UPSC', 'CGL', 'Bank PO', 'Railway', or 'Vision AI')"
-                    )}
+                    🎙️ Listening | Heard: &ldquo;{transcript || '...'}&rdquo;
                   </span>
                   <kbd className="hidden sm:inline px-1.5 py-0.5 text-2xs bg-black/80 text-[#ffed00] border border-[#ffed00]/40 rounded font-mono">
                     Alt+M
@@ -364,78 +238,83 @@ export function ExamSelectionHub() {
               ) : (
                 <button
                   type="button"
-                  onClick={toggleVoiceMode}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono font-semibold bg-neutral-900 text-white/70 border border-white/20 hover:text-white transition-all cursor-pointer"
-                  title="Voice Router Muted. Click or press Alt+M to unmute"
-                  aria-label="Voice Router: Muted. Click or press Alt+M to unmute"
+                  onClick={() => startListening(isHindi ? 'hi-IN' : 'en-US')}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold bg-neutral-900 text-white/70 border border-white/20 hover:text-white transition-all cursor-pointer"
+                  title="Voice Router Muted. Click to unmute"
                 >
                   <span className="size-2 rounded-full bg-red-500" />
-                  <span>{isHindi ? '🔴 वॉइस नेविगेशन म्यूट (Alt+M)' : '🔴 Voice Muted (Alt+M)'}</span>
+                  <span>🔴 Voice Muted (Click or Alt+M to start)</span>
                 </button>
               )}
             </div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Select Mock Examination
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-2">
+            Select Your Examination
           </h1>
-          <p className="mt-2 text-sm sm:text-base text-white/70 max-w-2xl">
-            Choose an examination pattern to start your proctored CBT session. You can speak exam names directly (e.g. &ldquo;UPSC&rdquo;, &ldquo;CGL&rdquo;, &ldquo;Bank PO&rdquo;, &ldquo;Railway&rdquo;) to launch instantly.
+          <p className="text-base text-neutral-400 max-w-2xl">
+            Choose a full simulated mock test or launch instantly with your microphone.
+            Our fully accessible, voice-first engine is active across all national formats.
           </p>
+
+          {/* Voice Command Helper Banner */}
+          <div className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg bg-neutral-900/80 border border-white/10 px-4 py-2.5 text-xs text-neutral-300">
+            <Volume2 className="h-4 w-4 text-[#ffed00] shrink-0" aria-hidden="true" />
+            <span className="font-semibold text-white">Voice Shortcut:</span>
+            <span>Say</span>
+            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;CGL&quot;</span>,
+            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;UPSC&quot;</span>,
+            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;IBPS&quot;</span>,
+            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Railway&quot;</span>, or
+            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Vision AI&quot;</span>
+            <span>to open any exam hands-free.</span>
+          </div>
         </div>
 
         {/* Exam Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {EXAM_CATALOG.map((exam) => {
             const isHighlighted = highlightedExamId === exam.id;
+            const isLaunchingThis = launchingTitle === exam.title;
+
             return (
               <div
                 key={exam.id}
                 id={`exam-card-${exam.id}`}
                 className={cn(
-                  "flex flex-col justify-between rounded-[2px] border p-6 transition-all duration-300 group relative shadow-md scroll-mt-24",
-                  isHighlighted
-                    ? "border-2 border-[#ffed00] shadow-[0_0_30px_rgba(255,237,0,0.6)] ring-2 ring-[#ffed00]/80 bg-[#1a1a1a] scale-[1.02]"
-                    : "border-white/15 bg-[#111111] hover:border-[#ffed00] hover:bg-[#161616]"
+                  "relative flex flex-col justify-between rounded-xl border p-6 transition-all duration-300 bg-neutral-950",
+                  isLaunchingThis
+                    ? "border-emerald-400 ring-4 ring-emerald-500/40 bg-emerald-950/20 scale-[1.02] shadow-[0_0_30px_rgba(16,185,129,0.3)]"
+                    : isHighlighted
+                    ? "border-[#ffed00] ring-4 ring-[#ffed00]/30 bg-[#ffed00]/5 scale-[1.01]"
+                    : "border-neutral-800 hover:border-neutral-600 hover:bg-neutral-900/60"
                 )}
               >
                 <div>
-                  {/* Badge if present */}
-                  {exam.badge && (
-                    <span className="inline-flex items-center gap-1 rounded-[2px] bg-[#ffed00] text-black px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider mb-3">
-                      <Sparkles className="h-3 w-3" aria-hidden="true"/>
-                      {exam.badge}
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-2xs font-bold tracking-wider uppercase text-neutral-400">
+                      {exam.authority}
                     </span>
-                  )}
+                    {exam.badge && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-2xs font-semibold text-primary">
+                        <Sparkles className="h-3 w-3" aria-hidden="true" />
+                        <span>{exam.badge}</span>
+                      </span>
+                    )}
+                  </div>
 
-                  <p className="text-xs font-semibold text-[#ffed00] uppercase tracking-wide">
-                    {exam.authority}
-                  </p>
-                  <h2 className="mt-1 text-xl font-bold text-white group-hover:text-[#ffed00] transition-colors">
+                  <h2 className="text-xl font-bold text-white mb-2 group-hover:text-[#ffed00] transition-colors">
                     {exam.title}
                   </h2>
-                  <p className="mt-2 text-xs text-white/60 leading-relaxed">
+                  <p className="text-xs text-neutral-400 line-clamp-3 mb-4 leading-relaxed">
                     {exam.description}
                   </p>
 
-                  {/* Metadata Pills */}
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/80">
-                    <div className="flex items-center gap-1">
-                      <HelpCircle className="h-3.5 w-3.5 text-[#ffed00]" aria-hidden="true"/>
-                      <span>{exam.questionsCount} Questions</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-[#ffed00]" aria-hidden="true"/>
-                      <span>{exam.durationMinutes} Mins</span>
-                    </div>
-                  </div>
-
-                  {/* Subject tags */}
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {exam.subjects.map((sub, i) => (
+                  <div className="flex flex-wrap gap-1.5 mb-6">
+                    {exam.subjects.map((sub) => (
                       <span
-                        key={i}
-                        className="rounded-[2px] bg-white/5 border border-white/10 px-2 py-0.5 text-[10px] text-white/70"
+                        key={sub}
+                        className="rounded bg-neutral-900 border border-neutral-800 px-2 py-0.5 text-2xs font-medium text-neutral-300"
                       >
                         {sub}
                       </span>
@@ -443,21 +322,32 @@ export function ExamSelectionHub() {
                   </div>
                 </div>
 
-                {/* Action Button */}
-                <button
-                  type="button"
-                  onClick={() => launchExam(exam)}
-                  className={cn(
-                    "mt-6 inline-flex w-full items-center justify-center gap-2 rounded-[2px] px-4 py-2.5 text-xs font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00] cursor-pointer",
-                    isHighlighted
-                      ? "bg-[#ffed00] text-black ring-2 ring-[#ffed00] shadow-[0_0_15px_rgba(255,237,0,0.5)]"
-                      : "bg-[#ffed00] text-black hover:bg-[#e6d500]"
-                  )}
-                  aria-label={`Launch ${exam.title}`}
-                >
-                  <span>{isHighlighted ? 'Opening Exam...' : 'Launch Exam'}</span>
-                  <ArrowRight className="h-4 w-4" aria-hidden="true"/>
-                </button>
+                <div className="pt-4 border-t border-neutral-900 flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-xs text-neutral-400 font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      <HelpCircle className="h-3.5 w-3.5 text-neutral-500" aria-hidden="true" />
+                      <span>{exam.questionsCount} Qs</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-neutral-500" aria-hidden="true" />
+                      <span>{exam.durationMinutes} min</span>
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => launchExam(exam)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer",
+                      isLaunchingThis
+                        ? "bg-emerald-400 text-black shadow-lg"
+                        : "bg-[#ffed00] text-black hover:bg-[#e6d500]"
+                    )}
+                  >
+                    <span>{isLaunchingThis ? 'Launching...' : 'Start Mock'}</span>
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             );
           })}

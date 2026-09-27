@@ -3,9 +3,7 @@ import { classifyIntentLocally, playVoiceFeedbackChime } from '@/lib/voice/inten
 import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 
-// Deal with browser prefixes for SpeechRecognition
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SpeechRecognition = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : null;
+import { startListening as engineStartListening, stopListening as engineStopListening } from '@/lib/voice/useVoiceEngine';
 
 export interface VoiceCommandConfig {
   isSubmitDialogOpen: boolean;
@@ -227,96 +225,29 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
   }, [isListening]);
 
   // Initialize recognition
-  useEffect(() => {
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      const lang = useAccessibilityStore.getState().language;
-      recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setStatusText('Listening for a voice command...');
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
-        // Echo-cancellation guard: ignore input when speech synthesis is speaking
-        if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking) {
-          return;
-        }
-
-        const resultIndex = event.resultIndex !== undefined ? event.resultIndex : event.results.length - 1;
-        const transcript = event.results?.[resultIndex]?.[0]?.transcript?.trim();
-        if (transcript) {
-          processCommand(transcript);
-        }
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech') {
-          return;
-        }
-        if (event.error === 'aborted') {
-          return;
-        }
-        switch (event.error) {
-          case 'network':
-            setStatusText('Voice recognition could not connect. Check your internet connection.');
-            break;
-          case 'not-allowed':
-          case 'service-not-allowed':
-            setStatusText('Microphone permission is required for voice commands.');
-            setIsListening(false);
-            break;
-          case 'audio-capture':
-            setStatusText('No microphone was found. Ensure a microphone is connected.');
-            setIsListening(false);
-            break;
-          default:
-            setStatusText(`Notice: ${event.error}`);
-            break;
-        }
-      };
-
-      recognition.onend = () => {
-        // Auto-restart recognition if listening toggle remains enabled
-        if (isListeningRef.current && recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (_) {}
-        } else {
-          setIsListening(false);
-        }
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, [processCommand]);
+  // Managed by centralized global Voice Engine in useVoiceEngine
 
 
 
   const startListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        // Already started or error
-        console.warn('Speech recognition start error', e);
-      }
-    }
-  }, []);
+    const isHi = useAccessibilityStore.getState().language === 'hi';
+    setIsListening(true);
+    isListeningRef.current = true;
+    setStatusText('Listening for a voice command...');
+    engineStartListening(isHi ? 'hi-IN' : 'en-US', (transcript) => {
+      processCommand(transcript);
+    });
+  }, [processCommand]);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
+    setIsListening(false);
+    isListeningRef.current = false;
+    engineStopListening();
+    setStatusText('Voice command ready');
   }, []);
 
   return {
-    isSupported: !!SpeechRecognition,
+    isSupported: typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition),
     isListening,
     statusText,
     startListening,

@@ -521,15 +521,6 @@ function ActiveExamSession({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* 2. Explicit User-Gesture Mic Unlock Button */}
-            {(!isActive || status === 'Error' || status === 'Ready') && (
-              <button
-                onClick={handleManualMicActivation}
-                className="px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md"
-              >
-                🎙️ Click to Enable Microphone
-              </button>
-            )}
 
             {/* Subtle Real-time Status Pill (Reading / Listening / Last heard) */}
             <ExamVoiceDebugVisualizer

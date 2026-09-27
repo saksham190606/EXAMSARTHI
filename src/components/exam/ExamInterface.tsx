@@ -146,7 +146,7 @@ export function ExamInterface({
         onEnableMic={handleManualMicActivation}
       />
 
-      {/* Header Real-time Debug Visualizer Status Pill & Manual Unlock */}
+      {/* Header Real-time Debug Visualizer Status Pill & Manual Recovery Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
         <ExamVoiceDebugVisualizer
           status={status}
@@ -159,14 +159,6 @@ export function ExamInterface({
           onEnableMic={handleManualMicActivation}
           onClick={toggleVoiceMode}
         />
-        {(!isActive || status === 'Error' || status === 'Ready') && (
-          <button
-            onClick={handleManualMicActivation}
-            className="px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md"
-          >
-            🎙️ Click to Enable Microphone
-          </button>
-        )}
       </div>
 
       {/* Active Glowing Sunlight Yellow Mic Indicator Floating Pulse */}

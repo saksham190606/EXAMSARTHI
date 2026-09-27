@@ -10,6 +10,7 @@
 
 import { useAccessibilityStore } from "@/store/useAccessibilityStore";
 import { parseSpokenIntent, playVoiceFeedbackChime } from "@/lib/voice/intent-parser";
+import { startListening as globalStartListening, stopListening as globalStopListening } from "@/lib/voice/useVoiceEngine";
 
 /**
  * Formats text for natural speech synthesis pronunciation.
@@ -1259,10 +1260,8 @@ export function localizeTalkBackText(text: string | null | undefined, isHi: bool
  * Bulletproof Voice Command Router & Speech Recognition Engine
  */
 class VoiceNavigationEngine {
-  private recognition: any = null;
   private routerNavigate: ((path: string) => void) | null = null;
   private isListeningExplicitly = false;
-  private restartTimeout: any = null;
   private isSpeakingFeedback = false;
 
   public setRouter(navigate: (path: string) => void) {
@@ -1272,9 +1271,7 @@ class VoiceNavigationEngine {
   public navigate(path: string, confirmationText: string) {
     playVoiceFeedbackChime();
     this.isSpeakingFeedback = true;
-    try {
-      this.recognition?.stop();
-    } catch (_) {}
+    globalStopListening();
 
     speak(confirmationText, {
       onEnd: () => {
@@ -1285,10 +1282,10 @@ class VoiceNavigationEngine {
         }
         setTimeout(() => {
           this.isSpeakingFeedback = false;
-          if (this.isListeningExplicitly && this.recognition) {
-            try {
-              this.recognition.start();
-            } catch (_) {}
+          if (this.isListeningExplicitly) {
+            const store = useAccessibilityStore.getState();
+            const lang = store.language === "hi" ? "hi-IN" : "en-US";
+            globalStartListening(lang, (t) => this.processCommand(t));
           }
         }, 300);
       },
@@ -1322,81 +1319,13 @@ class VoiceNavigationEngine {
   }
 
   public init() {
-    if (!isSpeechRecognitionSupported()) return;
-
-    try {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      
-      const store = useAccessibilityStore.getState();
-      recognition.lang = store.language === "hi" ? "hi-IN" : "en-US";
-
-      recognition.onresult = async (event: any) => {
-        // Prevent speech feedback loop if synthesized speech or confirmation chime is active
-        if (this.isSpeakingFeedback || (typeof window !== "undefined" && window.speechSynthesis?.speaking)) {
-          return;
-        }
-
-        const lastIndex = event.results.length - 1;
-        const transcript = event.results[lastIndex][0]?.transcript?.trim();
-        if (transcript) {
-          await this.processCommand(transcript);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          this.isListeningExplicitly = false;
-          useAccessibilityStore.getState().setIsListeningCommands(false);
-          const isHi = useAccessibilityStore.getState().language === "hi";
-          speak(
-            isHi
-              ? "माइक्रोफ़ोन अनुमति अस्वीकृत। कृपया अपने ब्राउज़र में माइक्रोफ़ोन अनुमति दें।"
-              : "Microphone permission was denied. Please allow microphone access in your browser."
-          );
-        } else if (event.error !== "no-speech" && event.error !== "aborted") {
-          console.warn("[VoiceEngine] Recognition error:", event.error);
-        }
-      };
-
-      // Crucial auto-restart: Browsers stop continuous listening on brief silence
-      recognition.onend = () => {
-        if (this.isListeningExplicitly) {
-          clearTimeout(this.restartTimeout);
-          this.restartTimeout = setTimeout(() => {
-            if (this.isListeningExplicitly && this.recognition) {
-              try {
-                this.recognition.start();
-              } catch (_) {
-                // Ignore InvalidStateError if already started
-              }
-            }
-          }, 200);
-        }
-      };
-
-      this.recognition = recognition;
-    } catch (e) {
-      console.warn("[VoiceEngine] Failed to initialize SpeechRecognition:", e);
-    }
+    // Managed centrally by singleton useVoiceEngine
   }
 
   public setLanguage(lang: 'en' | 'hi') {
-    if (this.recognition) {
+    if (this.isListeningExplicitly) {
       const newLang = lang === "hi" ? "hi-IN" : "en-US";
-      if (this.recognition.lang !== newLang) {
-        this.recognition.lang = newLang;
-        if (this.isListeningExplicitly) {
-          try {
-            this.recognition.stop();
-          } catch (_) {}
-        }
-      }
+      globalStartListening(newLang, (t) => this.processCommand(t));
     }
   }
 
@@ -1424,42 +1353,29 @@ class VoiceNavigationEngine {
       return false;
     }
 
-    if (!this.recognition) {
-      this.init();
-    }
-
     const shouldListen = forceState ?? !this.isListeningExplicitly;
 
     if (shouldListen) {
-      try {
-        this.recognition.start();
-        this.isListeningExplicitly = true;
-        useAccessibilityStore.getState().setIsListeningCommands(true);
-        speak(
-          isHi
-            ? "वॉइस कमांड सुन रहे हैं। रोकने के लिए Alt plus V दबाएं।"
-            : "Listening for voice commands. Press Alt plus V to stop."
-        );
-        return true;
-      } catch (err) {
-        this.isListeningExplicitly = true;
-        useAccessibilityStore.getState().setIsListeningCommands(true);
-        return true;
-      }
+      this.isListeningExplicitly = true;
+      useAccessibilityStore.getState().setIsListeningCommands(true);
+      const store = useAccessibilityStore.getState();
+      const lang = store.language === "hi" ? "hi-IN" : "en-US";
+      globalStartListening(lang, (t) => this.processCommand(t));
+      speak(
+        isHi
+          ? "वॉइस कमांड सुन रहे हैं। रोकने के लिए Alt plus V दबाएं।"
+          : "Listening for voice commands. Press Alt plus V to stop."
+      );
+      return true;
     } else {
       this.isListeningExplicitly = false;
       useAccessibilityStore.getState().setIsListeningCommands(false);
-      clearTimeout(this.restartTimeout);
-      try {
-        this.recognition.stop();
-        speak(
-          isHi
-            ? "वॉइस कमांड पहचान रोक दी गई है।"
-            : "Voice command recognition paused."
-        );
-      } catch (err) {
-        console.warn("[VoiceEngine] Stop error:", err);
-      }
+      globalStopListening();
+      speak(
+        isHi
+          ? "वॉइस कमांड पहचान रोक दी गई है।"
+          : "Voice command recognition paused."
+      );
       return false;
     }
   }
@@ -1510,9 +1426,7 @@ class VoiceNavigationEngine {
           speak(isHi ? "पिछला प्रश्न" : "Moving to previous question", { langOverride: isHi ? "hi-IN" : "en-US" });
         } else {
           this.isSpeakingFeedback = true;
-          try {
-            this.recognition?.stop();
-          } catch (_) {}
+          globalStopListening();
           speak(isHi ? "वापस जा रहे हैं" : "Going back", {
             langOverride: isHi ? "hi-IN" : "en-US",
             onEnd: () => {
@@ -1521,10 +1435,10 @@ class VoiceNavigationEngine {
               }
               setTimeout(() => {
                 this.isSpeakingFeedback = false;
-                if (this.isListeningExplicitly && this.recognition) {
-                  try {
-                    this.recognition.start();
-                  } catch (_) {}
+                if (this.isListeningExplicitly) {
+                  const store = useAccessibilityStore.getState();
+                  const lang = store.language === "hi" ? "hi-IN" : "en-US";
+                  globalStartListening(lang, (t) => this.processCommand(t));
                 }
               }, 300);
             },
