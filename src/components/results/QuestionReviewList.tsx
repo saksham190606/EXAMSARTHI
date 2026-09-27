@@ -1,20 +1,28 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
   MinusCircle, 
-  HelpCircle,
-  Lightbulb,
-  Check,
-  X,
-  Layers
+  Lightbulb, 
+  Check, 
+  X, 
+  Layers,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Square,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 
 export interface QuestionReviewItem {
   questionId: string;
@@ -41,20 +49,181 @@ interface QuestionReviewListProps {
   onRetry?: () => void;
 }
 
+/**
+ * Mathematical symbol pronunciation cleaner for text-to-speech.
+ * Replaces powers, operators, and formatting with spoken natural phrasing.
+ */
+export function cleanMathAndTextForSpeech(text: string | null | undefined, isHindi: boolean = false): string {
+  if (!text) return '';
+  let cleaned = text
+    .replace(/\bEXAMSARTHI\b/gi, 'Exam Saarthi')
+    .replace(/examsarthi/gi, 'Exam Saarthi')
+    .replace(/[*_#`~\[\]]/g, ' ');
+
+  if (isHindi) {
+    cleaned = cleaned
+      .replace(/\^2\b/g, ' का वर्ग ')
+      .replace(/\^3\b/g, ' का घन ')
+      .replace(/\^([0-9a-zA-Z]+)/g, ' की घात $1 ')
+      .replace(/\^/g, ' की घात ')
+      .replace(/<=/g, ' से कम या बराबर ')
+      .replace(/>=/g, ' से अधिक या बराबर ')
+      .replace(/!=/g, ' बराबर नहीं है ')
+      .replace(/==/g, ' बराबर ')
+      .replace(/=/g, ' बराबर ')
+      .replace(/\+/g, ' धन ')
+      .replace(/-\s+/g, ' ऋण ')
+      .replace(/\*/g, ' गुणा ')
+      .replace(/\//g, ' भाग ')
+      .replace(/%/g, ' प्रतिशत ');
+  } else {
+    cleaned = cleaned
+      .replace(/\^2\b/g, ' squared ')
+      .replace(/\^3\b/g, ' cubed ')
+      .replace(/\^([0-9a-zA-Z]+)/g, ' to the power of $1 ')
+      .replace(/\^/g, ' to the power of ')
+      .replace(/<=/g, ' is less than or equal to ')
+      .replace(/>=/g, ' is greater than or equal to ')
+      .replace(/!=/g, ' is not equal to ')
+      .replace(/==/g, ' equals ')
+      .replace(/=/g, ' equals ')
+      .replace(/\+/g, ' plus ')
+      .replace(/-\s+/g, ' minus ')
+      .replace(/\*/g, ' multiplied by ')
+      .replace(/\//g, ' divided by ')
+      .replace(/%/g, ' percent ');
+  }
+
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Builds the structured audio narration script according to the exact specification.
+ */
+function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean): string {
+  const qNum = q.orderIndex + 1;
+  const cleanQText = cleanMathAndTextForSpeech(q.text, isHindi);
+
+  let userSelectedOption = '';
+  let correctOptionLetter = '';
+  let correctOptionText = '';
+
+  const isChoices = (q.type === 'single-choice' || q.type === 'multiple-choice') && Array.isArray(q.options);
+
+  if (isChoices && q.options) {
+    // User answer calculation
+    if (Array.isArray(q.userAnswer)) {
+      const letters = q.options
+        .map((opt, i) => q.userAnswer.includes(opt.id) ? String.fromCharCode(65 + i) : null)
+        .filter(Boolean);
+      userSelectedOption = letters.join(', ');
+    } else if (q.userAnswer) {
+      const idx = q.options.findIndex(opt => opt.id === q.userAnswer);
+      userSelectedOption = idx >= 0 ? String.fromCharCode(65 + idx) : String(q.userAnswer);
+    }
+
+    // Correct answer calculation
+    if (Array.isArray(q.correctAnswer)) {
+      const cOpts = q.options
+        .map((opt, i) => q.correctAnswer.includes(opt.id) ? { letter: String.fromCharCode(65 + i), text: opt.text } : null)
+        .filter(Boolean) as { letter: string; text: string }[];
+      correctOptionLetter = cOpts.map(o => o.letter).join(', ');
+      correctOptionText = cOpts.map(o => o.text).join('; ');
+    } else {
+      const idx = q.options.findIndex(opt => opt.id === q.correctAnswer);
+      correctOptionLetter = idx >= 0 ? String.fromCharCode(65 + idx) : 'A';
+      correctOptionText = idx >= 0 ? q.options[idx].text : String(q.correctAnswer || '');
+    }
+  } else if (q.type === 'true-false') {
+    const uTrue = String(q.userAnswer).toLowerCase() === 'true';
+    userSelectedOption = uTrue ? (isHindi ? 'सत्य' : 'True') : (isHindi ? 'असत्य' : 'False');
+
+    const cTrue = String(q.correctAnswer).toLowerCase() === 'true';
+    correctOptionLetter = cTrue ? (isHindi ? 'सत्य' : 'True') : (isHindi ? 'असत्य' : 'False');
+    correctOptionText = correctOptionLetter;
+  } else {
+    userSelectedOption = String(q.userAnswer || '');
+    correctOptionLetter = String(q.correctAnswer || '');
+    correctOptionText = String(q.correctAnswer || '');
+  }
+
+  const cleanCorrectText = cleanMathAndTextForSpeech(correctOptionText, isHindi);
+  const rawExplanation = q.explanation || (isHindi ? 'कोई अतिरिक्त व्याख्या उपलब्ध नहीं है।' : 'No additional explanation provided.');
+  const cleanExplanation = cleanMathAndTextForSpeech(rawExplanation, isHindi);
+
+  if (isHindi) {
+    const statusText = q.isCorrect
+      ? 'सही उत्तर। आपको 1 अंक मिला।'
+      : !q.isAnswered
+      ? 'अनुत्तरित।'
+      : `गलत उत्तर। आपने विकल्प ${userSelectedOption} चुना था।`;
+
+    const correctAnsPhrase = isChoices
+      ? `आधिकारिक सही उत्तर है विकल्प ${correctOptionLetter}: ${cleanCorrectText}।`
+      : `आधिकारिक सही उत्तर है: ${cleanCorrectText}।`;
+
+    return `प्रश्न ${qNum}. ${cleanQText}. स्थिति: ${statusText} ${correctAnsPhrase} हल और व्याख्या: ${cleanExplanation}.`;
+  } else {
+    const statusText = q.isCorrect
+      ? 'Correct. You scored 1 mark.'
+      : !q.isAnswered
+      ? 'Unanswered.'
+      : `Incorrect. You selected Option ${userSelectedOption}.`;
+
+    const correctAnsPhrase = isChoices
+      ? `Official Correct Answer is Option ${correctOptionLetter}: ${cleanCorrectText}.`
+      : `Official Correct Answer is: ${cleanCorrectText}.`;
+
+    return `Question ${qNum}. ${cleanQText}. Status: ${statusText} Official Correct Answer is Option ${correctOptionLetter}: ${cleanCorrectText}. Explanation: ${cleanExplanation}.`;
+  }
+}
+
 export function QuestionReviewList({
   questions,
   isLoading = false,
   error = null,
   onRetry,
 }: QuestionReviewListProps) {
+  const language = useAccessibilityStore((s) => s.language);
+  const isHindi = language === 'hi';
+
   const [filter, setFilter] = useState<'all' | 'correct' | 'incorrect' | 'unanswered'>('all');
 
-  const filteredQuestions = questions.filter((q) => {
-    if (filter === 'correct') return q.isCorrect;
-    if (filter === 'incorrect') return q.isAnswered && !q.isCorrect;
-    if (filter === 'unanswered') return !q.isAnswered;
-    return true;
-  });
+  // Audio Review Walkthrough States
+  const [isAudioReviewActive, setIsAudioReviewActive] = useState<boolean>(false);
+  const [activeReviewIndex, setActiveReviewIndex] = useState<number>(-1);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [individualPlayingId, setIndividualPlayingId] = useState<string | null>(null);
+
+  // Utterance Anchor Ref to Prevent Garbage Collection
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isAudioReviewActiveRef = useRef(isAudioReviewActive);
+  const isHindiRef = useRef(isHindi);
+
+  useEffect(() => {
+    isAudioReviewActiveRef.current = isAudioReviewActive;
+  }, [isAudioReviewActive]);
+
+  useEffect(() => {
+    isHindiRef.current = isHindi;
+  }, [isHindi]);
+
+  const filteredQuestions = useMemo(() => {
+    return questions.filter((q) => {
+      if (filter === 'correct') return q.isCorrect;
+      if (filter === 'incorrect') return q.isAnswered && !q.isCorrect;
+      if (filter === 'unanswered') return !q.isAnswered;
+      return true;
+    });
+  }, [questions, filter]);
+
+  const filteredQuestionsRef = useRef(filteredQuestions);
+  useEffect(() => {
+    filteredQuestionsRef.current = filteredQuestions;
+  }, [filteredQuestions]);
 
   const correctCount = questions.filter((q) => q.isCorrect).length;
   const incorrectCount = questions.filter((q) => q.isAnswered && !q.isCorrect).length;
@@ -100,6 +269,300 @@ export function QuestionReviewList({
 
     return groups;
   }, [hasSections, questions, filter]);
+
+  // Clean timers helper
+  const clearAudioTimers = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    if (watchdogTimerRef.current) {
+      clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = null;
+    }
+  }, []);
+
+  // Stop walkthrough helper
+  const stopAudioWalkthrough = useCallback(() => {
+    clearAudioTimers();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
+    activeUtteranceRef.current = null;
+    if (typeof window !== 'undefined') {
+      (window as any).__reviewUtterance = null;
+    }
+    setIsAudioReviewActive(false);
+    setActiveReviewIndex(-1);
+    setIsPaused(false);
+    setIndividualPlayingId(null);
+  }, [clearAudioTimers]);
+
+  // 2. STRUCTURED AUDIO SCRIPT BUILDER & SYNTHESIZER
+  const readQuestionReview = useCallback((questionIndex: number, isWalkthrough: boolean = false) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    const list = filteredQuestionsRef.current;
+    if (questionIndex < 0 || questionIndex >= list.length) {
+      stopAudioWalkthrough();
+      return;
+    }
+
+    const currentQ = list[questionIndex];
+    if (!currentQ) return;
+
+    // Smoothly scroll the active question card into center view
+    const cardEl = document.getElementById(`review-question-${currentQ.questionId}`);
+    if (cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    clearAudioTimers();
+
+    // 1. Cancel prior utterance
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+
+    // Compose narration
+    const narrationText = buildReviewSpeechScript(currentQ, isHindiRef.current);
+    const utterance = new SpeechSynthesisUtterance(narrationText);
+    utterance.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
+    utterance.rate = 1.0;
+
+    const naturalVoice = getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
+    if (naturalVoice) {
+      utterance.voice = naturalVoice;
+    }
+
+    // 2. Prevent garbage collection: store active utterance in persistent ref
+    activeUtteranceRef.current = utterance;
+    (window as any).__reviewUtterance = utterance;
+
+    setActiveReviewIndex(questionIndex);
+    setIsPaused(false);
+
+    if (isWalkthrough) {
+      setIsAudioReviewActive(true);
+      setIndividualPlayingId(null);
+    } else {
+      setIndividualPlayingId(currentQ.questionId);
+    }
+
+    // Safety watchdog timer
+    const watchdogDuration = Math.min(30000, Math.max(5000, (narrationText.length / 10) * 1000 + 3000));
+    watchdogTimerRef.current = setTimeout(() => {
+      console.warn('[ReviewWalkthrough] Watchdog expired for question index', questionIndex);
+      if (isAudioReviewActiveRef.current) {
+        // Advance to next
+        const nextIdx = questionIndex + 1;
+        if (nextIdx < filteredQuestionsRef.current.length) {
+          readQuestionReview(nextIdx, true);
+        } else {
+          stopAudioWalkthrough();
+        }
+      } else {
+        setIndividualPlayingId(null);
+      }
+    }, watchdogDuration);
+
+    utterance.onend = () => {
+      clearAudioTimers();
+      activeUtteranceRef.current = null;
+      if (typeof window !== 'undefined') {
+        (window as any).__reviewUtterance = null;
+      }
+
+      if (isWalkthrough && isAudioReviewActiveRef.current) {
+        // Wait 1.5-second pause, then advance to next question
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          const nextIndex = questionIndex + 1;
+          if (nextIndex < filteredQuestionsRef.current.length) {
+            readQuestionReview(nextIndex, true);
+          } else {
+            // Walkthrough complete
+            const completionMsg = isHindiRef.current 
+              ? 'समीक्षा पूर्ण हुई। सभी प्रश्नों की व्याख्या समाप्त हो गई है।' 
+              : 'Review walkthrough complete. All question explanations have ended.';
+            const finalUtterance = new SpeechSynthesisUtterance(completionMsg);
+            finalUtterance.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
+            finalUtterance.rate = 1.0;
+            activeUtteranceRef.current = finalUtterance;
+            finalUtterance.onend = () => {
+              stopAudioWalkthrough();
+            };
+            try {
+              window.speechSynthesis.speak(finalUtterance);
+            } catch (e) {
+              stopAudioWalkthrough();
+            }
+          }
+        }, 1500);
+      } else {
+        setIndividualPlayingId(null);
+      }
+    };
+
+    utterance.onerror = (err) => {
+      console.warn('[ReviewWalkthrough] Utterance error:', err);
+      clearAudioTimers();
+      activeUtteranceRef.current = null;
+      if (isWalkthrough && isAudioReviewActiveRef.current) {
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          const nextIndex = questionIndex + 1;
+          if (nextIndex < filteredQuestionsRef.current.length) {
+            readQuestionReview(nextIndex, true);
+          } else {
+            stopAudioWalkthrough();
+          }
+        }, 1500);
+      } else {
+        setIndividualPlayingId(null);
+      }
+    };
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('[ReviewWalkthrough] Speech speak failed:', e);
+      stopAudioWalkthrough();
+    }
+  }, [clearAudioTimers, stopAudioWalkthrough]);
+
+  // 1. UI Toggle Walkthrough Handler
+  const toggleWalkthrough = useCallback(() => {
+    if (isAudioReviewActive) {
+      stopAudioWalkthrough();
+    } else {
+      if (filteredQuestions.length === 0) return;
+      readQuestionReview(0, true);
+    }
+  }, [isAudioReviewActive, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
+
+  // Playback Navigation Handlers
+  const goToPreviousQuestion = useCallback(() => {
+    if (activeReviewIndex > 0) {
+      readQuestionReview(activeReviewIndex - 1, true);
+    }
+  }, [activeReviewIndex, readQuestionReview]);
+
+  const goToNextQuestion = useCallback(() => {
+    if (activeReviewIndex < filteredQuestions.length - 1) {
+      readQuestionReview(activeReviewIndex + 1, true);
+    }
+  }, [activeReviewIndex, filteredQuestions.length, readQuestionReview]);
+
+  const togglePauseResume = useCallback(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    if (isPaused) {
+      setIsPaused(false);
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        } else if (activeReviewIndex >= 0 && activeReviewIndex < filteredQuestions.length) {
+          readQuestionReview(activeReviewIndex, isAudioReviewActive);
+        }
+      } catch (e) {
+        if (activeReviewIndex >= 0 && activeReviewIndex < filteredQuestions.length) {
+          readQuestionReview(activeReviewIndex, isAudioReviewActive);
+        }
+      }
+    } else {
+      setIsPaused(true);
+      try {
+        window.speechSynthesis.pause();
+      } catch (e) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, [isPaused, activeReviewIndex, filteredQuestions.length, readQuestionReview, isAudioReviewActive]);
+
+  // 4. Individual Question Explanation Handler
+  const handlePlayIndividualQuestion = useCallback((q: QuestionReviewItem) => {
+    if (individualPlayingId === q.questionId) {
+      // Toggle off if already playing
+      stopAudioWalkthrough();
+      return;
+    }
+
+    const idx = filteredQuestions.findIndex(item => item.questionId === q.questionId);
+    if (idx >= 0) {
+      readQuestionReview(idx, false);
+    }
+  }, [individualPlayingId, filteredQuestions, readQuestionReview, stopAudioWalkthrough]);
+
+  // Keyboard Shortcuts: Alt+A (Toggle Walkthrough), Alt+P (Prev), Alt+N (Next), Space (Pause/Resume), Escape (Stop)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Alt+A -> Toggle Audio Walkthrough
+      if (e.altKey && (e.key === 'a' || e.key === 'A' || e.code === 'KeyA')) {
+        e.preventDefault();
+        toggleWalkthrough();
+        return;
+      }
+
+      // Playback shortcuts when Walkthrough is active
+      if (isAudioReviewActiveRef.current) {
+        // Alt+P -> Previous
+        if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+          e.preventDefault();
+          goToPreviousQuestion();
+          return;
+        }
+
+        // Alt+N -> Next
+        if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
+          e.preventDefault();
+          goToNextQuestion();
+          return;
+        }
+
+        // Space -> Pause / Resume
+        if (e.code === 'Space' || e.key === ' ') {
+          e.preventDefault();
+          togglePauseResume();
+          return;
+        }
+
+        // Escape -> Stop
+        if (e.key === 'Escape' || e.code === 'Escape') {
+          e.preventDefault();
+          stopAudioWalkthrough();
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleWalkthrough, goToPreviousQuestion, goToNextQuestion, togglePauseResume, stopAudioWalkthrough]);
+
+  // Clean up speech on component unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) {}
+      }
+    };
+  }, []);
+
+  // Reset active review when filter changes
+  useEffect(() => {
+    if (isAudioReviewActive) {
+      stopAudioWalkthrough();
+    }
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return (
@@ -158,15 +621,108 @@ export function QuestionReviewList({
     return null;
   }
 
+  const activeHighlightedQuestionId = activeReviewIndex >= 0 && activeReviewIndex < filteredQuestions.length
+    ? filteredQuestions[activeReviewIndex]?.questionId
+    : null;
+
   return (
     <section 
       aria-labelledby="question-review-heading" 
-      className="space-y-6 pt-4 border-t border-border/60"
+      className="space-y-6 pt-4 border-t border-border/60 relative"
     >
+      {/* 3. Floating / Sticky Playback Controls Bar */}
+      {isAudioReviewActive && activeReviewIndex >= 0 && (
+        <div
+          role="toolbar"
+          aria-label="Audio review walkthrough controls"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_30px_rgba(255,237,0,0.35)] rounded-full backdrop-blur-md text-foreground max-w-xl w-[94%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
+        >
+          <div className="flex items-center gap-2 pr-3 border-r border-white/20">
+            <span className="relative flex size-3 items-center justify-center">
+              <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
+              <span className="size-2.5 rounded-full bg-[#ffed00]" />
+            </span>
+            <div className="flex flex-col">
+              <span className="text-xs font-mono font-bold text-[#ffed00] whitespace-nowrap">
+                Q{activeReviewIndex + 1} of {filteredQuestions.length}
+              </span>
+              <span className="text-2xs text-muted-foreground hidden sm:inline">
+                {isPaused ? 'Paused' : 'Explaining...'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={goToPreviousQuestion}
+              disabled={activeReviewIndex === 0}
+              className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10"
+              title="Previous Question (Alt+P)"
+              aria-label="Previous Question (Alt+P)"
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+              <span className="hidden sm:inline ml-1">Previous</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={togglePauseResume}
+              className="h-8 px-3 text-xs font-bold bg-[#ffed00] text-black hover:bg-[#ffed00]/90 shadow-[0_0_10px_rgba(255,237,0,0.4)]"
+              title="Pause / Resume (Space)"
+              aria-label={isPaused ? "Resume walkthrough (Space)" : "Pause walkthrough (Space)"}
+            >
+              {isPaused ? (
+                <>
+                  <Play className="size-3.5 mr-1 fill-black" aria-hidden="true" />
+                  <span>Resume</span>
+                </>
+              ) : (
+                <>
+                  <Pause className="size-3.5 mr-1 fill-black" aria-hidden="true" />
+                  <span>Pause</span>
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={goToNextQuestion}
+              disabled={activeReviewIndex >= filteredQuestions.length - 1}
+              className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10"
+              title="Next Question (Alt+N)"
+              aria-label="Next Question (Alt+N)"
+            >
+              <span className="hidden sm:inline mr-1">Next</span>
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={stopAudioWalkthrough}
+              className="h-8 px-2.5 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 ml-1"
+              title="Stop Walkthrough (Escape)"
+              aria-label="Stop Walkthrough (Escape)"
+            >
+              <Square className="size-3.5 mr-1" aria-hidden="true" />
+              <span>Stop</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header and Filter Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border/60">
         <div className="space-y-1">
-          <h2 id="question-review-heading" className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h2 id="question-review-heading" className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
             <span>Question-by-Question Review</span>
             {hasSections && (
               <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
@@ -180,70 +736,101 @@ export function QuestionReviewList({
           </p>
         </div>
 
-        {/* Filter Badges */}
-        <div 
-          className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/50 rounded-[2px] border border-border/40"
-          role="group"
-          aria-label="Filter questions by outcome"
-        >
+        {/* Right side controls: Audio Walkthrough Toggle Button & Filter Badges */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* 1. UI Toggle Button in the Section Header */}
           <button
             type="button"
-            onClick={() => setFilter('all')}
+            role="switch"
+            aria-checked={isAudioReviewActive}
+            onClick={toggleWalkthrough}
             className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring",
-              filter === 'all'
-                ? "bg-background text-foreground shadow-none border border-border/80"
-                : "text-muted-foreground hover:text-foreground"
+              "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[4px] text-xs transition-all cursor-pointer select-none",
+              isAudioReviewActive
+                ? "bg-[#ffed00] text-black font-bold ring-2 ring-[#ffed00] shadow-[0_0_15px_rgba(255,237,0,0.35)]"
+                : "bg-neutral-900 text-white/80 border border-white/20 hover:text-white hover:border-white/40"
             )}
-            aria-pressed={filter === 'all'}
+            title="Toggle Audio Walkthrough (Alt+A)"
           >
-            All ({questions.length})
+            {isAudioReviewActive ? (
+              <Volume2 className="size-4 animate-pulse text-black" aria-hidden="true" />
+            ) : (
+              <Volume2 className="size-4 text-white/80" aria-hidden="true" />
+            )}
+            <span>Audio Walkthrough</span>
+            <kbd className={cn(
+              "px-1.5 py-0.5 text-2xs font-mono rounded",
+              isAudioReviewActive ? "bg-black text-[#ffed00] font-bold" : "bg-neutral-800 text-white/70"
+            )}>
+              Alt+A
+            </kbd>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setFilter('correct')}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
-              filter === 'correct'
-                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-none border border-emerald-500/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-pressed={filter === 'correct'}
+          {/* Filter Badges */}
+          <div 
+            className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/50 rounded-[2px] border border-border/40"
+            role="group"
+            aria-label="Filter questions by outcome"
           >
-            <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-            <span>Correct ({correctCount})</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring",
+                filter === 'all'
+                  ? "bg-background text-foreground shadow-none border border-border/80"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={filter === 'all'}
+            >
+              All ({questions.length})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setFilter('incorrect')}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
-              filter === 'incorrect'
-                ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 shadow-none border border-rose-500/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-pressed={filter === 'incorrect'}
-          >
-            <XCircle className="size-3 text-rose-600 dark:text-rose-400" aria-hidden="true" />
-            <span>Incorrect ({incorrectCount})</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setFilter('correct')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
+                filter === 'correct'
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-none border border-emerald-500/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={filter === 'correct'}
+            >
+              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>Correct ({correctCount})</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setFilter('unanswered')}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
-              filter === 'unanswered'
-                ? "bg-slate-500/10 text-slate-700 dark:text-slate-300 shadow-none border border-slate-500/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            aria-pressed={filter === 'unanswered'}
-          >
-            <MinusCircle className="size-3 text-muted-foreground" aria-hidden="true" />
-            <span>Unanswered ({unansweredCount})</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setFilter('incorrect')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
+                filter === 'incorrect'
+                  ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 shadow-none border border-rose-500/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={filter === 'incorrect'}
+            >
+              <XCircle className="size-3 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+              <span>Incorrect ({incorrectCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilter('unanswered')}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-1",
+                filter === 'unanswered'
+                  ? "bg-slate-500/10 text-slate-700 dark:text-slate-300 shadow-none border border-slate-500/30"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={filter === 'unanswered'}
+            >
+              <MinusCircle className="size-3 text-muted-foreground" aria-hidden="true" />
+              <span>Unanswered ({unansweredCount})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -279,36 +866,69 @@ export function QuestionReviewList({
                 </div>
 
                 <div className="space-y-4">
-                  {group.questions.map((q) => (
-                    <QuestionReviewCard key={q.questionId} q={q} />
-                  ))}
+                  {group.questions.map((q) => {
+                    const isCardActive = (isAudioReviewActive && activeHighlightedQuestionId === q.questionId) || individualPlayingId === q.questionId;
+                    return (
+                      <QuestionReviewCard 
+                        key={q.questionId} 
+                        q={q} 
+                        isActiveInWalkthrough={isCardActive}
+                        isIndividualPlaying={individualPlayingId === q.questionId}
+                        onPlayIndividual={() => handlePlayIndividualQuestion(q)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             );
           })
         ) : (
-          filteredQuestions.map((q) => (
-            <QuestionReviewCard key={q.questionId} q={q} />
-          ))
+          filteredQuestions.map((q) => {
+            const isCardActive = (isAudioReviewActive && activeHighlightedQuestionId === q.questionId) || individualPlayingId === q.questionId;
+            return (
+              <QuestionReviewCard 
+                key={q.questionId} 
+                q={q} 
+                isActiveInWalkthrough={isCardActive}
+                isIndividualPlaying={individualPlayingId === q.questionId}
+                onPlayIndividual={() => handlePlayIndividualQuestion(q)}
+              />
+            );
+          })
         )}
       </div>
     </section>
   );
 }
 
-function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
+interface QuestionReviewCardProps {
+  q: QuestionReviewItem;
+  isActiveInWalkthrough: boolean;
+  isIndividualPlaying: boolean;
+  onPlayIndividual: () => void;
+}
+
+function QuestionReviewCard({ 
+  q, 
+  isActiveInWalkthrough, 
+  isIndividualPlaying,
+  onPlayIndividual 
+}: QuestionReviewCardProps) {
   const displayIndex = q.orderIndex + 1;
   const isSingleOrMulti = q.type === 'single-choice' || q.type === 'multiple-choice';
 
   return (
     <Card 
+      id={`review-question-${q.questionId}`}
       className={cn(
-        "border transition-all shadow-none",
-        q.isCorrect 
-          ? "border-emerald-500/30 bg-card hover:border-emerald-500/50" 
-          : q.isAnswered 
-            ? "border-rose-500/30 bg-card hover:border-rose-500/50" 
-            : "border-border/80 bg-card hover:border-border"
+        "border transition-all duration-300 shadow-none scroll-mt-24",
+        isActiveInWalkthrough
+          ? "border-2 border-[#ffed00] shadow-[0_0_20px_rgba(255,237,0,0.25)] ring-1 ring-[#ffed00]/60 bg-card"
+          : q.isCorrect 
+            ? "border-emerald-500/30 bg-card hover:border-emerald-500/50" 
+            : q.isAnswered 
+              ? "border-rose-500/30 bg-card hover:border-rose-500/50" 
+              : "border-border/80 bg-card hover:border-border"
       )}
     >
       <CardHeader className="pb-3 space-y-2">
@@ -317,6 +937,33 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-muted text-foreground border border-border">
               Q{displayIndex}
             </span>
+
+            {/* 4. Individual Question Audio Button */}
+            <button
+              type="button"
+              onClick={onPlayIndividual}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-2xs font-semibold transition-all border cursor-pointer select-none",
+                isIndividualPlaying
+                  ? "bg-[#ffed00] text-black border-[#ffed00] font-bold shadow-[0_0_12px_rgba(255,237,0,0.4)] animate-pulse"
+                  : "bg-muted/60 text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+              )}
+              title={isIndividualPlaying ? "Stop Explanation" : "Listen to Explanation"}
+              aria-label={isIndividualPlaying ? `Stop Explanation for Question ${displayIndex}` : `Listen to Explanation for Question ${displayIndex}`}
+            >
+              {isIndividualPlaying ? (
+                <>
+                  <Volume2 className="size-3 text-black animate-pulse" aria-hidden="true" />
+                  <span>Playing Explanation</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="size-3" aria-hidden="true" />
+                  <span>Listen to Explanation</span>
+                </>
+              )}
+            </button>
+
             {q.sectionName && (
               <Badge variant="outline" className="text-2xs font-semibold">
                 {q.sectionName}
@@ -496,5 +1143,3 @@ function QuestionReviewCard({ q }: { q: QuestionReviewItem }) {
     </Card>
   );
 }
-
-
