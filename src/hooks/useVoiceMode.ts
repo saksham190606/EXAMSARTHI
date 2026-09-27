@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { parseVoiceCommand, ParsedCommand, CommandLanguage } from '@/lib/voice/voiceParser';
 import { classifyIntentLocally, playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
+import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { ExamActions, ExamState, announceToScreenReader } from '@/lib/useExamEngine';
 import { CandidateQuestion, getQuestionType, isQuestionAnswered } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
@@ -295,7 +296,7 @@ export function useVoiceMode({
 
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
+      recognition.continuous = true;
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
       recognition.lang = currentLocaleRef.current;
@@ -590,17 +591,10 @@ export function useVoiceMode({
       }
 
       case 'UNKNOWN': {
-        const qType = getQuestionType(currentQuestion);
-        let errorMsg = '';
-        if (qType === 'single-choice') {
-          errorMsg = isHindi ? 'कृपया A, B, C या D कहें।' : 'Please say A, B, C, or D.';
-        } else if (qType === 'multiple-choice') {
-          errorMsg = isHindi ? 'कृपया A, B, C या D कहें, एक या अधिक विकल्प।' : 'Please say A, B, C, or D, including multiple options.';
-        } else if (qType === 'true-false') {
-          errorMsg = isHindi ? 'कृपया सत्य या असत्य कहें।' : 'Please say true or false.';
-        } else {
-          errorMsg = isHindi ? 'मैं इस कमांड को समझ नहीं पाया।' : "I didn't understand that command.";
-        }
+        const errorMsg = isHindi
+          ? "आदेश समझ नहीं आया। 'अगला', 'पिछला' या 'विकल्प ए' बोलें।"
+          : "Command not recognized. Say 'Next', 'Previous', or an option like 'Option A'.";
+        setLastActionFeedback(errorMsg);
         speak(errorMsg, { langOverride: targetLang, onEnd: () => startListening() });
         break;
       }
@@ -627,15 +621,172 @@ export function useVoiceMode({
 
   // Handle recognized transcript with bilingual question-type aware command parsing and confirmation safeguards
   const handleCommand = useCallback((transcript: string) => {
+    const isHindi = language === 'hi';
+    const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
     const qType = getQuestionType(currentQuestion);
+
+    // 1. Primary Check: Intelligent Exam Intent & Keyword Matcher (Fuzzy + Phonetic)
+    const examMatch = matchExamIntent(transcript, !!pendingAction);
+
+    // Two-step confirmation active (e.g. submit exam verbal confirmation)
+    if (pendingAction) {
+      if (
+        examMatch.type === 'CONFIRM_SUBMIT' || 
+        /^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि)/i.test(transcript.trim())
+      ) {
+        playVoiceFeedbackChime();
+        setPendingAction(null);
+        if (onCloseSubmitDialog) onCloseSubmitDialog();
+        actions.submitExam();
+        const confMsg = isHindi ? 'परीक्षा सबमिट कर दी गई है।' : 'Exam submitted.';
+        setLastActionFeedback(`✓ ${confMsg}`);
+        speak(confMsg, {
+          langOverride: targetLang,
+          onEnd: () => deactivateVoiceMode()
+        });
+        return;
+      } else if (
+        examMatch.type === 'CANCEL_SUBMIT' || 
+        /^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो)/i.test(transcript.trim())
+      ) {
+        playVoiceFeedbackChime();
+        setPendingAction(null);
+        if (onCloseSubmitDialog) onCloseSubmitDialog();
+        const cancelMsg = isHindi ? 'कार्रवाई रद्द की गई।' : 'Submission cancelled.';
+        setLastActionFeedback(`✓ ${cancelMsg}`);
+        speak(cancelMsg, { langOverride: targetLang, onEnd: () => startListening() });
+        return;
+      } else {
+        speak(
+          isHindi ? 'कृपया पुष्टि के लिए "हां सबमिट करो" या "रद्द करो" बोलें।' : 'Please say "confirm submit" or "cancel submit".',
+          { langOverride: targetLang, onEnd: () => startListening() }
+        );
+        return;
+      }
+    }
+
+    // 2. Direct Match for Exam Test-Taking Commands
+    if (examMatch.type !== 'UNKNOWN') {
+      playVoiceFeedbackChime();
+      consecutiveFailuresRef.current = 0;
+
+      switch (examMatch.type) {
+        case 'SELECT_OPTION_A':
+        case 'SELECT_OPTION_B':
+        case 'SELECT_OPTION_C':
+        case 'SELECT_OPTION_D': {
+          const optIdx = examMatch.optionIndex ?? 0;
+          const letter = String.fromCharCode(65 + optIdx);
+          const opts = (currentQuestion as any)?.options || [];
+          const option = opts[optIdx];
+
+          if (option) {
+            if (qType === 'multiple-choice') {
+              if (actions.toggleOption) {
+                actions.toggleOption(currentQuestion.id, option.id);
+              } else {
+                actions.selectAnswer(currentQuestion.id, option.id);
+              }
+            } else {
+              if (actions.setAnswer) {
+                actions.setAnswer(currentQuestion.id, option.id);
+              }
+              actions.selectAnswer(currentQuestion.id, option.id);
+            }
+
+            const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+            setLastActionFeedback(`✓ ${confirmText}`);
+            announceToScreenReader(confirmText);
+            speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          } else {
+            const notAvail = isHindi ? `विकल्प ${letter} उपलब्ध नहीं है।` : `Option ${letter} is not available.`;
+            speak(notAvail, { langOverride: targetLang, onEnd: () => startListening() });
+          }
+          return;
+        }
+
+        case 'NEXT_QUESTION': {
+          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          setLastActionFeedback(`✓ ${confirmText}`);
+          announceToScreenReader(confirmText);
+          actions.goToNext();
+          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        case 'PREVIOUS_QUESTION': {
+          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          setLastActionFeedback(`✓ ${confirmText}`);
+          announceToScreenReader(confirmText);
+          actions.goToPrevious();
+          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        case 'CLEAR_SELECTION': {
+          if (actions.setAnswer) {
+            actions.setAnswer(currentQuestion.id, "");
+          }
+          actions.selectAnswer(currentQuestion.id, "");
+          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          setLastActionFeedback(`✓ ${confirmText}`);
+          announceToScreenReader(confirmText);
+          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        case 'MARK_FOR_REVIEW': {
+          if (actions.toggleFlag) {
+            actions.toggleFlag(currentQuestion.id);
+          }
+          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          setLastActionFeedback(`✓ ${confirmText}`);
+          announceToScreenReader(confirmText);
+          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        case 'READ_AGAIN': {
+          readEverything(targetLang);
+          return;
+        }
+
+        case 'DESCRIBE_DIAGRAM': {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
+              detail: { action: 'describe-diagram' }
+            }));
+          }
+          const describeBtn = typeof document !== 'undefined'
+            ? document.querySelector<HTMLElement>('button[aria-label*="Describe diagram" i], button:has(svg.lucide-sparkles)')
+            : null;
+          if (describeBtn) {
+            describeBtn.click();
+          }
+          const confirmText = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          speak(confirmText, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        case 'SUBMIT_EXAM': {
+          setPendingAction({ type: 'SUBMIT' } as any);
+          if (onOpenSubmitDialog) onOpenSubmitDialog();
+          const confirmPrompt = isHindi ? examMatch.audioConfirmationHi : examMatch.audioConfirmationEn;
+          speak(confirmPrompt, { langOverride: targetLang, onEnd: () => startListening() });
+          return;
+        }
+
+        default:
+          break;
+      }
+    }
+
+    // 3. Fallback to general voiceParser (for true/false, text input, navigation)
     const cmd = parseVoiceCommand(transcript, {
       questionType: qType,
       currentQuestion,
       isPendingConfirmation: !!pendingAction
     });
-
-    const isHindi = cmd.detectedLanguage === 'hi' || (cmd.detectedLanguage === 'mixed' && language === 'hi');
-    const targetLang: 'hi' | 'en' = isHindi ? 'hi' : 'en';
 
     // Adapt recognition locale if clear language detected
     if (cmd.type !== 'UNKNOWN') {
@@ -649,7 +800,7 @@ export function useVoiceMode({
         if (recognitionRef.current) recognitionRef.current.lang = 'en-IN';
       }
     } else {
-      // Check fallback intent classifier (keyword/fuzzy) before failing
+      // Check local intent classifier (keyword/fuzzy) before failing
       const fallbackResult = classifyIntentLocally(transcript);
       if (fallbackResult.intent !== 'UNKNOWN') {
         playVoiceFeedbackChime();
@@ -755,35 +906,6 @@ export function useVoiceMode({
         if (recognitionRef.current) recognitionRef.current.lang = currentLocaleRef.current;
         consecutiveFailuresRef.current = 0;
       }
-    }
-
-    // Two-step confirmation active (e.g. submit confirmation)
-    if (pendingAction) {
-      if (cmd.type === 'YES' || cmd.type === 'SUBMIT' || (cmd.type === 'TRUE_FALSE' && cmd.value === true)) {
-        setPendingAction(null);
-        if (onCloseSubmitDialog) onCloseSubmitDialog();
-        actions.submitExam();
-        speak(
-          isHindi ? 'परीक्षा सबमिट कर दी गई है।' : 'Exam submitted.',
-          {
-            langOverride: targetLang,
-            onEnd: () => deactivateVoiceMode()
-          }
-        );
-      } else if (cmd.type === 'NO' || (cmd.type === 'TRUE_FALSE' && cmd.value === false)) {
-        setPendingAction(null);
-        if (onCloseSubmitDialog) onCloseSubmitDialog();
-        speak(
-          isHindi ? 'कार्रवाई रद्द की गई।' : 'Action cancelled.',
-          { langOverride: targetLang, onEnd: () => startListening() }
-        );
-      } else {
-        speak(
-          isHindi ? 'कृपया हाँ या नहीं कहें।' : 'Please say yes or no.',
-          { langOverride: targetLang, onEnd: () => startListening() }
-        );
-      }
-      return;
     }
 
     // Direct submit action requires two-step confirmation safeguard
@@ -1006,13 +1128,19 @@ export function useVoiceMode({
     if (!recognition) return;
 
     recognition.onresult = (event: any) => {
+      // Echo-cancellation guard: ignore input while TTS / screen reader is speaking to prevent false self-triggers
+      if (
+        isSpeakingRef.current || 
+        (synthesisRef.current && synthesisRef.current.speaking) ||
+        (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking)
+      ) {
+        return;
+      }
+
       consecutiveFailuresRef.current = 0;
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      const resultIndex = event.resultIndex !== undefined ? event.resultIndex : event.results.length - 1;
+      const transcript = event.results?.[resultIndex]?.[0]?.transcript?.trim();
       if (!transcript) {
-        speak(
-          language === 'hi' ? 'मैं समझ नहीं पाया। कृपया पुनः प्रयास करें।' : "I didn't catch that. Please try again.",
-          { langOverride: language === 'hi' ? 'hi' : 'en', onEnd: () => startListening() }
-        );
         return;
       }
 
@@ -1096,19 +1224,22 @@ export function useVoiceMode({
           if (isActiveRef.current && !isSpeakingRef.current) {
             startListening();
           }
-        }, 500);
+        }, 300);
       }
     };
 
     recognition.onend = () => {
-      // Continuous listening: restart recognition if active, not speaking, and in Listening state
-      if (isActiveRef.current && !isSpeakingRef.current && statusRef.current === 'Listening') {
+      // Continuous listening: auto-restart recognition if voice mode toggle remains enabled and not speaking
+      if (isActiveRef.current && !isSpeakingRef.current) {
         clearRestartTimer();
         restartTimerRef.current = setTimeout(() => {
-          if (isActiveRef.current && !isSpeakingRef.current) {
+          if (isActiveRef.current && !isSpeakingRef.current && recognitionRef.current) {
             try {
-              recognition.start();
-            } catch (e) {}
+              recognitionRef.current.start();
+              setStatus('Listening');
+            } catch (e) {
+              // Ignore if already starting or active
+            }
           }
         }, 150);
       }

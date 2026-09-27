@@ -68,7 +68,7 @@ function ActiveExamSession({
   const router = useRouter();
   const rawDuration = (activeConfig as any)?.duration ?? (activeConfig as any)?.duration_minutes;
   const examDuration = typeof rawDuration === 'number' && rawDuration > 0 ? rawDuration * 60 : 900;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   const [isSectionAdvanceDialogOpen, setIsSectionAdvanceDialogOpen] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
@@ -286,6 +286,48 @@ function ActiveExamSession({
     };
   }, [actions, currentQuestion]);
 
+  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), 1-4 (Options)
+  useEffect(() => {
+    const handleExamKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Alt+N -> Next question
+      if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
+        e.preventDefault();
+        actions.goToNext();
+        return;
+      }
+
+      // Alt+P -> Previous question
+      if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
+        e.preventDefault();
+        actions.goToPrevious();
+        return;
+      }
+
+      // 1-4 -> Select Option A-D (1=A, 2=B, 3=C, 4=D)
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && ['1', '2', '3', '4'].includes(e.key)) {
+        const optionIndex = parseInt(e.key, 10) - 1;
+        if (currentQuestion && currentQuestion.options && optionIndex >= 0 && optionIndex < currentQuestion.options.length) {
+          e.preventDefault();
+          const opt = currentQuestion.options[optionIndex];
+          if (actions.setAnswer) {
+            actions.setAnswer(currentQuestion.id, opt.id);
+          }
+          actions.selectAnswer(currentQuestion.id, opt.id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleExamKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleExamKeyDown);
+    };
+  }, [actions, currentQuestion]);
+
   const totalQuestions = questions.length;
   const hasSections = Boolean(sections && sections.length > 0);
 
@@ -322,6 +364,22 @@ function ActiveExamSession({
   return (
     <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6 relative">
       <LiveRegion />
+
+      {/* Active Glowing Sunlight Yellow Mic Indicator Pulse */}
+      {isActive && status === 'Listening' && (
+        <div 
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.6)] backdrop-blur-md animate-pulse"
+        >
+          <div className="relative flex items-center justify-center">
+            <span className="absolute -inset-1.5 rounded-full bg-[#ffed00]/60 animate-ping opacity-80" />
+            <span className="size-3 rounded-full bg-[#ffed00]" />
+          </div>
+          <span className="text-xs font-bold tracking-wider text-[#ffed00] uppercase font-mono">
+            {language === 'hi' ? 'सुन रहा है...' : 'Listening...'}
+          </span>
+        </div>
+      )}
 
       {/* Submission In-Progress Modal Overlay */}
       {isSubmitting && (

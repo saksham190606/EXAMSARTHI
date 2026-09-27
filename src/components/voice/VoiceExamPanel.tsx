@@ -76,8 +76,8 @@ export function VoiceExamPanel({
     switch (status) {
       case 'Listening':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-primary/10 text-primary border border-primary/30">
-            <Radio className="size-3 motion-safe:animate-pulse" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[46px] text-xs font-semibold bg-[#ffed00]/20 text-yellow-300 dark:text-[#ffed00] border border-[#ffed00]/60 shadow-[0_0_14px_rgba(255,237,0,0.4)] animate-pulse">
+            <Radio className="size-3 text-[#ffed00]" aria-hidden="true" />
             <span>{t('statusListening')}</span>
           </span>
         );
@@ -115,26 +115,39 @@ export function VoiceExamPanel({
 
   return (
     <Card className={cn(
-      "border transition-colors ",
-      isActive ? "border-primary/40 bg-card" : "border-border bg-card"
+      "border transition-all duration-300",
+      isActive && status === 'Listening'
+        ? "border-[#ffed00]/60 shadow-[0_0_22px_rgba(255,237,0,0.18)] bg-card"
+        : isActive
+        ? "border-primary/40 bg-card"
+        : "border-border bg-card"
     )}>
       <CardContent className="p-4 sm:p-5 space-y-4">
         {/* Top Control & Status Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button 
-              variant={isActive ? "default" : "outline"} 
+              variant={isActive && status === 'Listening' ? "secondary" : isActive ? "default" : "outline"} 
               size="sm"
               onClick={onToggle}
               disabled={status === 'RequestingPermission'}
               aria-pressed={isActive}
               className={cn(
-                "h-9 px-3.5 font-medium gap-2 transition-all",
-                isActive ? "shadow-2xs" : "border-border"
+                "h-9 px-3.5 font-medium gap-2 transition-all relative",
+                isActive && status === 'Listening'
+                  ? "bg-[#ffed00] hover:bg-[#ffed00]/90 text-black border-[#ffed00] shadow-[0_0_18px_rgba(255,237,0,0.55)] ring-2 ring-[#ffed00]/80 font-semibold"
+                  : isActive
+                  ? "shadow-2xs"
+                  : "border-border"
               )}
             >
               {status === 'RequestingPermission' ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : isActive && status === 'Listening' ? (
+                <div className="relative flex items-center justify-center">
+                  <span className="absolute -inset-1 rounded-full bg-[#ffed00]/60 animate-ping opacity-75" />
+                  <Mic className="size-4 relative text-black" aria-hidden="true" />
+                </div>
               ) : isActive ? (
                 <Mic className="size-4" aria-hidden="true" />
               ) : (
