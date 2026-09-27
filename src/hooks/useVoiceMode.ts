@@ -517,6 +517,61 @@ export function useVoiceMode({
         );
         break;
 
+      case 'SWITCH_TO_HINDI': {
+        useAccessibilityStore.getState().setLanguage('hi');
+        currentLocaleRef.current = 'hi-IN';
+        if (recognitionRef.current) {
+          recognitionRef.current.lang = 'hi-IN';
+        }
+        speak(
+          'भाषा हिंदी में बदल दी गई है। अब आप हिंदी में नेविगेट कर सकते हैं।',
+          { langOverride: 'hi', onEnd: () => startListening() }
+        );
+        break;
+      }
+
+      case 'SWITCH_TO_ENGLISH': {
+        useAccessibilityStore.getState().setLanguage('en');
+        currentLocaleRef.current = 'en-IN';
+        if (recognitionRef.current) {
+          recognitionRef.current.lang = 'en-IN';
+        }
+        speak(
+          'Language switched to English. You can now navigate in English.',
+          { langOverride: 'en', onEnd: () => startListening() }
+        );
+        break;
+      }
+
+      case 'HELP': {
+        const helpText = isHindi
+          ? "आप 'प्रैक्टिस शुरू करें', 'मॉक टेस्ट दें', 'चित्र का विवरण दें', या अंग्रेजी में जाने के लिए 'switch to English' कह सकते हैं।"
+          : "You can say 'start practice', 'take mock exam', 'describe diagram', or say 'switch to Hindi' to navigate completely in Hindi.";
+        speak(helpText, { langOverride: targetLang, onEnd: () => startListening() });
+        break;
+      }
+
+      case 'CLEAR_RESPONSE': {
+        if (actions.setAnswer) {
+          actions.setAnswer(currentQuestion.id, "");
+        }
+        actions.selectAnswer(currentQuestion.id, "");
+        const confirmClear = isHindi ? 'उत्तर हटा दिया गया।' : 'Response cleared.';
+        setLastActionFeedback(`✓ ${confirmClear}`);
+        announceToScreenReader(confirmClear);
+        speak(confirmClear, { langOverride: targetLang, onEnd: () => startListening() });
+        break;
+      }
+
+      case 'DESCRIBE_DIAGRAM': {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('examsarthi-voice-action', {
+            detail: { action: 'describe-diagram' }
+          }));
+        }
+        break;
+      }
+
       case 'UNKNOWN': {
         const qType = getQuestionType(currentQuestion);
         let errorMsg = '';

@@ -7,6 +7,7 @@ import {
   initGestureTrigger, 
   initFocusTalkBack, 
   initVoiceCommandHotkey, 
+  initLanguageHotkey,
   voiceEngine,
   stopSpeech 
 } from '@/lib/accessibility/voice-companion'
@@ -63,10 +64,14 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     // Step 3: Natural Voice Commands listener (Alt + V toggle)
     const cleanupHotkey = initVoiceCommandHotkey()
 
+    // Step 4: Bilingual Voice & Language Switch Hotkey (Alt + L)
+    const cleanupLangHotkey = initLanguageHotkey()
+
     return () => {
       cleanupGesture()
       cleanupFocus()
       cleanupHotkey()
+      cleanupLangHotkey()
       stopSpeech()
     }
   }, [router])

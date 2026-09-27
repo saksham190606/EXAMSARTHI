@@ -77,17 +77,24 @@ export const EXAM_CATALOG: ExamCatalogItem[] = [
 export function ExamSelectionHub() {
   const router = useRouter();
   const reducedMotion = useAccessibilityStore((state) => state.reducedMotion);
+  const language = useAccessibilityStore((state) => state.language);
+  const isHindi = language === 'hi';
 
   // Announce the exam selection screen upon landing
   useEffect(() => {
     speak(
-      'Examination Selection Hub. Please choose an exam to begin your computer-based test. Use Tab to browse through available tests, or press Enter to launch.',
-      { cancelPrevious: true }
+      isHindi
+        ? 'परीक्षा चयन केंद्र में आपका स्वागत है। अपना कंप्यूटर आधारित टेस्ट शुरू करने के लिए कोई परीक्षा चुनें। उपलब्ध परीक्षाओं को देखने के लिए Tab दबाएं, या शुरू करने के लिए Enter दबाएं।'
+        : 'Examination Selection Hub. Please choose an exam to begin your computer-based test. Use Tab to browse through available tests, or press Enter to launch.',
+      { cancelPrevious: true, langOverride: isHindi ? 'hi' : 'en' }
     );
-  }, []);
+  }, [isHindi]);
 
   const handleSelectExam = (param: string, title: string) => {
-    speak(`Starting ${title}`, { cancelPrevious: true });
+    speak(
+      isHindi ? `${title} शुरू हो रही है।` : `Starting ${title}`,
+      { cancelPrevious: true, langOverride: isHindi ? 'hi' : 'en' }
+    );
     router.push(`/exam?set=${param}`);
   };
 

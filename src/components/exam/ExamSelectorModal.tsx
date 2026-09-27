@@ -76,6 +76,8 @@ export default function ExamSelectorModal({ isOpen, onClose }: ExamSelectorModal
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const prevFocusedElementRef = useRef<HTMLElement | null>(null);
   const reducedMotion = useAccessibilityStore((state) => state.reducedMotion);
+  const language = useAccessibilityStore((state) => state.language);
+  const isHindi = language === 'hi';
 
   // Focus trap, speech announcement, and Escape key listener
   useEffect(() => {
@@ -83,8 +85,10 @@ export default function ExamSelectorModal({ isOpen, onClose }: ExamSelectorModal
       prevFocusedElementRef.current = document.activeElement as HTMLElement | null;
 
       speak(
-        'Select an examination mock test. Use Tab to move through available exams, or press Escape to close.',
-        { cancelPrevious: true }
+        isHindi
+          ? 'मॉक टेस्ट चुनें। उपलब्ध परीक्षाओं के बीच जाने के लिए Tab दबाएं, या बंद करने के लिए Escape दबाएं।'
+          : 'Select an examination mock test. Use Tab to move through available exams, or press Escape to close.',
+        { cancelPrevious: true, langOverride: isHindi ? 'hi' : 'en' }
       );
 
       // Small delay to ensure modal is mounted before focusing
@@ -131,12 +135,18 @@ export default function ExamSelectorModal({ isOpen, onClose }: ExamSelectorModal
       // Restore focus on close
       prevFocusedElementRef.current?.focus();
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isHindi]);
 
   const handleSelectExam = (exam: ExamOption) => {
-    speak(`Starting ${exam.title}. Preparing examination questions.`, {
-      cancelPrevious: true,
-    });
+    speak(
+      isHindi
+        ? `${exam.title} शुरू हो रहा है। परीक्षा प्रश्न तैयार किए जा रहे हैं।`
+        : `Starting ${exam.title}. Preparing examination questions.`,
+      {
+        cancelPrevious: true,
+        langOverride: isHindi ? 'hi' : 'en',
+      }
+    );
     onClose();
 
     if (exam.isSet || exam.param.startsWith('p')) {

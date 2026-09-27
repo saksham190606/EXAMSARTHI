@@ -76,6 +76,8 @@ export function ExamTickerBar() {
 
 export default function ExamSarthiHero() {
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+  const language = useAccessibilityStore((state) => state.language);
+  const isHindi = language === 'hi';
 
   return (
     <div className="relative w-full overflow-hidden bg-white text-black dark:bg-[#0a0a0a] dark:text-white transition-colors">
@@ -108,7 +110,7 @@ export default function ExamSarthiHero() {
               ))}
             </div>
             <span className="text-xs font-medium text-black/80 dark:text-white/80">
-              1,200+ Aspirants Preparing for UPSC, SSC & Banking
+              {isHindi ? "1,200+ अभ्यर्थी यूपीएससी, एसएससी और बैंकिंग की तैयारी में" : "1,200+ Aspirants Preparing for UPSC, SSC & Banking"}
             </span>
           </motion.div>
 
@@ -118,10 +120,21 @@ export default function ExamSarthiHero() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl"
           >
-            Accessible Examination & Practice for{' '}
-            <span className="relative whitespace-nowrap">
-              <span className="relative z-10 text-[#d4af37] dark:text-[#ffed00]">Every Aspirant</span>
-            </span>
+            {isHindi ? (
+              <>
+                हर अभ्यर्थी के लिए सुलभ परीक्षा और{' '}
+                <span className="relative whitespace-nowrap">
+                  <span className="relative z-10 text-[#d4af37] dark:text-[#ffed00]">प्रैक्टिस मंच</span>
+                </span>
+              </>
+            ) : (
+              <>
+                Accessible Examination & Practice for{' '}
+                <span className="relative whitespace-nowrap">
+                  <span className="relative z-10 text-[#d4af37] dark:text-[#ffed00]">Every Aspirant</span>
+                </span>
+              </>
+            )}
           </motion.h1>
 
           <motion.p
@@ -130,7 +143,9 @@ export default function ExamSarthiHero() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mt-6 max-w-2xl text-base sm:text-lg text-black/70 dark:text-white/70 leading-relaxed"
           >
-            High-contrast Computer Based Tests, conversational voice navigation, and multimodal Vision AI scribes engineered for visually impaired candidates.
+            {isHindi 
+              ? "उच्च-कंट्रास्ट कंप्यूटर आधारित टेस्ट, संवादात्मक द्विभाषी वॉइस नेविगेशन और दृष्टिबाधित अभ्यर्थियों के लिए मल्टीमॉडल विजन एआई स्क्राइब।"
+              : "High-contrast Computer Based Tests, conversational voice navigation, and multimodal Vision AI scribes engineered for visually impaired candidates."}
           </motion.p>
 
           <motion.div
@@ -139,8 +154,11 @@ export default function ExamSarthiHero() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="mt-8 flex flex-wrap items-center justify-center gap-4"
           >
-            <Link className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00] px-6 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-[#e6d500] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]" href="/practice">
-              Start Practice (Alt+P)
+            <Link 
+              className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00] px-6 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-[#e6d500] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]" 
+              href="/practice"
+            >
+              {isHindi ? "प्रैक्टिस शुरू करें (Alt+P)" : "Start Practice (Alt+P)"}
               <ArrowRight className="h-4 w-4"/>
             </Link>
 
@@ -150,7 +168,7 @@ export default function ExamSarthiHero() {
               aria-haspopup="dialog"
               className="inline-flex items-center gap-2 rounded-[2px] border border-black/20 dark:border-white/20 bg-transparent px-6 py-3 text-sm font-semibold text-black dark:text-white transition hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00] cursor-pointer"
             >
-              Take Mock Exam
+              {isHindi ? "मॉक टेस्ट दें" : "Take Mock Exam"}
             </button>
           </motion.div>
 
@@ -162,11 +180,11 @@ export default function ExamSarthiHero() {
           >
             <div className="flex items-center gap-1.5">
               <Volume2 className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>
-              <span>Full Voice & Screen-Reader TalkBack</span>
+              <span>{isHindi ? "पूर्ण द्विभाषी वॉइस व टॉकबैक" : "Full Voice & Screen-Reader TalkBack"}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>
-              <span>Gemini Vision AI Diagram Scribe</span>
+              <span>{isHindi ? "जेमिनी विजन एआई चित्र स्क्राइब" : "Gemini Vision AI Diagram Scribe"}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-[#d4af37] dark:text-[#ffed00]"/>

@@ -22,15 +22,23 @@ export function formatSpeechPronunciation(text: string | null | undefined): stri
     .replace(/examsarthi/gi, "Exam Saarthi");
 }
 
-export const WELCOME_TOUR_TEXT =
+export const WELCOME_TOUR_TEXT_EN =
   "Welcome to Exam Saarthi — Empowering every aspirant with accessible examination and practice. " +
   "Voice companion is now active. Use Tab to navigate through options, " +
   "or press Alt plus V anytime to speak voice commands.";
+
+export const WELCOME_TOUR_TEXT_HI =
+  "एग्जाम सारथी में आपका स्वागत है — सभी उम्मीदवारों के लिए सुलभ परीक्षा और अभ्यास। " +
+  "वॉइस साथी अब सक्रिय है। विकल्पों पर जाने के लिए Tab दबाएं, " +
+  "या वॉइस कमांड बोलने के लिए कभी भी Alt plus V दबाएं।";
+
+export const WELCOME_TOUR_TEXT = WELCOME_TOUR_TEXT_EN;
 
 export interface SpeakOptions {
   rate?: number;
   cancelPrevious?: boolean;
   lang?: string;
+  langOverride?: string;
   onEnd?: () => void;
   onError?: (err: any) => void;
 }
@@ -102,7 +110,7 @@ const MALE_VOICE_KEYWORDS = [
 const FEMALE_VOICE_KEYWORDS = [
   "female", "woman", "zira", "jenny", "aria", "samantha", "victoria", 
   "karen", "swara", "kalpana", "heera", "neerja", "veena", "lekha", 
-  "google us english", "google uk english female", "hazel", "susan", 
+  "google us english", "google uk english female", "google हिन्दी", "hazel", "susan", 
   "catherine", "linda", "sonia", "natasha", "fiona", "tessa", "moira", "siri"
 ];
 
@@ -118,22 +126,27 @@ export function isFemaleVoice(voice: SpeechSynthesisVoice): boolean {
   return FEMALE_VOICE_KEYWORDS.some(kw => name.includes(kw));
 }
 
-let cachedFemaleVoice: SpeechSynthesisVoice | null = null;
+let cachedFemaleVoiceEn: SpeechSynthesisVoice | null = null;
+let cachedFemaleVoiceHi: SpeechSynthesisVoice | null = null;
 
 if (typeof window !== "undefined" && "speechSynthesis" in window) {
   try {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.addEventListener("voiceschanged", () => {
-      cachedFemaleVoice = null;
-      getNaturalFemaleVoice();
+      cachedFemaleVoiceEn = null;
+      cachedFemaleVoiceHi = null;
+      getNaturalFemaleVoice("en");
+      getNaturalFemaleVoice("hi");
     });
   } catch (_) {}
 }
 
 /**
  * Selects a high-quality natural female voice across all browser platforms.
- * Prioritizes natural/neural female voices (Google US English, Microsoft Jenny/Aria/Zira/Neerja/Swara, Samantha/Karen)
- * and strictly blacklists all male voices (David, Mark, Ravi, Hemant, etc.).
+ * When Hindi (hi-IN) is active, prioritizes standard natural Hindi voices:
+ * Google हिन्दी, Microsoft Swara / Heera (Natural), or any available hi-IN female voice.
+ * When English is active, prioritizes natural female voices (Google US English, Microsoft Jenny/Aria/Zira).
+ * Strictly blacklists all male voices (David, Mark, Ravi, Hemant, etc.).
  */
 export function getNaturalFemaleVoice(langPref?: string): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -141,68 +154,87 @@ export function getNaturalFemaleVoice(langPref?: string): SpeechSynthesisVoice |
   const voices = synth.getVoices();
   if (!voices || voices.length === 0) return null;
 
-  const isHindi = langPref === "hi" || langPref?.toLowerCase().startsWith("hi");
+  const currentStoreLang = useAccessibilityStore.getState().language;
+  const isHindi = langPref === "hi" || langPref?.toLowerCase().startsWith("hi") || (!langPref && currentStoreLang === "hi");
 
-  // 1. If Hindi requested, find Hindi female voice
+  // 1. If Hindi requested, find natural Hindi female voice
   if (isHindi) {
+    if (cachedFemaleVoiceHi && voices.includes(cachedFemaleVoiceHi)) {
+      return cachedFemaleVoiceHi;
+    }
+
     const hindiVoices = voices.filter(v => v.lang.toLowerCase().startsWith("hi") && !isMaleVoice(v));
-    const preferredHindi = hindiVoices.find(v => 
-      isFemaleVoice(v) || !v.localService
-    ) || hindiVoices[0];
-    if (preferredHindi) return preferredHindi;
+    
+    // Priority: Google हिन्दी, Microsoft Swara / Heera (Natural), or any available hi-IN female voice
+    const preferredHindi = 
+      hindiVoices.find(v => v.name.includes("Google") || v.name.toLowerCase().includes("swara") || v.name.toLowerCase().includes("heera")) ||
+      hindiVoices.find(v => !v.localService) ||
+      hindiVoices.find(v => isFemaleVoice(v)) ||
+      hindiVoices[0];
+
+    if (preferredHindi) {
+      cachedFemaleVoiceHi = preferredHindi;
+      return preferredHindi;
+    }
+
+    // Fallback: Indian English female voice if Hindi TTS voice is missing on host OS
+    const inFemale = voices.find(v => 
+      v.lang.toLowerCase().startsWith("en-in") && !isMaleVoice(v) && isFemaleVoice(v)
+    );
+    if (inFemale) return inFemale;
   }
 
-  // If we already resolved and cached the English female voice, return it if still present
-  if (!isHindi && cachedFemaleVoice && voices.includes(cachedFemaleVoice)) {
-    return cachedFemaleVoice;
+  // English requested
+  if (!isHindi && cachedFemaleVoiceEn && voices.includes(cachedFemaleVoiceEn)) {
+    return cachedFemaleVoiceEn;
   }
 
-  // 2. Priority 1: Exact natural voice used by initial welcome greeting in Chromium ("Google US English" / non-local en-US)
+  // Priority 1: Exact natural voice used by initial welcome greeting in Chromium ("Google US English" / non-local en-US)
   const googleUS = voices.find(v => 
     !isMaleVoice(v) && 
     (v.name === "Google US English" || (v.lang === "en-US" && !v.localService))
   );
   if (googleUS) {
-    if (!isHindi) cachedFemaleVoice = googleUS;
+    if (!isHindi) cachedFemaleVoiceEn = googleUS;
     return googleUS;
   }
 
-  // 3. Priority 2: High-quality natural/online or desktop female voices (Edge / Windows: Jenny, Aria, Zira, etc.)
+  // Priority 2: High-quality natural/online or desktop female voices (Edge / Windows: Jenny, Aria, Zira, etc.)
   const naturalFemale = voices.find(v => 
     !isMaleVoice(v) && 
     isFemaleVoice(v) && 
     v.lang.toLowerCase().startsWith("en")
   );
   if (naturalFemale) {
-    if (!isHindi) cachedFemaleVoice = naturalFemale;
+    if (!isHindi) cachedFemaleVoiceEn = naturalFemale;
     return naturalFemale;
   }
 
-  // 4. Priority 3: Any non-local (cloud/neural) English voice that is not male
+  // Priority 3: Any non-local (cloud/neural) English voice that is not male
   const cloudFemale = voices.find(v => 
     v.lang.toLowerCase().startsWith("en") && 
     !v.localService && 
     !isMaleVoice(v)
   );
   if (cloudFemale) {
-    if (!isHindi) cachedFemaleVoice = cloudFemale;
+    if (!isHindi) cachedFemaleVoiceEn = cloudFemale;
     return cloudFemale;
   }
 
-  // 5. Priority 4: Any English voice that is NOT in the male blacklist
+  // Priority 4: Any English voice that is NOT in the male blacklist
   const nonMaleEnglish = voices.find(v => 
     v.lang.toLowerCase().startsWith("en") && 
     !isMaleVoice(v)
   );
   if (nonMaleEnglish) {
-    if (!isHindi) cachedFemaleVoice = nonMaleEnglish;
+    if (!isHindi) cachedFemaleVoiceEn = nonMaleEnglish;
     return nonMaleEnglish;
   }
 
-  // 6. Priority 5: Any non-male voice of any language
+  // Priority 5: Any non-male voice of any language
   const nonMaleAny = voices.find(v => !isMaleVoice(v));
   if (nonMaleAny) {
-    if (!isHindi) cachedFemaleVoice = nonMaleAny;
+    if (!isHindi) cachedFemaleVoiceEn = nonMaleAny;
     return nonMaleAny;
   }
 
@@ -212,7 +244,7 @@ export function getNaturalFemaleVoice(langPref?: string): SpeechSynthesisVoice |
 /**
  * Bulletproof Speech Helper that prevents stalled queues and waits for asynchronous voice loading in Chromium browsers.
  */
-export function forceSpeak(text: string, onEnd?: () => void) {
+export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
   // 1. Prime hardware audio
@@ -238,14 +270,16 @@ export function forceSpeak(text: string, onEnd?: () => void) {
 
   const play = () => {
     try {
+      const store = useAccessibilityStore.getState();
+      const targetLang = lang || (store.language === "hi" ? "hi-IN" : "en-US");
       const spokenText = formatSpeechPronunciation(text);
       const utterance = new SpeechSynthesisUtterance(spokenText);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
-      utterance.lang = "en-US";
+      utterance.lang = targetLang;
 
       // Lock in the natural female voice
-      const femaleVoice = getNaturalFemaleVoice("en-US");
+      const femaleVoice = getNaturalFemaleVoice(targetLang);
       if (femaleVoice) {
         utterance.voice = femaleVoice;
       }
@@ -335,7 +369,7 @@ export function stopSpeech(): void {
 export function speak(text: string, options?: SpeakOptions): void {
   if (!isSpeechSupported() || !text || !text.trim()) return;
 
-  const { cancelPrevious = true, lang, onEnd, onError } = options || {};
+  const { cancelPrevious = true, lang, langOverride, onEnd, onError } = options || {};
 
   if (cancelPrevious) {
     stopSpeech();
@@ -349,7 +383,8 @@ export function speak(text: string, options?: SpeakOptions): void {
     const utterance = new SpeechSynthesisUtterance(spokenText);
     utterance.rate = Math.max(0.6, Math.min(2.0, rate));
 
-    const targetLang = lang || (store.language === "hi" ? "hi-IN" : "en-US");
+    const effectiveLang = langOverride || lang;
+    const targetLang = effectiveLang || (store.language === "hi" ? "hi-IN" : "en-US");
     utterance.lang = targetLang;
 
     // Lock in the exact same natural female voice across the platform
@@ -576,6 +611,11 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
     if (!optionLetter) optionLetter = "A";
     if (!optionText) optionText = getAssociatedLabel(target) || "Option choice";
 
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    if (isHi) {
+      return `विकल्प ${optionLetter}, ${localizeTalkBackText(optionText, true)}, ${isChecked ? "चुना गया" : "नहीं चुना गया"}`;
+    }
+
     return `Option ${optionLetter}, ${optionText}, ${isChecked ? "selected" : "not selected"}`;
   }
 
@@ -590,6 +630,10 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       target.getAttribute("aria-checked") === "true" ||
       target.dataset.state === "checked";
     const label = getAssociatedLabel(target) || "Checkbox option";
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    if (isHi) {
+      return `${localizeTalkBackText(label, true)}, चेकबॉक्स, ${isChecked ? "चिह्नित" : "नहीं चिह्नित"}`;
+    }
     return `${label}, checkbox, ${isChecked ? "checked" : "not checked"}`;
   }
 
@@ -604,17 +648,25 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
   if (isTextInput) {
     const label = getAssociatedLabel(target) || "Text field";
     const value = (target as HTMLInputElement).value?.trim();
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    if (isHi) {
+      return `${localizeTalkBackText(label, true)}, टेक्स्ट इनपुट, वर्तमान मान: ${value || "खाली"}`;
+    }
     return `${label}, text input, current value: ${value || "empty"}`;
   }
 
   // 4. BUTTONS & ACCESSIBLE TRIGGERS
   const isButton = tagName === "BUTTON" || role === "button";
   if (isButton) {
+    const isHi = useAccessibilityStore.getState().language === "hi";
     if (role === "switch") {
       const isChecked =
         target.getAttribute("aria-checked") === "true" ||
         target.dataset.state === "checked";
       const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
+      if (isHi) {
+        return `${localizeTalkBackText(label, true)}, टॉगल स्विच, ${isChecked ? "चालू" : "बंद"}`;
+      }
       return `${label}, toggle switch, ${isChecked ? "on" : "off"}`;
     }
 
@@ -623,6 +675,9 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
         target.getAttribute("aria-selected") === "true" ||
         target.dataset.state === "active";
       const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
+      if (isHi) {
+        return `${localizeTalkBackText(label, true)}, टैब, ${isSelected ? "सक्रिय" : "निष्क्रिय"}`;
+      }
       return `${label}, tab, ${isSelected ? "selected" : "not selected"}`;
     }
 
@@ -632,6 +687,9 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       getAssociatedLabel(target);
 
     if (!label) return null;
+    if (isHi) {
+      return `${localizeTalkBackText(label, true)}, बटन`;
+    }
     return `${label}, button`;
   }
 
@@ -644,12 +702,20 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
       target.getAttribute("title");
 
     if (!label) return null;
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    if (isHi) {
+      return `${localizeTalkBackText(label, true)}, लिंक`;
+    }
     return `${label}, navigation link`;
   }
 
   // 6. SELECT / COMBOBOX
   if (tagName === "SELECT" || role === "combobox") {
     const label = getAssociatedLabel(target) || cleanAccessibleText(target.textContent);
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    if (isHi) {
+      return `${localizeTalkBackText(label, true)}, ड्रॉपडाउन मेनू`;
+    }
     return `${label}, dropdown selection`;
   }
 
@@ -657,13 +723,37 @@ export function computeAccessibleLabel(target: HTMLElement): string | null {
   const ariaLabel = target.getAttribute("aria-label");
   if (ariaLabel && cleanAccessibleText(ariaLabel)) {
     const clean = cleanAccessibleText(ariaLabel);
+    const isHi = useAccessibilityStore.getState().language === "hi";
+    const localized = localizeTalkBackText(clean, isHi);
     if (role) {
-      return `${clean}, ${role}`;
+      return `${localized}, ${role}`;
     }
-    return clean;
+    return localized;
   }
 
   return null;
+}
+
+export function localizeTalkBackText(text: string | null | undefined, isHi: boolean): string {
+  if (!text) return "";
+  if (!isHi) return text;
+  return text
+    .replace(/\bStart Practice\b/gi, "प्रैक्टिस शुरू करें")
+    .replace(/\bTake Mock Exam\b/gi, "मॉक टेस्ट दें")
+    .replace(/\bDashboard\b/gi, "डैशबोर्ड")
+    .replace(/\bPractice\b/gi, "अभ्यास")
+    .replace(/\bExams\b/gi, "परीक्षा")
+    .replace(/\bResults\b/gi, "परिणाम")
+    .replace(/\bSettings\b/gi, "सेटिंग्स")
+    .replace(/\bNext Question\b/gi, "अगला प्रश्न")
+    .replace(/\bPrevious Question\b/gi, "पिछला प्रश्न")
+    .replace(/\bClear Response\b/gi, "उत्तर हटाएं")
+    .replace(/\bSubmit Final Examination\b/gi, "अंतिम परीक्षा सबमिट करें")
+    .replace(/\bSubmit Exam\b/gi, "परीक्षा जमा करें")
+    .replace(/\bDescribe Diagram\b/gi, "चित्र का विवरण")
+    .replace(/\bNext\b/gi, "अगला")
+    .replace(/\bPrevious\b/gi, "पिछला")
+    .replace(/\bSubmit\b/gi, "सबमिट");
 }
 
 /**
@@ -728,7 +818,9 @@ class VoiceNavigationEngine {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = false;
-      recognition.lang = "en-US";
+      
+      const store = useAccessibilityStore.getState();
+      recognition.lang = store.language === "hi" ? "hi-IN" : "en-US";
 
       recognition.onresult = (event: any) => {
         // Prevent speech feedback loop if synthesized speech is actively playing
@@ -747,7 +839,12 @@ class VoiceNavigationEngine {
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           this.isListeningExplicitly = false;
           useAccessibilityStore.getState().setIsListeningCommands(false);
-          speak("Microphone permission was denied. Please allow microphone access in your browser.");
+          const isHi = useAccessibilityStore.getState().language === "hi";
+          speak(
+            isHi
+              ? "माइक्रोफ़ोन अनुमति अस्वीकृत। कृपया अपने ब्राउज़र में माइक्रोफ़ोन अनुमति दें।"
+              : "Microphone permission was denied. Please allow microphone access in your browser."
+          );
         } else if (event.error !== "no-speech" && event.error !== "aborted") {
           console.warn("[VoiceEngine] Recognition error:", event.error);
         }
@@ -775,9 +872,41 @@ class VoiceNavigationEngine {
     }
   }
 
+  public setLanguage(lang: 'en' | 'hi') {
+    if (this.recognition) {
+      const newLang = lang === "hi" ? "hi-IN" : "en-US";
+      if (this.recognition.lang !== newLang) {
+        this.recognition.lang = newLang;
+        if (this.isListeningExplicitly) {
+          try {
+            this.recognition.stop();
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  public switchLanguage(lang: 'en' | 'hi') {
+    const store = useAccessibilityStore.getState();
+    store.setLanguage(lang);
+    this.setLanguage(lang);
+
+    if (lang === "hi") {
+      speak("भाषा हिंदी में बदल दी गई है। अब आप हिंदी में नेविगेट कर सकते हैं।", { lang: "hi-IN" });
+    } else {
+      speak("Language switched to English. You can now navigate in English.", { lang: "en-US" });
+    }
+  }
+
   public toggle(forceState?: boolean): boolean {
+    const isHi = useAccessibilityStore.getState().language === "hi";
+
     if (!isSpeechRecognitionSupported()) {
-      speak("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+      speak(
+        isHi
+          ? "इस ब्राउज़र में आवाज पहचान समर्थित नहीं है। कृपया Chrome या Edge का उपयोग करें।"
+          : "Speech recognition is not supported in this browser. Please use Chrome or Edge."
+      );
       return false;
     }
 
@@ -792,10 +921,13 @@ class VoiceNavigationEngine {
         this.recognition.start();
         this.isListeningExplicitly = true;
         useAccessibilityStore.getState().setIsListeningCommands(true);
-        speak("Listening for voice commands. Press Alt plus V to stop.");
+        speak(
+          isHi
+            ? "वॉइस कमांड सुन रहे हैं। रोकने के लिए Alt plus V दबाएं।"
+            : "Listening for voice commands. Press Alt plus V to stop."
+        );
         return true;
       } catch (err) {
-        // If already started, ensure state matches
         this.isListeningExplicitly = true;
         useAccessibilityStore.getState().setIsListeningCommands(true);
         return true;
@@ -806,7 +938,11 @@ class VoiceNavigationEngine {
       clearTimeout(this.restartTimeout);
       try {
         this.recognition.stop();
-        speak("Voice command recognition paused.");
+        speak(
+          isHi
+            ? "वॉइस कमांड पहचान रोक दी गई है।"
+            : "Voice command recognition paused."
+        );
       } catch (err) {
         console.warn("[VoiceEngine] Stop error:", err);
       }
@@ -816,35 +952,53 @@ class VoiceNavigationEngine {
 
   public processCommand(rawInput: string) {
     const input = rawInput.toLowerCase().trim();
+    const isHi = useAccessibilityStore.getState().language === "hi";
 
-    // 1. ROUTING COMMANDS
-    if (/(?:go\s+to\s+dashboard|open\s+dashboard|show\s+dashboard|^dashboard$)/i.test(input)) {
-      this.navigate("/dashboard", "Navigating to Dashboard");
+    // 0. LANGUAGE SWITCHING COMMANDS (Functional & Active globally)
+    // English -> Hindi
+    if (
+      /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein\s+karo|hindi\s+me\s+karo|hindi\s+bhasha|hindi\s+mein|hindi\s+me|^hindi$|हिंदी|हिंदी\s+में\s+करो|हिंदी\s+भाषा|हिंदी\s+करो)/i.test(input)
+    ) {
+      this.switchLanguage("hi");
       return;
     }
 
-    if (/(?:go\s+to\s+practice|open\s+practice|start\s+practice|^practice$)/i.test(input)) {
-      this.navigate("/practice", "Navigating to Practice");
+    // Hindi -> English
+    if (
+      /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|angrezi\s+mein\s+karo|angrezi\s+me\s+karo|angrezi\s+mein|angrezi\s+me|^angrezi$|^english$|अंग्रेजी|अंग्रेजी\s+में\s+करो|अंग्रेज़ी|अंग्रेजी\s+करो)/i.test(input)
+    ) {
+      this.switchLanguage("en");
       return;
     }
 
-    if (/(?:go\s+to\s+exams?|open\s+exams?|start\s+exams?|^exams?$)/i.test(input)) {
-      this.navigate("/exam", "Navigating to Exams");
+    // 1. ROUTING COMMANDS (English & Hindi)
+    if (/(?:go\s+to\s+dashboard|open\s+dashboard|show\s+dashboard|^dashboard$|डैशबोर्ड|डैशबोर्ड\s+पर\s+जाओ)/i.test(input)) {
+      this.navigate("/dashboard", isHi ? "डैशबोर्ड पर जा रहे हैं" : "Navigating to Dashboard");
       return;
     }
 
-    if (/(?:open\s+results|go\s+to\s+results|show\s+results|^results?$)/i.test(input)) {
-      this.navigate("/results", "Navigating to Results");
+    if (/(?:go\s+to\s+practice|open\s+practice|start\s+practice|^practice$|प्रैक्टिस\s+शुरू\s+करें|अभ्यास\s+शुरू\s+करें|प्रैक्टिस|अभ्यास|practice\s+shuru\s+karo)/i.test(input)) {
+      this.navigate("/practice", isHi ? "प्रैक्टिस पर जा रहे हैं" : "Navigating to Practice");
       return;
     }
 
-    if (/(?:open\s+settings|go\s+to\s+settings|show\s+settings|^settings?$)/i.test(input)) {
-      this.navigate("/settings", "Navigating to Settings");
+    if (/(?:go\s+to\s+exams?|open\s+exams?|start\s+exams?|take\s+mock\s+exam|^exams?$|मॉक\s+टेस्ट\s+दें|परीक्षा\s+शुरू\s+करें|मॉक\s+टेस्ट|परीक्षा|mock\s+test\s+do|pariksha\s+shuru\s+karo)/i.test(input)) {
+      this.navigate("/exam", isHi ? "परीक्षा पोर्टल पर जा रहे हैं" : "Navigating to Exams");
+      return;
+    }
+
+    if (/(?:open\s+results|go\s+to\s+results|show\s+results|^results?$|परिणाम|रिजल्ट|नतीजे|parinaam|result\s+dikhao)/i.test(input)) {
+      this.navigate("/results", isHi ? "परिणाम पर जा रहे हैं" : "Navigating to Results");
+      return;
+    }
+
+    if (/(?:open\s+settings|go\s+to\s+settings|show\s+settings|^settings?$|सेटिंग्स|सेटिंग्स\s+खोलो)/i.test(input)) {
+      this.navigate("/settings", isHi ? "सेटिंग्स पर जा रहे हैं" : "Navigating to Settings");
       return;
     }
 
     // 2. CONVERSATIONAL YES / CONFIRM / SELECT / SURE / HAAN
-    if (/(?:^|\b)(?:yes|yeah|yup|sure|confirm|select|proceed|haan|sahi|thik\s*hai)(?:\b|$)/i.test(input)) {
+    if (/(?:^|\b)(?:yes|yeah|yup|sure|confirm|select|proceed|haan|sahi|thik\s*hai|हाँ|हा|पुष्टि|सही)(?:\b|$)/i.test(input)) {
       const activeEl = (document.activeElement && document.activeElement !== document.body
         ? document.activeElement
         : lastFocusedElement) as HTMLElement | null;
@@ -853,7 +1007,7 @@ class VoiceNavigationEngine {
         const confirmMsg =
           activeEl.getAttribute("data-voice-confirm") ||
           activeEl.closest("[data-voice-confirm]")?.getAttribute("data-voice-confirm") ||
-          "Confirmed.";
+          (isHi ? "पुष्टि की गई।" : "Confirmed.");
         speak(confirmMsg);
 
         // Check if element or ancestor/child is a link
@@ -887,18 +1041,18 @@ class VoiceNavigationEngine {
       }
     }
 
-    // 3. CONVERSATIONAL NO / SKIP / NEXT (in Practice section or on voice prompt element)
+    // 3. CONVERSATIONAL NO / SKIP / NEXT
     const isPracticeSection = typeof window !== "undefined" && window.location.pathname.includes("/practice");
     const activeEl = (document.activeElement && document.activeElement !== document.body
       ? document.activeElement
       : lastFocusedElement) as HTMLElement | null;
     const hasPrompt = Boolean(activeEl?.getAttribute("data-voice-prompt") || activeEl?.closest("[data-voice-prompt]"));
 
-    const isNoCommand = /(?:^|\b)(?:no|nope|skip|nahi|nahin|chhodo)(?:\b|$)/i.test(input);
-    const isNextInPractice = isPracticeSection && /(?:^|\b)(?:next)(?:\b|$)/i.test(input);
+    const isNoCommand = /(?:^|\b)(?:no|nope|skip|nahi|nahin|chhodo|नहीं|ना|छोड़ो)(?:\b|$)/i.test(input);
+    const isNextInPractice = isPracticeSection && /(?:^|\b)(?:next|अगला)(?:\b|$)/i.test(input);
 
     if (isNoCommand || (isNextInPractice && hasPrompt)) {
-      speak("Skipping.");
+      speak(isHi ? "छोड़ा जा रहा है।" : "Skipping.");
       this.advanceFocusToNextElement();
       return;
     }
@@ -906,7 +1060,7 @@ class VoiceNavigationEngine {
     // 4. ACTIVE EXAM / PRACTICE ACTIONS
 
     // Next Question
-    if (/(?:next\s+question|go\s+next|next|forward|agla\s+sawal|agla\s+prashna|agla)/i.test(input)) {
+    if (/(?:next\s+question|go\s+next|next|forward|agla\s+sawal|agla\s+prashna|agla|अगला\s+प्रश्न|अगला\s+सवाल|अगला|आगे)/i.test(input)) {
       this.dispatchExamAction("next");
       const nextBtn = document.querySelector<HTMLElement>(
         'button[aria-label*="next" i], button[aria-label*="Next question" i], button:has(svg.lucide-chevron-right)'
@@ -914,12 +1068,12 @@ class VoiceNavigationEngine {
       if (nextBtn && !nextBtn.hasAttribute("disabled")) {
         nextBtn.click();
       }
-      speak("Moving to next question");
+      speak(isHi ? "अगला प्रश्न" : "Moving to next question");
       return;
     }
 
     // Previous Question
-    if (/(?:previous\s+question|go\s+previous|go\s+back|previous|back|pichhla\s+sawal|pichla\s+sawal|pichhla|pichla)/i.test(input)) {
+    if (/(?:previous\s+question|go\s+previous|go\s+back|previous|back|pichhla\s+sawal|pichla\s+sawal|pichhla|pichla|पिछला\s+प्रश्न|पिछला\s+सवाल|पिछला|पीछे)/i.test(input)) {
       this.dispatchExamAction("prev");
       const prevBtn = document.querySelector<HTMLElement>(
         'button[aria-label*="previous" i], button[aria-label*="Previous question" i], button:has(svg.lucide-chevron-left)'
@@ -927,81 +1081,114 @@ class VoiceNavigationEngine {
       if (prevBtn && !prevBtn.hasAttribute("disabled")) {
         prevBtn.click();
       }
-      speak("Moving to previous question");
+      speak(isHi ? "पिछला प्रश्न" : "Moving to previous question");
       return;
     }
 
     // Select Option A (or 1)
-    if (/(?:select|choose|pick|option)\s+(?:a|1|one)\b|^(?:option\s+)?(?:a|1|one)$/i.test(input)) {
+    if (/(?:select|choose|pick|option)\s+(?:a|1|one|पहला|ए)\b|^(?:option\s+)?(?:a|1|one|पहला|ए)$|^(?:पहला\s+विकल्प|विकल्प\s+ए)$/i.test(input)) {
       this.selectExamOption("A");
       return;
     }
 
     // Select Option B (or 2)
-    if (/(?:select|choose|pick|option)\s+(?:b|2|two)\b|^(?:option\s+)?(?:b|2|two)$/i.test(input)) {
+    if (/(?:select|choose|pick|option)\s+(?:b|2|two|दूसरा|बी)\b|^(?:option\s+)?(?:b|2|two|दूसरा|बी)$|^(?:दूसरा\s+विकल्प|विकल्प\s+बी)$/i.test(input)) {
       this.selectExamOption("B");
       return;
     }
 
     // Select Option C (or 3)
-    if (/(?:select|choose|pick|option)\s+(?:c|3|three)\b|^(?:option\s+)?(?:c|3|three)$/i.test(input)) {
+    if (/(?:select|choose|pick|option)\s+(?:c|3|three|तीसरा|सी)\b|^(?:option\s+)?(?:c|3|three|तीसरा|सी)$|^(?:तीसरा\s+विकल्प|विकल्प\s+सी)$/i.test(input)) {
       this.selectExamOption("C");
       return;
     }
 
     // Select Option D (or 4)
-    if (/(?:select|choose|pick|option)\s+(?:d|4|four)\b|^(?:option\s+)?(?:d|4|four)$/i.test(input)) {
+    if (/(?:select|choose|pick|option)\s+(?:d|4|four|चौथा|डी)\b|^(?:option\s+)?(?:d|4|four|चौथा|डी)$|^(?:चौथा\s+विकल्प|विकल्प\s+डी)$/i.test(input)) {
       this.selectExamOption("D");
       return;
     }
 
     // Clear Response
-    if (/(?:clear\s+response|clear\s+answer|clear\s+selection|clear|deselect|reset\s+answer|reset)/i.test(input)) {
+    if (/(?:clear\s+response|clear\s+answer|clear\s+selection|clear|deselect|reset\s+answer|reset|उत्तर\s+हटाएं|उत्तर\s+हटाओ|जवाब\s+हटाओ|साफ़\s+करो|uttar\s+hatao)/i.test(input)) {
       this.dispatchExamAction("clear");
       const clearBtn = document.querySelector<HTMLElement>(
         'button[aria-label*="clear" i], button:has-text("Clear")'
       );
       if (clearBtn) clearBtn.click();
-      speak("Response cleared");
+      speak(isHi ? "उत्तर हटाएं" : "Response cleared");
       return;
     }
 
     // Mark for Review / Flag
-    if (/(?:mark\s+for\s+review|review\s+later|review|flag\s+for\s+review|flag\s+question|flag|unflag)/i.test(input)) {
+    if (/(?:mark\s+for\s+review|review\s+later|review|flag\s+for\s+review|flag\s+question|flag|unflag|चिह्नित\s+करो|समीक्षा)/i.test(input)) {
       this.dispatchExamAction("flag");
       const flagBtn = document.querySelector<HTMLElement>(
         'button[aria-label*="flag" i], button[aria-label*="review" i], button:has(svg.lucide-flag)'
       );
       if (flagBtn) flagBtn.click();
-      speak("Marked for review");
+      speak(isHi ? "समीक्षा के लिए चिह्नित किया गया" : "Marked for review");
+      return;
+    }
+
+    // Submit Exam
+    if (/(?:submit\s+exam|submit\s+test|finish\s+exam|submit|परीक्षा\s+जमा\s+करें|परीक्षा\s+जमा\s+करो|सबमिट\s+करो|सबमिट|pariksha\s+jama\s+karo)/i.test(input)) {
+      this.dispatchExamAction("submit");
+      const submitBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="Submit" i], button:has-text("Submit")'
+      );
+      if (submitBtn) submitBtn.click();
+      speak(isHi ? "परीक्षा जमा करें" : "Submitting examination");
+      return;
+    }
+
+    // Describe Diagram (Vision AI)
+    if (/(?:describe\s+diagram|diagram\s+description|describe\s+image|चित्र\s+का\s+विवरण|चित्र\s+का\s+विवरण\s+दें|चित्र\s+बताओ|diagram\s+padho|chitra\s+ka\s+vivaran)/i.test(input)) {
+      const describeBtn = document.querySelector<HTMLElement>(
+        'button[aria-label*="Describe diagram" i], button:has(svg.lucide-sparkles)'
+      );
+      if (describeBtn) {
+        describeBtn.click();
+      } else {
+        speak(isHi ? "चित्र का विवरण: इस प्रश्न में कोई आरेख नहीं है।" : "Describe diagram: No diagram found on this question.");
+      }
       return;
     }
 
     // Read Question
-    if (/(?:read\s+question|read\s+again|read|repeat\s+question|repeat|speak\s+question|padho)/i.test(input)) {
+    if (/(?:read\s+question|read\s+again|read|repeat\s+question|repeat|speak\s+question|padho|सवाल\s+पढ़ो|प्रश्न\s+पढ़ो|सवाल\s+क्या\s+है)/i.test(input)) {
       this.readCurrentQuestionAloud();
       return;
     }
 
     // How Much Time Is Left?
-    if (/(?:how\s+much\s+time\s+is\s+left|how\s+much\s+time|time\s+left|time\s+remaining|what\s+is\s+the\s+time|remaining\s+time|kitna\s+samay)/i.test(input)) {
+    if (/(?:how\s+much\s+time\s+is\s+left|how\s+much\s+time|time\s+left|time\s+remaining|what\s+is\s+the\s+time|remaining\s+time|kitna\s+samay|कितना\s+समय\s+बचा\s+है|समय\s+कितना\s+है)/i.test(input)) {
       this.announceTimeRemaining();
       return;
     }
 
-    // Help Command
-    if (/(?:help|commands|what\s+can\s+i\s+say|madad)/i.test(input)) {
-      speak(
-        "Available voice commands: Go to dashboard, Go to practice, Go to exams, " +
-        "Open results, Open settings, Next question, Previous question, " +
-        "Select option A, B, C, or D, Clear response, Mark for review, " +
-        "Read question, and How much time is left."
-      );
+    // Help Command (Explicit bilingual guidance required by prompt)
+    if (/(?:help|commands|what\s+can\s+i\s+say|madad|sahayata|sahayta|मदद|सहायता|क्या\s+बोल\s+सकते\s+हैं)/i.test(input)) {
+      if (isHi) {
+        speak(
+          "आप 'प्रैक्टिस शुरू करें', 'मॉक टेस्ट दें', 'चित्र का विवरण दें', या अंग्रेजी में जाने के लिए 'switch to English' कह सकते हैं।",
+          { lang: "hi-IN" }
+        );
+      } else {
+        speak(
+          "You can say 'start practice', 'take mock exam', 'describe diagram', or say 'switch to Hindi' to navigate completely in Hindi.",
+          { lang: "en-US" }
+        );
+      }
       return;
     }
 
     // Fallback: Unrecognized
-    speak("Command not recognized. Say Help for a list of commands.");
+    speak(
+      isHi
+        ? "कमांड समझ नहीं आया। सहायता के लिए 'मदद' कहें।"
+        : "Command not recognized. Say Help for a list of commands."
+    );
   }
 
   private dispatchExamAction(action: string, detail?: any) {
@@ -1017,6 +1204,7 @@ class VoiceNavigationEngine {
   private selectExamOption(letter: string) {
     const idx = letter.charCodeAt(0) - 65; // A -> 0, B -> 1, C -> 2, D -> 3
     this.dispatchExamAction("select-option", { letter, index: idx });
+    const isHi = useAccessibilityStore.getState().language === "hi";
 
     const radios = Array.from(
       document.querySelectorAll<HTMLElement>(
@@ -1026,7 +1214,7 @@ class VoiceNavigationEngine {
 
     if (radios.length > idx && radios[idx]) {
       radios[idx].click();
-      speak(`Option ${letter} selected`);
+      speak(isHi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`);
       return;
     }
 
@@ -1035,14 +1223,15 @@ class VoiceNavigationEngine {
     );
     if (optionLabels.length > idx && optionLabels[idx]) {
       optionLabels[idx].click();
-      speak(`Option ${letter} selected`);
+      speak(isHi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`);
       return;
     }
 
-    speak(`Option ${letter} selected`);
+    speak(isHi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`);
   }
 
   private readCurrentQuestionAloud() {
+    const isHi = useAccessibilityStore.getState().language === "hi";
     const legend = document.querySelector(
       "fieldset legend, main h2, [data-testid='question-text']"
     );
@@ -1054,7 +1243,7 @@ class VoiceNavigationEngine {
       )
     );
 
-    let textToRead = questionText ? `Question: ${questionText}. ` : "";
+    let textToRead = questionText ? (isHi ? `प्रश्न: ${questionText}। ` : `Question: ${questionText}. `) : "";
 
     if (options.length > 0) {
       options.forEach((opt, index) => {
@@ -1062,12 +1251,12 @@ class VoiceNavigationEngine {
         const optText = cleanAccessibleText(
           opt.querySelector(".text-foreground")?.textContent || opt.textContent || ""
         ).replace(/^[A-D]\s*/i, "");
-        textToRead += `Option ${letter}: ${optText}. `;
+        textToRead += isHi ? `विकल्प ${letter}: ${optText}। ` : `Option ${letter}: ${optText}. `;
       });
     }
 
     if (!textToRead.trim()) {
-      speak("No active question found to read on this page.");
+      speak(isHi ? "इस पृष्ठ पर पढ़ने के लिए कोई सक्रिय प्रश्न नहीं मिला।" : "No active question found to read on this page.");
       return;
     }
 
@@ -1075,6 +1264,7 @@ class VoiceNavigationEngine {
   }
 
   private announceTimeRemaining() {
+    const isHi = useAccessibilityStore.getState().language === "hi";
     const timerEl = document.querySelector(
       '[role="region"][aria-label*="Timer"] span[aria-label], [aria-label*="remaining"], span.tabular-nums'
     );
@@ -1082,7 +1272,7 @@ class VoiceNavigationEngine {
     if (timerEl) {
       const ariaLabel = timerEl.getAttribute("aria-label");
       if (ariaLabel && /remaining/i.test(ariaLabel)) {
-        speak(`You have ${ariaLabel}`);
+        speak(isHi ? `आपके पास ${ariaLabel}` : `You have ${ariaLabel}`);
         return;
       }
 
@@ -1091,21 +1281,34 @@ class VoiceNavigationEngine {
       if (match) {
         const mins = parseInt(match[1], 10);
         const secs = parseInt(match[2], 10);
-        speak(`You have ${mins} minutes and ${secs} seconds remaining.`);
+        speak(
+          isHi
+            ? `आपके पास ${mins} मिनट और ${secs} सेकंड का समय शेष है।`
+            : `You have ${mins} minutes and ${secs} seconds remaining.`
+        );
         return;
       }
 
       if (text) {
-        speak(`Time remaining: ${text}`);
+        speak(isHi ? `शेष समय: ${text}` : `Time remaining: ${text}`);
         return;
       }
     }
 
-    speak("No active exam timer found on this page.");
+    speak(isHi ? "इस पृष्ठ पर कोई सक्रिय टाइमर नहीं मिला।" : "No active exam timer found on this page.");
   }
 }
 
 export const voiceEngine = new VoiceNavigationEngine();
+
+// Auto-sync voiceEngine recognition language with store changes
+if (typeof window !== "undefined") {
+  useAccessibilityStore.subscribe((state, prevState) => {
+    if (state.language !== prevState.language) {
+      voiceEngine.setLanguage(state.language);
+    }
+  });
+}
 
 let hasAnnouncedInSession = false;
 
@@ -1113,7 +1316,7 @@ let hasAnnouncedInSession = false;
  * Initializes the automated Gesture Trigger on first Tab or Space keypress per session.
  * - Listens for keydown where e.key === 'Tab' or 'Space'.
  * - Unlocks hardware audio context synchronously within the user gesture.
- * - Speaks the welcome tour clearly without preventing natural keyboard focus.
+ * - Speaks the welcome tour clearly in candidate's selected language.
  */
 export function initGestureTrigger(): () => void {
   if (typeof window === "undefined") return () => {};
@@ -1151,10 +1354,14 @@ export function initGestureTrigger(): () => void {
     // Mark welcome announcement in-progress to prevent focus talk-back from interrupting it
     isAnnouncingWelcome = true;
 
+    const isHi = store.language === "hi";
+    const welcomeText = isHi ? WELCOME_TOUR_TEXT_HI : WELCOME_TOUR_TEXT_EN;
+    const targetLang = isHi ? "hi-IN" : "en-US";
+
     // Speak the welcome tagline clearly using bulletproof forceSpeak
-    forceSpeak(WELCOME_TOUR_TEXT, () => {
+    forceSpeak(welcomeText, () => {
       isAnnouncingWelcome = false;
-    });
+    }, targetLang);
 
     // Fallback timer to release welcome lock in case speech synthesis ends abruptly
     setTimeout(() => {
@@ -1215,10 +1422,13 @@ export function initFocusTalkBack(): () => void {
       : target.closest<HTMLElement>("[data-voice-prompt]");
 
     if (promptElement && promptElement.dataset.voicePrompt) {
+      const isHi = store.language === "hi";
       const promptText = promptElement.dataset.voicePrompt.trim();
-      const message = /say yes/i.test(promptText)
+      const message = /say yes|हाँ कहें/i.test(promptText)
         ? promptText
-        : `${promptText} Say Yes to proceed, or say No to skip.`;
+        : isHi
+          ? `${promptText} आगे बढ़ने के लिए हाँ कहें, या छोड़ने के लिए नहीं कहें।`
+          : `${promptText} Say Yes to proceed, or say No to skip.`;
       speak(message, { cancelPrevious: true });
       return;
     }
@@ -1246,6 +1456,28 @@ export function initVoiceCommandHotkey(): () => void {
     if (event.altKey && (event.key === "v" || event.key === "V" || event.code === "KeyV")) {
       event.preventDefault();
       voiceEngine.toggle();
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+
+  return () => {
+    window.removeEventListener("keydown", handleKeyDown);
+  };
+}
+
+/**
+ * Initializes the Alt + L hotkey listener for toggling platform language (English / Hindi).
+ */
+export function initLanguageHotkey(): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.altKey && (event.key === "l" || event.key === "L" || event.code === "KeyL")) {
+      event.preventDefault();
+      const current = useAccessibilityStore.getState().language;
+      const nextLang = current === "hi" ? "en" : "hi";
+      voiceEngine.switchLanguage(nextLang);
     }
   };
 

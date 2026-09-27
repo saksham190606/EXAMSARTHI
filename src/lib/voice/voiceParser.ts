@@ -16,6 +16,11 @@ export type ParsedCommand =
   | { type: 'FLAG_QUESTION'; detectedLanguage: CommandLanguage }
   | { type: 'START_EXAM'; detectedLanguage: CommandLanguage }
   | { type: 'SUBMIT'; detectedLanguage: CommandLanguage }
+  | { type: 'CLEAR_RESPONSE'; detectedLanguage: CommandLanguage }
+  | { type: 'DESCRIBE_DIAGRAM'; detectedLanguage: CommandLanguage }
+  | { type: 'SWITCH_TO_HINDI'; detectedLanguage: CommandLanguage }
+  | { type: 'SWITCH_TO_ENGLISH'; detectedLanguage: CommandLanguage }
+  | { type: 'HELP'; detectedLanguage: CommandLanguage }
   | { type: 'GOTO'; questionNumber: number; detectedLanguage: CommandLanguage }
   | { type: 'TIME_LEFT'; detectedLanguage: CommandLanguage }
   | { type: 'YES'; detectedLanguage: CommandLanguage }
@@ -186,6 +191,50 @@ export function parseVoiceCommand(
     /^(?:voice mode chalu karo|awaaz mode chalu karo|sunna shuru karo)$/i.test(t)
   ) {
     return { type: 'ENABLE_VOICE', detectedLanguage: lang };
+  }
+
+  // 1.1 Bilingual Language Switching Controls (real-time voice switching)
+  if (
+    /^(?:switch to hindi|change to hindi|hindi please|hindi mein karo|hindi bhasha|hindi karo|hindi)$/i.test(t) ||
+    /^(?:हिंदी में करो|हिंदी भाषा|हिंदी में बदलो|हिंदी करो|हिंदी बोलिए|हिंदी में बोलो|हिंदी)$/i.test(t) ||
+    /^(?:hindi mein baat karo|hindi language)$/i.test(t)
+  ) {
+    return { type: 'SWITCH_TO_HINDI', detectedLanguage: 'hi' };
+  }
+
+  if (
+    /^(?:switch to english|change to english|english please|angrezi mein karo|english mein karo|english)$/i.test(t) ||
+    /^(?:अंग्रेज़ी में करो|अंग्रेजी में करो|अंग्रेजी भाषा|अंग्रेज़ी भाषा|इंग्लिश में करो|अंग्रेजी बोलिए|अंग्रेजी में बोलो|अंग्रेजी)$/i.test(t) ||
+    /^(?:angreji mein karo|english language)$/i.test(t)
+  ) {
+    return { type: 'SWITCH_TO_ENGLISH', detectedLanguage: 'en' };
+  }
+
+  // 1.2 Help Announcements
+  if (
+    /^(?:help|help me|what can i say|commands|voice commands|how to use)$/i.test(t) ||
+    /^(?:मदद|सहायता|मदद करो|सहायता करो|क्या बोल सकता हूँ|क्या कह सकता हूँ)$/i.test(t) ||
+    /^(?:madad|sahayata|madad karo)$/i.test(t)
+  ) {
+    return { type: 'HELP', detectedLanguage: lang };
+  }
+
+  // 1.3 Vision AI Diagram Description
+  if (
+    /^(?:describe diagram|describe image|describe the diagram|describe visual|explain diagram)$/i.test(t) ||
+    /^(?:चित्र का विवरण|चित्र का विवरण दें|चित्र बताओ|चित्र समझाओ|डायग्राम समझाओ|चित्र पढ़ो)$/i.test(t) ||
+    /^(?:chitra ka vivaran|diagram describe karo|chitra samjhao|chitra batao)$/i.test(t)
+  ) {
+    return { type: 'DESCRIBE_DIAGRAM', detectedLanguage: lang };
+  }
+
+  // 1.4 Clear / Reset Response
+  if (
+    /^(?:clear response|clear answer|clear selection|clear my answer|reset answer|clear)$/i.test(t) ||
+    /^(?:उत्तर हटाएं|उत्तर हटाओ|जवाब हटाएं|जवाब हटाओ|हटाओ|उत्तर साफ करो|उत्तर मिटाओ)$/i.test(t) ||
+    /^(?:uttar hatao|jawab hatao|clear karo)$/i.test(t)
+  ) {
+    return { type: 'CLEAR_RESPONSE', detectedLanguage: lang };
   }
 
   // 2. Exam Controls: Start Exam

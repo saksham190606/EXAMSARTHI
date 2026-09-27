@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Eye, Loader2, Volume2, VolumeX, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { speak, stopSpeech } from "@/lib/accessibility/voice-companion";
+import { useAccessibilityStore } from "@/store/useAccessibilityStore";
 
 interface DiagramDescriberProps {
   imageUrl: string;
@@ -11,6 +12,9 @@ interface DiagramDescriberProps {
 }
 
 export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberProps) {
+  const language = useAccessibilityStore((s) => s.language);
+  const isHindi = language === "hi";
+
   const [loading, setLoading] = useState(false);
   const [description, setDescription] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -30,6 +34,7 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
     if (description) {
       setIsSpeaking(true);
       speak(description, {
+        langOverride: isHindi ? "hi" : "en",
         onEnd: () => setIsSpeaking(false),
         onError: () => setIsSpeaking(false),
       });
@@ -37,13 +42,16 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
     }
 
     setLoading(true);
-    speak("Analyzing diagram with Vision AI...", { cancelPrevious: true });
+    speak(
+      isHindi ? "विजन एआई से चित्र का विश्लेषण किया जा रहा है..." : "Analyzing diagram with Vision AI...",
+      { cancelPrevious: true, langOverride: isHindi ? "hi" : "en" }
+    );
 
     try {
       const res = await fetch("/api/ai/describe-diagram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({ imageUrl, lang: language }),
       });
 
       const data = await res.json();
@@ -52,26 +60,29 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
         setDescription(data.description);
         setSource(data.source || null);
         setIsSpeaking(true);
-        speak(`Diagram Description: ${data.description}`, {
+        speak(`${isHindi ? "चित्र का विवरण: " : "Diagram Description: "}${data.description}`, {
+          langOverride: isHindi ? "hi" : "en",
           onEnd: () => setIsSpeaking(false),
           onError: () => setIsSpeaking(false),
         });
       } else {
-        const errorMsg =
-          "Could not analyze the diagram at this time. Please request assistance from your exam supervisor.";
+        const errorMsg = isHindi
+          ? "इस समय चित्र का विश्लेषण नहीं किया जा सका। कृपया अपने परीक्षा पर्यवेक्षक से सहायता का अनुरोध करें।"
+          : "Could not analyze the diagram at this time. Please request assistance from your exam supervisor.";
         setDescription(errorMsg);
-        speak(errorMsg);
+        speak(errorMsg, { langOverride: isHindi ? "hi" : "en" });
       }
     } catch (err) {
       console.error("[DiagramDescriber] Fetch error:", err);
-      const fallbackMsg =
-        "The diagram shows an examination illustration. Please refer to visual labels or consult your exam scribe.";
+      const fallbackMsg = isHindi
+        ? "यह चित्र एक परीक्षा चित्रण दर्शाता है। कृपया दृश्य लेबलों को देखें या अपने परीक्षा स्क्राइब से परामर्श करें।"
+        : "The diagram shows an examination illustration. Please refer to visual labels or consult your exam scribe.";
       setDescription(fallbackMsg);
-      speak(fallbackMsg);
+      speak(fallbackMsg, { langOverride: isHindi ? "hi" : "en" });
     } finally {
       setLoading(false);
     }
-  }, [imageUrl, loading, isSpeaking, description]);
+  }, [imageUrl, loading, isSpeaking, description, isHindi, language]);
 
   const handleStopSpeech = () => {
     stopSpeech();
@@ -93,6 +104,20 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
     };
   }, [handleDescribe]);
 
+  // Listen for voice action 'describe-diagram'
+  useEffect(() => {
+    const handleVoiceAction = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.action === 'describe-diagram') {
+        handleDescribe();
+      }
+    };
+    window.addEventListener('examsarthi-voice-action', handleVoiceAction);
+    return () => {
+      window.removeEventListener('examsarthi-voice-action', handleVoiceAction);
+    };
+  }, [handleDescribe]);
+
   // Reset cached description if question changes (imageUrl changes)
   useEffect(() => {
     setDescription(null);
@@ -104,7 +129,7 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
     <div
       className="mt-4 p-4 rounded-[2px] border border-border bg-card/60 backdrop-blur-sm space-y-3"
       role="region"
-      aria-label="Diagram Vision AI Assistant"
+      aria-label={isHindi ? "चित्र विजन एआई सहायक" : "Diagram Vision AI Assistant"}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -113,10 +138,10 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
           </span>
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Multimodal Accessibility Assistant
+              {isHindi ? "मल्टीमॉडल सुलभता सहायक" : "Multimodal Accessibility Assistant"}
             </span>
             <span className="text-sm font-bold text-foreground">
-              Diagram Vision AI
+              {isHindi ? "डायग्राम विजन एआई" : "Diagram Vision AI"}
             </span>
           </div>
         </div>
@@ -128,24 +153,34 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
             onClick={handleDescribe}
             disabled={loading}
             className="h-10 px-4 text-xs sm:text-sm font-bold bg-[#ffed00] text-black hover:bg-[#e5d500] border-none shadow-[0_2px_8px_rgba(255,237,0,0.25)] rounded-[2px]"
-            aria-label="Describe diagram with Vision AI (Keyboard shortcut Alt plus D)"
-            data-voice-prompt="Describe this exam diagram with Vision AI? Say Yes to listen, or say No to skip."
-            data-voice-confirm="Analyzing diagram with Vision AI..."
+            aria-label={
+              isHindi
+                ? "विजन एआई से चित्र का विवरण सुनें (कीबोर्ड शॉर्टकट Alt + D)"
+                : "Describe diagram with Vision AI (Keyboard shortcut Alt plus D)"
+            }
+            data-voice-prompt={
+              isHindi
+                ? "इस परीक्षा चित्र का विवरण विजन एआई से सुनें? सुनने के लिए हाँ कहें, या छोड़ने के लिए ना कहें।"
+                : "Describe this exam diagram with Vision AI? Say Yes to listen, or say No to skip."
+            }
+            data-voice-confirm={
+              isHindi ? "विजन एआई से चित्र का विश्लेषण किया जा रहा है..." : "Analyzing diagram with Vision AI..."
+            }
           >
             {loading ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
-                <span>Analyzing Diagram...</span>
+                <span>{isHindi ? "चित्र का विश्लेषण हो रहा है..." : "Analyzing Diagram..."}</span>
               </>
             ) : isSpeaking ? (
               <>
                 <Volume2 className="mr-2 size-4 animate-pulse text-black" aria-hidden="true" />
-                <span>Reading Description...</span>
+                <span>{isHindi ? "विवरण पढ़ा जा रहा है..." : "Reading Description..."}</span>
               </>
             ) : (
               <>
                 <Eye className="mr-2 size-4" aria-hidden="true" />
-                <span>Describe Diagram (Alt+D)</span>
+                <span>{isHindi ? "चित्र का विवरण (Alt+D)" : "Describe Diagram (Alt+D)"}</span>
               </>
             )}
           </Button>
@@ -157,10 +192,10 @@ export function DiagramDescriber({ imageUrl, questionText }: DiagramDescriberPro
               variant="outline"
               onClick={handleStopSpeech}
               className="h-10 px-3 text-xs font-bold border-red-500/50 text-red-500 hover:bg-red-500/10 rounded-[2px]"
-              aria-label="Stop reading diagram description"
+              aria-label={isHindi ? "चित्र का विवरण पढ़ना रोकें" : "Stop reading diagram description"}
             >
               <VolumeX className="mr-1.5 size-4" aria-hidden="true" />
-              <span>Stop Audio</span>
+              <span>{isHindi ? "ऑडियो रोकें" : "Stop Audio"}</span>
             </Button>
           )}
         </div>

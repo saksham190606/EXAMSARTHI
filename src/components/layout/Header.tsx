@@ -104,30 +104,34 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Language Selector */}
-          <div className="hidden sm:block">
-            <Select 
-              value={language} 
-              onValueChange={(val) => setLanguage(val as Language)}
-            >
-              <SelectTrigger 
-                className={cn(
-                  "w-[120px] h-9 text-xs font-semibold rounded-[2px] border border-white/20 bg-black text-white shadow-none",
-                  "hover:bg-white/10 hover:border-white/40 transition-all duration-120 ease-out",
-                  "motion-safe:active:scale-95 motion-reduce:transform-none",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                )} 
-                aria-label={t('selectLanguage')}
-              >
-                <SelectValue placeholder={t('language')} />
-              </SelectTrigger>
-              <SelectContent className="rounded-none border-white/20 bg-neutral-950 text-white">
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="hi">हिंदी (Hindi)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
+          {/* Accessible Bilingual Language Toggle Button (Alt + L) */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextLang = language === 'hi' ? 'en' : 'hi'
+              voiceEngine.switchLanguage(nextLang)
+            }}
+            aria-label={
+              language === 'hi' 
+                ? 'वर्तमान भाषा हिंदी है। अंग्रेजी में बदलने के लिए दबाएं (ऑल्ट + L)'
+                : 'Current language is English. Press to switch to Hindi (Alt + L)'
+            }
+            title={`Switch language (Alt + L) - Currently ${language === 'hi' ? 'हिंदी (Hindi)' : 'English'}`}
+            className={cn(
+              "relative h-9 px-2.5 inline-flex items-center justify-center gap-1.5 rounded-[2px] border text-xs font-bold transition-all duration-150 cursor-pointer shadow-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+              "border-white/20 bg-black text-white hover:bg-white/10 hover:border-white/40 motion-safe:active:scale-95"
+            )}
+          >
+            <span className={cn("transition-colors", language === 'en' ? "text-[#ffed00] font-black underline decoration-2 underline-offset-4" : "text-white/60")}>
+              EN
+            </span>
+            <span className="text-white/30 text-[10px] select-none">/</span>
+            <span className={cn("transition-colors", language === 'hi' ? "text-[#ffed00] font-black underline decoration-2 underline-offset-4" : "text-white/60")}>
+              HI
+            </span>
+          </button>
+
           {/* Accessibility Settings */}
           <AccessibilityPanel />
 
