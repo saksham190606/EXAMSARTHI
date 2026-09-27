@@ -15,7 +15,8 @@ import {
   Pause,
   Square,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Mic
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -193,6 +194,7 @@ export function QuestionReviewList({
   const [isAudioReviewActive, setIsAudioReviewActive] = useState<boolean>(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState<number>(-1);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [individualPlayingId, setIndividualPlayingId] = useState<string | null>(null);
 
   // Utterance Anchor Ref to Prevent Garbage Collection
@@ -201,11 +203,32 @@ export function QuestionReviewList({
   const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAudioReviewActiveRef = useRef(isAudioReviewActive);
+  const activeReviewIndexRef = useRef(activeReviewIndex);
+  const isPausedRef = useRef(isPaused);
+  const isSpeakingRef = useRef(isSpeaking);
   const isHindiRef = useRef(isHindi);
+
+  // Background Listening & Barge-In Refs
+  const recognitionRef = useRef<any>(null);
+  const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActionTimestampRef = useRef<number>(0);
+  const isRecognitionStartingRef = useRef<boolean>(false);
 
   useEffect(() => {
     isAudioReviewActiveRef.current = isAudioReviewActive;
   }, [isAudioReviewActive]);
+
+  useEffect(() => {
+    activeReviewIndexRef.current = activeReviewIndex;
+  }, [activeReviewIndex]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   useEffect(() => {
     isHindiRef.current = isHindi;
@@ -294,6 +317,7 @@ export function QuestionReviewList({
     if (typeof window !== 'undefined') {
       (window as any).__reviewUtterance = null;
     }
+    setIsSpeaking(false);
     setIsAudioReviewActive(false);
     setActiveReviewIndex(-1);
     setIsPaused(false);
@@ -369,6 +393,7 @@ export function QuestionReviewList({
     }, watchdogDuration);
 
     utterance.onend = () => {
+      setIsSpeaking(false);
       clearAudioTimers();
       activeUtteranceRef.current = null;
       if (typeof window !== 'undefined') {
@@ -391,11 +416,14 @@ export function QuestionReviewList({
             finalUtterance.rate = 1.0;
             activeUtteranceRef.current = finalUtterance;
             finalUtterance.onend = () => {
+              setIsSpeaking(false);
               stopAudioWalkthrough();
             };
             try {
+              setIsSpeaking(true);
               window.speechSynthesis.speak(finalUtterance);
             } catch (e) {
+              setIsSpeaking(false);
               stopAudioWalkthrough();
             }
           }
@@ -406,6 +434,7 @@ export function QuestionReviewList({
     };
 
     utterance.onerror = (err) => {
+      setIsSpeaking(false);
       console.warn('[ReviewWalkthrough] Utterance error:', err);
       clearAudioTimers();
       activeUtteranceRef.current = null;
@@ -427,9 +456,11 @@ export function QuestionReviewList({
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
+      setIsSpeaking(true);
       window.speechSynthesis.speak(utterance);
     } catch (e) {
       console.warn('[ReviewWalkthrough] Speech speak failed:', e);
+      setIsSpeaking(false);
       stopAudioWalkthrough();
     }
   }, [clearAudioTimers, stopAudioWalkthrough]);
@@ -445,43 +476,70 @@ export function QuestionReviewList({
   }, [isAudioReviewActive, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
 
   // Playback Navigation Handlers
-  const goToPreviousQuestion = useCallback(() => {
-    if (activeReviewIndex > 0) {
-      readQuestionReview(activeReviewIndex - 1, true);
+  const handlePause = useCallback(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    setIsPaused(true);
+    try {
+      window.speechSynthesis.pause();
+    } catch (e) {
+      window.speechSynthesis.cancel();
     }
-  }, [activeReviewIndex, readQuestionReview]);
+  }, []);
 
-  const goToNextQuestion = useCallback(() => {
-    if (activeReviewIndex < filteredQuestions.length - 1) {
-      readQuestionReview(activeReviewIndex + 1, true);
+  const handleResume = useCallback(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    setIsPaused(false);
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      } else if (activeReviewIndexRef.current >= 0 && activeReviewIndexRef.current < filteredQuestionsRef.current.length) {
+        readQuestionReview(activeReviewIndexRef.current, true);
+      }
+    } catch (e) {
+      if (activeReviewIndexRef.current >= 0 && activeReviewIndexRef.current < filteredQuestionsRef.current.length) {
+        readQuestionReview(activeReviewIndexRef.current, true);
+      }
     }
-  }, [activeReviewIndex, filteredQuestions.length, readQuestionReview]);
+  }, [readQuestionReview]);
 
   const togglePauseResume = useCallback(() => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-
     if (isPaused) {
-      setIsPaused(false);
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        } else if (activeReviewIndex >= 0 && activeReviewIndex < filteredQuestions.length) {
-          readQuestionReview(activeReviewIndex, isAudioReviewActive);
-        }
-      } catch (e) {
-        if (activeReviewIndex >= 0 && activeReviewIndex < filteredQuestions.length) {
-          readQuestionReview(activeReviewIndex, isAudioReviewActive);
-        }
-      }
+      handleResume();
     } else {
-      setIsPaused(true);
-      try {
-        window.speechSynthesis.pause();
-      } catch (e) {
-        window.speechSynthesis.cancel();
-      }
+      handlePause();
     }
-  }, [isPaused, activeReviewIndex, filteredQuestions.length, readQuestionReview, isAudioReviewActive]);
+  }, [isPaused, handleResume, handlePause]);
+
+  const handleNextQuestionReview = useCallback(() => {
+    clearAudioTimers();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
+    const currentIdx = activeReviewIndexRef.current;
+    const total = filteredQuestionsRef.current.length;
+    const nextIdx = currentIdx < 0 ? 0 : currentIdx + 1;
+    if (nextIdx < total) {
+      readQuestionReview(nextIdx, true);
+    }
+  }, [clearAudioTimers, readQuestionReview]);
+
+  const handlePrevQuestionReview = useCallback(() => {
+    clearAudioTimers();
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
+    const currentIdx = activeReviewIndexRef.current;
+    if (currentIdx > 0) {
+      readQuestionReview(currentIdx - 1, true);
+    }
+  }, [clearAudioTimers, readQuestionReview]);
+
+  const goToPreviousQuestion = handlePrevQuestionReview;
+  const goToNextQuestion = handleNextQuestionReview;
 
   // 4. Individual Question Explanation Handler
   const handlePlayIndividualQuestion = useCallback((q: QuestionReviewItem) => {
@@ -496,6 +554,185 @@ export function QuestionReviewList({
       readQuestionReview(idx, false);
     }
   }, [individualPlayingId, filteredQuestions, readQuestionReview, stopAudioWalkthrough]);
+
+  // 5. Barge-In Voice Navigation & Playback Controls during Audio Walkthrough
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const isListeningNeeded = isAudioReviewActive || isSpeaking;
+    if (!isListeningNeeded) {
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch (e) {}
+        recognitionRef.current = null;
+      }
+      isRecognitionStartingRef.current = false;
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return;
+    }
+
+    let recognition: any = null;
+    let isDisposed = false;
+
+    const processBargeInTranscript = (transcriptText: string) => {
+      const raw = transcriptText.toLowerCase().trim();
+      if (!raw) return;
+
+      const now = Date.now();
+      if (now - lastActionTimestampRef.current < 500) {
+        return;
+      }
+
+      const words = raw.split(/\s+/);
+
+      // PAUSE: ["pause", "stop speaking", "wait", "hold", "रुकिए", "रुको", "पॉज़"]
+      const pauseKeywords = ["pause", "stop speaking", "wait", "hold", "रुकिए", "रुको", "पॉज़", "rukिए", "ruko"];
+      if (pauseKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
+        if (!isPausedRef.current) {
+          lastActionTimestampRef.current = now;
+          handlePause();
+        }
+        return;
+      }
+
+      // RESUME: ["resume", "play", "continue", "start", "आगे बोलो", "जारी रखें"]
+      const resumeKeywords = ["resume", "play", "continue", "start", "आगे बोलो", "जारी रखें", "बोलो"];
+      if (resumeKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
+        if (isPausedRef.current) {
+          lastActionTimestampRef.current = now;
+          handleResume();
+        }
+        return;
+      }
+
+      // STOP REVIEW: ["stop", "close review", "exit", "band karo", "बंद करो"]
+      const stopKeywords = ["stop", "close review", "exit", "band karo", "बंद करो", "stop review", "बंद"];
+      if (stopKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
+        lastActionTimestampRef.current = now;
+        stopAudioWalkthrough();
+        return;
+      }
+
+      // NEXT QUESTION: ["next", "next question", "skip", "agla", "अगला", "आगे"]
+      const nextKeywords = ["next", "next question", "skip", "agla", "अगला", "आगे"];
+      if (nextKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
+        lastActionTimestampRef.current = now;
+        handleNextQuestionReview();
+        return;
+      }
+
+      // PREVIOUS QUESTION: ["previous", "back", "pichla", "पिछला", "पीछे"]
+      const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
+      if (prevKeywords.some((k) => raw === k || words.includes(k) || raw.includes(k))) {
+        lastActionTimestampRef.current = now;
+        handlePrevQuestionReview();
+        return;
+      }
+    };
+
+    const startRecognitionInstance = () => {
+      if (isDisposed || (!isAudioReviewActiveRef.current && !isSpeakingRef.current)) return;
+      if (isRecognitionStartingRef.current) return;
+
+      try {
+        if (recognition) {
+          try {
+            recognition.onend = null;
+            recognition.onerror = null;
+            recognition.onresult = null;
+            recognition.abort();
+          } catch (e) {}
+        }
+
+        recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
+
+        recognition.onstart = () => {
+          isRecognitionStartingRef.current = false;
+        };
+
+        recognition.onresult = (event: any) => {
+          if (!isAudioReviewActiveRef.current && !isSpeakingRef.current) return;
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0]?.transcript;
+            if (transcript) {
+              processBargeInTranscript(transcript);
+            }
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          if (event.error === 'aborted' || event.error === 'no-speech') {
+            return;
+          }
+          console.warn('[ReviewBargeIn] Recognition error:', event.error);
+        };
+
+        recognition.onend = () => {
+          isRecognitionStartingRef.current = false;
+          if (isDisposed || (!isAudioReviewActiveRef.current && !isSpeakingRef.current)) return;
+
+          // Loop & Error Guard: restart within 150ms
+          if (restartTimerRef.current) {
+            clearTimeout(restartTimerRef.current);
+          }
+          restartTimerRef.current = setTimeout(() => {
+            if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current)) {
+              startRecognitionInstance();
+            }
+          }, 150);
+        };
+
+        isRecognitionStartingRef.current = true;
+        recognition.start();
+      } catch (err: any) {
+        isRecognitionStartingRef.current = false;
+        if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current)) {
+          restartTimerRef.current = setTimeout(() => {
+            if (!isDisposed && (isAudioReviewActiveRef.current || isSpeakingRef.current)) {
+              startRecognitionInstance();
+            }
+          }, 150);
+        }
+      }
+    };
+
+    startRecognitionInstance();
+
+    return () => {
+      isDisposed = true;
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
+      if (recognition) {
+        try {
+          recognition.onend = null;
+          recognition.onerror = null;
+          recognition.onresult = null;
+          recognition.abort();
+        } catch (e) {}
+      }
+      recognitionRef.current = null;
+      isRecognitionStartingRef.current = false;
+    };
+  }, [isAudioReviewActive, isSpeaking, handlePause, handleResume, handleNextQuestionReview, handlePrevQuestionReview, stopAudioWalkthrough]);
 
   // Keyboard Shortcuts: Alt+A (Toggle Walkthrough), Alt+P (Prev), Alt+N (Next), Space (Pause/Resume), Escape (Stop)
   useEffect(() => {
@@ -517,14 +754,14 @@ export function QuestionReviewList({
         // Alt+P -> Previous
         if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
           e.preventDefault();
-          goToPreviousQuestion();
+          handlePrevQuestionReview();
           return;
         }
 
         // Alt+N -> Next
         if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
           e.preventDefault();
-          goToNextQuestion();
+          handleNextQuestionReview();
           return;
         }
 
@@ -546,7 +783,7 @@ export function QuestionReviewList({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleWalkthrough, goToPreviousQuestion, goToNextQuestion, togglePauseResume, stopAudioWalkthrough]);
+  }, [toggleWalkthrough, handlePrevQuestionReview, handleNextQuestionReview, togglePauseResume, stopAudioWalkthrough]);
 
   // Clean up speech on component unmount
   useEffect(() => {
@@ -635,9 +872,9 @@ export function QuestionReviewList({
         <div
           role="toolbar"
           aria-label="Audio review walkthrough controls"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-3 bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_30px_rgba(255,237,0,0.35)] rounded-full backdrop-blur-md text-foreground max-w-xl w-[94%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_30px_rgba(255,237,0,0.35)] rounded-full backdrop-blur-md text-foreground max-w-2xl w-[96%] sm:w-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
         >
-          <div className="flex items-center gap-2 pr-3 border-r border-white/20">
+          <div className="flex items-center gap-2 pr-2.5 sm:pr-3 border-r border-white/20">
             <span className="relative flex size-3 items-center justify-center">
               <span className="absolute -inset-1 rounded-full bg-[#ffed00] animate-ping opacity-75" />
               <span className="size-2.5 rounded-full bg-[#ffed00]" />
@@ -652,12 +889,22 @@ export function QuestionReviewList({
             </div>
           </div>
 
+          {/* Tiny indicator inside the pill: "🎙️ Mic Active (Say 'Next', 'Previous', or 'Pause')" */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-2xs font-semibold text-white whitespace-nowrap shadow-inner">
+            <span className="relative flex size-2 items-center justify-center">
+              <span className="absolute -inset-0.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+            </span>
+            <span className="hidden sm:inline">🎙️ Mic Active (Say &apos;Next&apos;, &apos;Previous&apos;, or &apos;Pause&apos;)</span>
+            <span className="sm:hidden">🎙️ Mic Active</span>
+          </div>
+
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={goToPreviousQuestion}
+              onClick={handlePrevQuestionReview}
               disabled={activeReviewIndex === 0}
               className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10"
               title="Previous Question (Alt+P)"
@@ -693,7 +940,7 @@ export function QuestionReviewList({
               type="button"
               variant="outline"
               size="sm"
-              onClick={goToNextQuestion}
+              onClick={handleNextQuestionReview}
               disabled={activeReviewIndex >= filteredQuestions.length - 1}
               className="h-8 px-2.5 text-xs font-semibold border-white/20 text-white hover:bg-white/10"
               title="Next Question (Alt+N)"
