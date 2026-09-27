@@ -15,6 +15,7 @@ interface AccessibilityState {
   enableVoiceCommands: boolean;
   voiceSpeed: VoiceSpeed;
   speechRate: number;
+  selectedVoiceURI: string | null;
   voiceModeEnabled: boolean;
   hasAnnouncedWelcome: boolean;
   isListeningCommands: boolean;
@@ -29,6 +30,7 @@ interface AccessibilityState {
   setEnableVoiceCommands: (enabled: boolean) => void;
   setVoiceSpeed: (speed: VoiceSpeed) => void;
   setSpeechRate: (rate: number) => void;
+  setSelectedVoiceURI: (uri: string | null) => void;
   setVoiceModeEnabled: (enabled: boolean) => void;
   setHasAnnouncedWelcome: (announced: boolean) => void;
   setIsListeningCommands: (listening: boolean) => void;
@@ -46,6 +48,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       enableVoiceCommands: false,
       voiceSpeed: 'normal',
       speechRate: 1.0,
+      selectedVoiceURI: null,
       voiceModeEnabled: false,
       hasAnnouncedWelcome: false,
       isListeningCommands: false,
@@ -59,13 +62,14 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       setEnableVoiceCommands: (enabled) => set({ enableVoiceCommands: enabled }),
       setVoiceSpeed: (speed) => {
         const speedMap: Record<VoiceSpeed, number> = {
-          slow: 0.75,
+          slow: 0.8,
           normal: 1.0,
-          fast: 1.5,
+          fast: 1.2,
         };
         set({ voiceSpeed: speed, speechRate: speedMap[speed] || 1.0 });
       },
       setSpeechRate: (rate) => set({ speechRate: rate }),
+      setSelectedVoiceURI: (uri) => set({ selectedVoiceURI: uri }),
       setVoiceModeEnabled: (enabled) => set({ voiceModeEnabled: enabled }),
       setHasAnnouncedWelcome: (announced) => set({ hasAnnouncedWelcome: announced }),
       setIsListeningCommands: (listening) => set({ isListeningCommands: listening }),
@@ -82,6 +86,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
         enableVoiceCommands: state.enableVoiceCommands,
         voiceSpeed: state.voiceSpeed,
         speechRate: state.speechRate,
+        selectedVoiceURI: state.selectedVoiceURI,
         language: state.language,
       }),
     }

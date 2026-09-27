@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getHighFidelityVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
+import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 
 /**
  * EXAMSARTHI — Centralized Global Audio & Voice Engine
@@ -118,9 +121,16 @@ export function speakText(text: string, lang = 'en-US', onComplete?: () => void)
     window.speechSynthesis.cancel();
   } catch (e) {}
 
-  const utterance = new SpeechSynthesisUtterance(text);
+  const store = useAccessibilityStore.getState();
+  const sanitizedText = sanitizeExamTextForSpeech(text, lang);
+  const utterance = new SpeechSynthesisUtterance(sanitizedText);
   utterance.lang = lang;
-  utterance.rate = 1.0;
+  utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
+
+  const voice = getHighFidelityVoice(lang, store.selectedVoiceURI);
+  if (voice) {
+    utterance.voice = voice;
+  }
 
   const handleFinish = () => {
     isSpeakingGlobal = false;
@@ -184,7 +194,11 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     const recognition = new SpeechRecognition();
     recognition.continuous = false; // Discrete cycles prevent Chromium audio buffer lock
     recognition.interimResults = false;
+    recognition.maxAlternatives = 5;
     recognition.lang = lang;
+
+    // Inject JSGF grammar
+    injectExamGrammar(recognition);
 
     recognition.onaudiostart = () => console.log('[VoiceEngine] Audio capture started (mic is hot)');
     recognition.onsoundstart = () => console.log('[VoiceEngine] Sound detected in room');
@@ -218,7 +232,18 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     };
 
     recognition.onresult = (e: any) => {
-      const raw = e?.results?.[0]?.[0]?.transcript || '';
+      const candidates = extractTranscriptsFromEvent(e);
+      let raw = candidates[0] || e?.results?.[0]?.[0]?.transcript || '';
+
+      // Check multi-alternatives and phonetic error correction
+      if (candidates.length > 0) {
+        const resolved = resolveMultiAlternativeCommand(candidates);
+        if (resolved) {
+          raw = resolved.matchedToken;
+          console.log('[VoiceEngine Phonetic Resolved]:', resolved.action, 'from', candidates);
+        }
+      }
+
       console.log('[VoiceEngine Result Captured]:', raw);
       if (raw) {
         globalTranscript = raw;

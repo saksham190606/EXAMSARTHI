@@ -6,6 +6,7 @@ import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { ExamState, announceToScreenReader } from '@/lib/useExamEngine';
 import { CandidateQuestion, getQuestionType } from '@/types/question';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { matchTokenToCommand } from '@/lib/voice/speech-recognition';
 import {
   useVoiceEngine,
   speakText,
@@ -331,6 +332,7 @@ export function useVoiceMode({
     }
 
     const words = transcript.split(/\s+/);
+    const phoneticMatch = matchTokenToCommand(transcript);
 
     // =========================================================================
     // 2. CORE VOICE EXAM COMMANDS (Take immediate precedence across all types)
@@ -341,7 +343,7 @@ export function useVoiceMode({
     const repeatKeywords = [
       "repeat", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो", "दोबारा", "again", "फिर से"
     ];
-    if (repeatKeywords.some((k) => transcript === k || transcript.includes(k))) {
+    if (phoneticMatch?.action === 'REPEAT_QUESTION' || repeatKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         try {
@@ -357,7 +359,7 @@ export function useVoiceMode({
     const flagKeywords = [
       "flag", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
     ];
-    if (flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
+    if (phoneticMatch?.action === 'FLAG_REVIEW' || flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
       handleToggleFlag();
       return;
@@ -368,7 +370,7 @@ export function useVoiceMode({
     const clearKeywords = [
       "clear response", "clear answer", "unselect", "remove answer", "साफ करो", "हटाओ", "clear"
     ];
-    if (clearKeywords.some((k) => transcript === k || transcript.includes(k))) {
+    if (phoneticMatch?.action === 'CLEAR_RESPONSE' || clearKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
       handleClearAnswer();
       return;
@@ -377,7 +379,7 @@ export function useVoiceMode({
     // NEXT / PREVIOUS:
     // Keywords for Next: ["next", "next question", "agla", "अगला", "आगे"] -> handleNextQuestion()
     const nextKeywords = ["next", "next question", "agla", "अगला", "आगे"];
-    if (nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    if (phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
       playVoiceFeedbackChime();
       handleNextQuestion();
       return;
@@ -385,7 +387,7 @@ export function useVoiceMode({
 
     // Keywords for Previous: ["previous", "back", "pichla", "पिछला", "पीछे"] -> handlePrevQuestion()
     const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
-    if (prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    if (phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
       playVoiceFeedbackChime();
       handlePrevQuestion();
       return;
@@ -396,7 +398,7 @@ export function useVoiceMode({
     const submitKeywords = [
       "submit exam", "submit test", "finish exam", "end test", "सबमिट करो", "परीक्षा समाप्त", "submit"
     ];
-    if (submitKeywords.some((k) => transcript === k || transcript.includes(k))) {
+    if (phoneticMatch?.action === 'SUBMIT_EXAM' || submitKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
       handleSubmitTrigger();
       return;
@@ -425,7 +427,7 @@ export function useVoiceMode({
       // Recognized inputs for TRUE:
       // ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ"]
       const trueTokens = ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ", "हा"];
-      if (trueTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+      if (phoneticMatch?.action === 'SELECT_TRUE' || trueTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
         playVoiceFeedbackChime();
         const trueOptId = (currentQ.options && currentQ.options[0]) ? currentQ.options[0].id : "true";
         if (actionsRef.current.setAnswer) {
@@ -442,7 +444,7 @@ export function useVoiceMode({
       // Recognized inputs for FALSE:
       // ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं"]
       const falseTokens = ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं", "ना"];
-      if (falseTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+      if (phoneticMatch?.action === 'SELECT_FALSE' || falseTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
         playVoiceFeedbackChime();
         const falseOptId = (currentQ.options && currentQ.options[1]) ? currentQ.options[1].id : "false";
         if (actionsRef.current.setAnswer) {
@@ -463,7 +465,7 @@ export function useVoiceMode({
         "विकल्प ए", "विकल्प बी", "विकल्प सी", "विकल्प डी",
         "a", "b", "c", "d", "ए", "बी", "सी", "डी"
       ];
-      if (mcqTokens.some((t) => transcript === t || words.includes(t))) {
+      if ((phoneticMatch && ['SELECT_A', 'SELECT_B', 'SELECT_C', 'SELECT_D'].includes(phoneticMatch.action)) || mcqTokens.some((t) => transcript === t || words.includes(t))) {
         const warning = isHi
           ? "यह सत्य या असत्य प्रश्न है। कृपया सत्य या असत्य कहें।"
           : "This is a True or False question. Please say True or False.";
@@ -528,7 +530,7 @@ export function useVoiceMode({
     // Option D: "d", "option d", "4", "four", "चौथा", "विकल्प डी" -> select Option 3. Speak "Selected D"
     const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "4", "डी", "चार"];
 
-    if (optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_A' || optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();
       handleSelectOption(0);
       speakText(isHi ? "विकल्प ए चुना गया" : "Selected A", speechLang, () => {
@@ -537,7 +539,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (optBTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_B' || optBTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();
       handleSelectOption(1);
       speakText(isHi ? "विकल्प बी चुना गया" : "Selected B", speechLang, () => {
@@ -546,7 +548,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (optCTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_C' || optCTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();
       handleSelectOption(2);
       speakText(isHi ? "विकल्प सी चुना गया" : "Selected C", speechLang, () => {
@@ -555,7 +557,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (optDTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_D' || optDTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();
       handleSelectOption(3);
       speakText(isHi ? "विकल्प डी चुना गया" : "Selected D", speechLang, () => {

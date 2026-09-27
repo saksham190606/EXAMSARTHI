@@ -1,7 +1,7 @@
 "use client"
 
-import React from 'react'
-import { Settings2 } from "lucide-react"
+import React, { useEffect, useState } from 'react'
+import { Settings2, Play, Square, Sparkles } from "lucide-react"
 import { useAccessibilityStore, TextSize, Contrast, VoiceSpeed } from "@/store/useAccessibilityStore"
 import { useTheme } from "next-themes"
 
@@ -17,6 +17,15 @@ import {
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  getAvailableVoices,
+  categorizeVoice,
+  speakHighFidelity,
+  stopHighFidelitySpeech,
+  onVoicesLoaded,
+  CategorizedVoice,
+} from "@/lib/voice/speech-synthesis"
 
 const emptySubscribe = () => () => { }
 
@@ -35,10 +44,53 @@ export function AccessibilityPanel() {
     autoReadQuestions, setAutoReadQuestions,
     enableVoiceCommands, setEnableVoiceCommands,
     voiceModeEnabled, setVoiceModeEnabled,
-    voiceSpeed, setVoiceSpeed
+    voiceSpeed, setVoiceSpeed,
+    speechRate, setSpeechRate,
+    selectedVoiceURI, setSelectedVoiceURI,
+    language
   } = useAccessibilityStore()
 
   const { theme, setTheme } = useTheme()
+
+  const [availableVoices, setAvailableVoices] = useState<CategorizedVoice[]>([])
+  const [isPlayingTest, setIsPlayingTest] = useState(false)
+
+  useEffect(() => {
+    const refreshVoices = () => {
+      const raw = getAvailableVoices(language)
+      const categorized = raw.map(categorizeVoice)
+      setAvailableVoices(categorized)
+    }
+
+    refreshVoices()
+    const unsubscribe = onVoicesLoaded(refreshVoices)
+    return () => {
+      unsubscribe()
+      stopHighFidelitySpeech()
+    }
+  }, [language])
+
+  const handleTestVoice = () => {
+    if (isPlayingTest) {
+      stopHighFidelitySpeech()
+      setIsPlayingTest(false)
+      return
+    }
+
+    setIsPlayingTest(true)
+    const testText = language === 'hi'
+      ? 'नमस्कार! यह परीक्षा सारथी की उच्च गुणवत्ता आवाज़ का नमूना है।'
+      : 'Hello! This is a preview of the Exam Saarthi high-fidelity neural voice.'
+
+    speakHighFidelity(testText, {
+      lang: language === 'hi' ? 'hi-IN' : 'en-US',
+      voiceURI: selectedVoiceURI,
+      rate: speechRate,
+      onStart: () => setIsPlayingTest(true),
+      onEnd: () => setIsPlayingTest(false),
+      onError: () => setIsPlayingTest(false),
+    })
+  }
 
   const triggerClasses = "size-9 inline-flex items-center justify-center rounded-[2px] border border-white/20 bg-black text-white shadow-none hover:bg-white/10 hover:border-white/40 transition-all duration-120 ease-out motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black cursor-pointer"
 
@@ -259,29 +311,141 @@ export function AccessibilityPanel() {
             </div>
           )}
 
-          {/* Voice Speed */}
-          <div className="space-y-3">
-            <div id="vs-legend" className="text-base font-semibold">Voice Speed</div>
-            <RadioGroup
-              value={voiceSpeed}
-              onValueChange={(val) => setVoiceSpeed(val as VoiceSpeed)}
-              className="flex flex-col space-y-1"
+          {/* Voice Profile Dropdown */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="panel-voice-profile" className="text-base font-semibold flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+                Voice Profile
+              </Label>
+              <span className="text-xs font-mono font-medium text-muted-foreground">
+                {language === 'hi' ? 'Hindi' : 'English'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Browser neural &amp; natural voices filtered by active language.
+            </p>
+            <Select
+              value={selectedVoiceURI || 'auto'}
+              onValueChange={(val) => setSelectedVoiceURI(val === 'auto' ? null : val)}
               disabled={!audioAssistance}
-              aria-labelledby="vs-legend"
             >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="slow" id="vs-slow" />
-                <Label htmlFor="vs-slow">Slow</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="normal" id="vs-normal" />
-                <Label htmlFor="vs-normal">Normal</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="fast" id="vs-fast" />
-                <Label htmlFor="vs-fast">Fast</Label>
-              </div>
-            </RadioGroup>
+              <SelectTrigger id="panel-voice-profile" className="w-full text-xs" aria-label="Voice Profile Selection">
+                <SelectValue placeholder="Neural Auto-Select (Recommended)" />
+              </SelectTrigger>
+              <SelectContent className="max-h-56">
+                <SelectItem value="auto">
+                  <span className="font-medium text-primary">✨ Neural Auto-Select</span>
+                </SelectItem>
+                {availableVoices.map((cv) => (
+                  <SelectItem key={cv.voice.voiceURI} value={cv.voice.voiceURI} className="text-xs">
+                    {cv.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Speech Rate & Test Voice */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div id="vs-legend" className="text-base font-semibold">Speech Rate</div>
+              <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-muted border border-border">
+                {speechRate.toFixed(2)}x
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="panel-speech-rate"
+                type="range"
+                min="0.8"
+                max="1.2"
+                step="0.05"
+                value={speechRate}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setSpeechRate(val);
+                  if (val <= 0.85) setVoiceSpeed('slow');
+                  else if (val >= 1.15) setVoiceSpeed('fast');
+                  else setVoiceSpeed('normal');
+                }}
+                disabled={!audioAssistance}
+                aria-valuemin={0.8}
+                aria-valuemax={1.2}
+                aria-valuenow={speechRate}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary disabled:opacity-50"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestVoice}
+                disabled={!audioAssistance}
+                className="shrink-0 h-8 text-xs font-medium gap-1 px-2.5"
+                aria-label="Test Voice"
+              >
+                {isPlayingTest ? (
+                  <>
+                    <Square className="h-3 w-3 text-destructive fill-destructive" aria-hidden="true" />
+                    <span>Stop</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 text-primary fill-primary" aria-hidden="true" />
+                    <span>Test</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={!audioAssistance}
+                onClick={() => {
+                  setSpeechRate(0.8);
+                  setVoiceSpeed('slow');
+                }}
+                className={`py-1 text-xs font-medium border rounded-[2px] transition-colors ${
+                  Math.abs(speechRate - 0.8) < 0.04
+                    ? 'bg-primary text-primary-foreground border-primary font-bold'
+                    : 'border-border/60 hover:bg-muted/40'
+                }`}
+              >
+                0.8x
+              </button>
+              <button
+                type="button"
+                disabled={!audioAssistance}
+                onClick={() => {
+                  setSpeechRate(1.0);
+                  setVoiceSpeed('normal');
+                }}
+                className={`py-1 text-xs font-medium border rounded-[2px] transition-colors ${
+                  Math.abs(speechRate - 1.0) < 0.04
+                    ? 'bg-primary text-primary-foreground border-primary font-bold'
+                    : 'border-border/60 hover:bg-muted/40'
+                }`}
+              >
+                1.0x
+              </button>
+              <button
+                type="button"
+                disabled={!audioAssistance}
+                onClick={() => {
+                  setSpeechRate(1.2);
+                  setVoiceSpeed('fast');
+                }}
+                className={`py-1 text-xs font-medium border rounded-[2px] transition-colors ${
+                  Math.abs(speechRate - 1.2) < 0.04
+                    ? 'bg-primary text-primary-foreground border-primary font-bold'
+                    : 'border-border/60 hover:bg-muted/40'
+                }`}
+              >
+                1.2x
+              </button>
+            </div>
           </div>
 
         </div>

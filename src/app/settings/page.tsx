@@ -2,11 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle, Play, Square, Sparkles } from 'lucide-react';
 import { useAccessibilityStore, TextSize, Contrast, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  getAvailableVoices,
+  categorizeVoice,
+  speakHighFidelity,
+  stopHighFidelitySpeech,
+  onVoicesLoaded,
+  CategorizedVoice,
+} from "@/lib/voice/speech-synthesis";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -28,6 +36,8 @@ export default function SettingsPage() {
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
     voiceSpeed, setVoiceSpeed,
+    speechRate, setSpeechRate,
+    selectedVoiceURI, setSelectedVoiceURI,
     language, setLanguage
   } = useAccessibilityStore();
   
@@ -39,6 +49,46 @@ export default function SettingsPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [availableVoices, setAvailableVoices] = useState<CategorizedVoice[]>([]);
+  const [isPlayingTest, setIsPlayingTest] = useState(false);
+
+  useEffect(() => {
+    const refreshVoices = () => {
+      const raw = getAvailableVoices(language);
+      const categorized = raw.map(categorizeVoice);
+      setAvailableVoices(categorized);
+    };
+
+    refreshVoices();
+    const unsubscribe = onVoicesLoaded(refreshVoices);
+    return () => {
+      unsubscribe();
+      stopHighFidelitySpeech();
+    };
+  }, [language]);
+
+  const handleTestVoice = () => {
+    if (isPlayingTest) {
+      stopHighFidelitySpeech();
+      setIsPlayingTest(false);
+      return;
+    }
+
+    setIsPlayingTest(true);
+    const testText = language === 'hi'
+      ? 'नमस्कार! यह परीक्षा सारथी की उच्च गुणवत्ता आवाज़ का नमूना है। प्रश्न 1, विकल्प ए।'
+      : 'Hello! This is a preview of the Exam Saarthi high-fidelity neural voice. Question 1, Option A.';
+
+    speakHighFidelity(testText, {
+      lang: language === 'hi' ? 'hi-IN' : 'en-US',
+      voiceURI: selectedVoiceURI,
+      rate: speechRate,
+      onStart: () => setIsPlayingTest(true),
+      onEnd: () => setIsPlayingTest(false),
+      onError: () => setIsPlayingTest(false),
+    });
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -353,27 +403,148 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="space-y-3 pt-2">
-              <Label className="text-sm font-semibold">{t('voiceSpeedLabel')}</Label>
-              <RadioGroup 
-                value={voiceSpeed} 
-                onValueChange={(val) => setVoiceSpeed(val as VoiceSpeed)}
-                className="grid sm:grid-cols-3 gap-3"
+            {/* Voice Profile Dropdown Selector */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="settings-voice-profile" className="text-sm font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  Voice Profile (Neural / Natural)
+                </Label>
+                <Badge variant="outline" className="text-[11px] font-mono">
+                  {language === 'hi' ? 'Hindi (hi-IN)' : 'English (en-US)'}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select your preferred browser speech synthesis voice filtered by active language (Natural Female, Natural Male, Studio Standard).
+              </p>
+              <Select
+                value={selectedVoiceURI || 'auto'}
+                onValueChange={(val) => setSelectedVoiceURI(val === 'auto' ? null : val)}
                 disabled={!audioAssistance}
               >
-                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="slow" id="settings-vs-slow" />
-                  <Label htmlFor="settings-vs-slow" className="cursor-pointer font-medium">Slow (0.8x)</Label>
-                </div>
-                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="normal" id="settings-vs-normal" />
-                  <Label htmlFor="settings-vs-normal" className="cursor-pointer font-medium">Normal (1.0x)</Label>
-                </div>
-                <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="fast" id="settings-vs-fast" />
-                  <Label htmlFor="settings-vs-fast" className="cursor-pointer font-medium">Fast (1.2x)</Label>
-                </div>
-              </RadioGroup>
+                <SelectTrigger id="settings-voice-profile" className="w-full" aria-label="Voice Profile Selection">
+                  <SelectValue placeholder="Neural Auto-Select (Google / Microsoft Natural Recommended)" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  <SelectItem value="auto">
+                    <span className="font-medium text-primary">✨ Neural Auto-Select (Recommended)</span>
+                  </SelectItem>
+                  {availableVoices.map((cv) => (
+                    <SelectItem key={cv.voice.voiceURI} value={cv.voice.voiceURI}>
+                      <div className="flex items-center justify-between gap-3 w-full">
+                        <span>{cv.displayName}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Speech Rate Slider & Test Voice Preview */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="settings-speech-rate" className="text-sm font-semibold">
+                  Speech Rate (0.8x to 1.2x)
+                </Label>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-muted border border-border">
+                  {speechRate.toFixed(2)}x
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Fine-tune speaking pacing for exam questions and walkthroughs.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  id="settings-speech-rate"
+                  type="range"
+                  min="0.8"
+                  max="1.2"
+                  step="0.05"
+                  value={speechRate}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setSpeechRate(val);
+                    if (val <= 0.85) setVoiceSpeed('slow');
+                    else if (val >= 1.15) setVoiceSpeed('fast');
+                    else setVoiceSpeed('normal');
+                  }}
+                  disabled={!audioAssistance}
+                  aria-valuemin={0.8}
+                  aria-valuemax={1.2}
+                  aria-valuenow={speechRate}
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary disabled:opacity-50"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestVoice}
+                  disabled={!audioAssistance}
+                  className="shrink-0 h-9 font-medium gap-1.5 min-w-[110px]"
+                  aria-label="Test Voice"
+                >
+                  {isPlayingTest ? (
+                    <>
+                      <Square className="h-3.5 w-3.5 text-destructive fill-destructive" aria-hidden="true" />
+                      <span>Stop</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 text-primary fill-primary" aria-hidden="true" />
+                      <span>Test Voice</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={!audioAssistance}
+                  onClick={() => {
+                    setSpeechRate(0.8);
+                    setVoiceSpeed('slow');
+                  }}
+                  className={`py-1.5 text-xs font-medium border rounded-[2px] transition-colors ${
+                    Math.abs(speechRate - 0.8) < 0.04
+                      ? 'bg-primary text-primary-foreground border-primary font-bold'
+                      : 'border-border/60 hover:bg-muted/40'
+                  }`}
+                >
+                  Slow (0.8x)
+                </button>
+                <button
+                  type="button"
+                  disabled={!audioAssistance}
+                  onClick={() => {
+                    setSpeechRate(1.0);
+                    setVoiceSpeed('normal');
+                  }}
+                  className={`py-1.5 text-xs font-medium border rounded-[2px] transition-colors ${
+                    Math.abs(speechRate - 1.0) < 0.04
+                      ? 'bg-primary text-primary-foreground border-primary font-bold'
+                      : 'border-border/60 hover:bg-muted/40'
+                  }`}
+                >
+                  Normal (1.0x)
+                </button>
+                <button
+                  type="button"
+                  disabled={!audioAssistance}
+                  onClick={() => {
+                    setSpeechRate(1.2);
+                    setVoiceSpeed('fast');
+                  }}
+                  className={`py-1.5 text-xs font-medium border rounded-[2px] transition-colors ${
+                    Math.abs(speechRate - 1.2) < 0.04
+                      ? 'bg-primary text-primary-foreground border-primary font-bold'
+                      : 'border-border/60 hover:bg-muted/40'
+                  }`}
+                >
+                  Fast (1.2x)
+                </button>
+              </div>
             </div>
           </CardContent>
         </Card>
