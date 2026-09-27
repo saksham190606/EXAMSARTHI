@@ -632,8 +632,12 @@ export function useVoiceMode({
     };
 
     recognition.onerror = (e: any) => {
-      console.error('[Voice Error]', e.error, e.message);
-      setVoiceStatus(`Mic Error: ${e.error}`);
+      // 1. Benign lifecycle events:
+      // 'aborted' is fired normally when recognition.abort() or stop() is called intentionally
+      // 'no-speech' is fired when silence is detected without matching words (room is quiet)
+      if (e.error === 'aborted' || e.error === 'no-speech') {
+        return;
+      }
 
       // Fallback: If hi-IN speech recognition fails due to missing language pack, fallback to en-US
       if (e.error === 'language-not-supported' && recognition.lang !== 'en-US') {
@@ -647,6 +651,9 @@ export function useVoiceMode({
         }, 200);
         return;
       }
+
+      console.error('[Voice Error]', e.error, e.message);
+      setVoiceStatus(`Mic Error: ${e.error}`);
 
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         setStatus('Error');

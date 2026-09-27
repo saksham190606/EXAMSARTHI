@@ -8,9 +8,10 @@ import { ThemeProvider as NextThemesProvider } from "next-themes"
 if (process.env.NODE_ENV === "development") {
   const originalError = console.error
   console.error = (...args: unknown[]) => {
+    const firstArg = typeof args[0] === "string" ? args[0] : ""
     if (
-      typeof args[0] === "string" &&
-      args[0].includes("Encountered a script tag while rendering React component")
+      firstArg.includes("Encountered a script tag while rendering React component") ||
+      (firstArg.includes("[Voice Error]") && args.includes("aborted"))
     ) {
       return
     }
