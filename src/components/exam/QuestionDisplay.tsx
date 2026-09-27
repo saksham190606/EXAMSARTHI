@@ -130,7 +130,7 @@ export function QuestionDisplay({
                       relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
+                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -150,7 +150,7 @@ export function QuestionDisplay({
                         className={`
                           flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                           ${isSelected 
-                            ? 'bg-primary text-black border-primary ' 
+                            ? 'bg-[#ffed00] text-black border-[#ffed00] font-black shadow-[0_0_10px_rgba(255,237,0,0.4)]' 
                             : 'bg-muted/60 text-muted-foreground border-border'
                           }
                         `}
@@ -223,7 +223,7 @@ export function QuestionDisplay({
                       relative flex items-center p-4 sm:p-5 rounded-none border transition-all cursor-pointer
                       focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                       ${isSelected 
-                        ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
+                        ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
                         : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                       }
                     `}
@@ -255,7 +255,7 @@ export function QuestionDisplay({
                         className={`
                           flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                           ${isSelected 
-                            ? 'bg-primary text-black border-primary ' 
+                            ? 'bg-[#ffed00] text-black border-[#ffed00] font-black shadow-[0_0_10px_rgba(255,237,0,0.4)]' 
                             : 'bg-muted/60 text-muted-foreground border-border'
                           }
                         `}
@@ -274,7 +274,7 @@ export function QuestionDisplay({
                         className={`
                           size-6 shrink-0 rounded-md border flex items-center justify-center transition-colors ml-2
                           ${isSelected 
-                            ? 'bg-primary text-black border-primary' 
+                            ? 'bg-[#ffed00] text-black border-[#ffed00]' 
                             : 'border-muted-foreground/30 bg-card'
                           }
                         `}
@@ -325,7 +325,7 @@ export function QuestionDisplay({
                   relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'true' 
-                    ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
+                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
@@ -344,7 +344,7 @@ export function QuestionDisplay({
                       className={`
                         flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                         ${currentChoice === 'true' 
-                          ? 'bg-primary text-black border-primary ' 
+                          ? 'bg-[#ffed00] text-black border-[#ffed00] font-black shadow-[0_0_10px_rgba(255,237,0,0.4)]' 
                           : 'bg-muted/60 text-muted-foreground border-border'
                         }
                       `}
@@ -371,7 +371,7 @@ export function QuestionDisplay({
                   relative flex items-center p-5 rounded-none border transition-all cursor-pointer
                   focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background
                   ${currentChoice === 'false' 
-                    ? 'bg-primary/5 border-primary  ring-1 ring-primary/30' 
+                    ? 'ring-2 ring-[#ffed00] bg-[#ffed00]/10 border-[#ffed00] shadow-[0_0_16px_rgba(255,237,0,0.22)]' 
                     : 'bg-card border-border hover:bg-muted/40 hover:border-primary/40'
                   }
                 `}
@@ -390,7 +390,7 @@ export function QuestionDisplay({
                       className={`
                         flex shrink-0 items-center justify-center size-9 rounded-[2px] font-bold text-sm transition-colors border
                         ${currentChoice === 'false' 
-                          ? 'bg-primary text-black border-primary ' 
+                          ? 'bg-[#ffed00] text-black border-[#ffed00] font-black shadow-[0_0_10px_rgba(255,237,0,0.4)]' 
                           : 'bg-muted/60 text-muted-foreground border-border'
                         }
                       `}

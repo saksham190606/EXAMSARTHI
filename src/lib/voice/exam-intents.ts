@@ -39,28 +39,28 @@ export interface KeywordDefinition {
 export const EXAM_KEYWORD_MAPS: KeywordDefinition[] = [
   {
     type: 'SELECT_OPTION_A',
-    keywords: ["option a", "a", "one", "first", "option 1", "विकल्प ए", "पहला", "ऑप्शन ए", "एक", "option ek"],
+    keywords: ["option a", "a", "one", "first", "option 1", "ए", "विकल्प ए", "पहला", "ऑप्शन ए", "एक", "option ek"],
     optionIndex: 0,
     audioConfirmationEn: "Option A selected",
     audioConfirmationHi: "विकल्प ए चुना गया",
   },
   {
     type: 'SELECT_OPTION_B',
-    keywords: ["option b", "b", "two", "second", "option 2", "विकल्प बी", "दूसरा", "ऑप्शन बी", "दो", "option do"],
+    keywords: ["option b", "b", "two", "second", "option 2", "बी", "विकल्प बी", "दूसरा", "ऑप्शन बी", "दो", "option do"],
     optionIndex: 1,
     audioConfirmationEn: "Option B selected",
     audioConfirmationHi: "विकल्प बी चुना गया",
   },
   {
     type: 'SELECT_OPTION_C',
-    keywords: ["option c", "c", "three", "third", "option 3", "विकल्प सी", "तीसरा", "ऑप्शन सी", "तीन", "option teen"],
+    keywords: ["option c", "c", "three", "third", "option 3", "सी", "विकल्प सी", "तीसरा", "ऑप्शन सी", "तीन", "option teen"],
     optionIndex: 2,
     audioConfirmationEn: "Option C selected",
     audioConfirmationHi: "विकल्प सी चुना गया",
   },
   {
     type: 'SELECT_OPTION_D',
-    keywords: ["option d", "d", "four", "fourth", "option 4", "विकल्प डी", "चौथा", "ऑप्शन डी", "चार", "option char"],
+    keywords: ["option d", "d", "four", "fourth", "option 4", "डी", "विकल्प डी", "चौथा", "ऑप्शन डी", "चार", "option char"],
     optionIndex: 3,
     audioConfirmationEn: "Option D selected",
     audioConfirmationHi: "विकल्प डी चुना गया",

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
+import { ExamMicStatusBar } from '@/components/exam/ExamMicStatusBar';
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { CandidateQuestion } from '@/types/question';
@@ -67,11 +68,18 @@ export function ExamInterface({
 
   const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
 
-  // Synchronize Keyboard Shortcuts: Alt+N (Next), Alt+P (Prev), 1-4 (Options)
+  // Synchronize Keyboard Shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Mic Toggle), 1-4 (Options)
   useEffect(() => {
     const handleExamKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Alt+M -> Toggle Microphone On/Off
+      if (e.altKey && (e.key === 'm' || e.key === 'M' || e.code === 'KeyM')) {
+        e.preventDefault();
+        toggleVoiceMode();
         return;
       }
 
@@ -107,7 +115,7 @@ export function ExamInterface({
     return () => {
       window.removeEventListener('keydown', handleExamKeyDown);
     };
-  }, [actions, currentQuestion]);
+  }, [actions, currentQuestion, toggleVoiceMode]);
 
   if (!currentQuestion) {
     return null;
@@ -115,6 +123,16 @@ export function ExamInterface({
 
   return (
     <div className="flex flex-col space-y-6 w-full relative">
+      {/* Visual Mic Status Bar with 🔴 Off, 🟡 Listening, 🟢 Recognized */}
+      <ExamMicStatusBar
+        isActive={isActive}
+        status={status}
+        lastCommand={lastCommand}
+        lastActionFeedback={lastActionFeedback}
+        errorMessage={errorMessage}
+        onToggle={toggleVoiceMode}
+      />
+
       {/* Active Glowing Sunlight Yellow Mic Indicator Floating Pulse */}
       {isActive && status === 'Listening' && (
         <div

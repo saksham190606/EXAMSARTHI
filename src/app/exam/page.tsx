@@ -31,6 +31,7 @@ import { SectionAdvanceDialog } from '@/components/exam/SectionAdvanceDialog';
 
 import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { VoiceExamPanel } from '@/components/voice/VoiceExamPanel';
+import { ExamMicStatusBar } from '@/components/exam/ExamMicStatusBar';
 import { useTranslation } from '@/lib/i18n';
 import { ExamSelectionHub } from '@/components/exam/ExamSelectionHub';
 
@@ -286,11 +287,33 @@ function ActiveExamSession({
     };
   }, [actions, currentQuestion]);
 
-  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), 1-4 (Options)
+  const totalQuestions = questions.length;
+  const hasSections = Boolean(sections && sections.length > 0);
+
+  const { isActive, status, lastCommand, lastActionFeedback, errorMessage, toggleVoiceMode } = useVoiceMode({
+    actions,
+    state,
+    currentQuestion,
+    totalQuestions,
+    questions,
+    activeSection: state.activeSection,
+    sectionTimeRemaining: state.sectionTimeRemaining,
+    onOpenSubmitDialog: () => setIsSubmitDialogOpen(true),
+    onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
+  });
+
+  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Toggle Mic), 1-4 (Options)
   useEffect(() => {
     const handleExamKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Alt+M -> Toggle microphone on/off
+      if (e.altKey && (e.key === 'm' || e.key === 'M' || e.code === 'KeyM')) {
+        e.preventDefault();
+        toggleVoiceMode();
         return;
       }
 
@@ -326,22 +349,7 @@ function ActiveExamSession({
     return () => {
       window.removeEventListener('keydown', handleExamKeyDown);
     };
-  }, [actions, currentQuestion]);
-
-  const totalQuestions = questions.length;
-  const hasSections = Boolean(sections && sections.length > 0);
-
-  const { isActive, status, lastCommand, lastActionFeedback, errorMessage, toggleVoiceMode } = useVoiceMode({
-    actions,
-    state,
-    currentQuestion,
-    totalQuestions,
-    questions,
-    activeSection: state.activeSection,
-    sectionTimeRemaining: state.sectionTimeRemaining,
-    onOpenSubmitDialog: () => setIsSubmitDialogOpen(true),
-    onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
-  });
+  }, [actions, currentQuestion, toggleVoiceMode]);
 
   const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
   const answeredCount = questions.filter(q => isQuestionAnswered(q, state.answers[q.id])).length;
@@ -521,6 +529,16 @@ function ActiveExamSession({
           />
         </div>
       </header>
+
+      {/* Visual Mic Status Bar: 🔴 Off / 🟡 Listening / 🟢 Recognized */}
+      <ExamMicStatusBar
+        isActive={isActive}
+        status={status}
+        lastCommand={lastCommand}
+        lastActionFeedback={lastActionFeedback}
+        errorMessage={errorMessage}
+        onToggle={toggleVoiceMode}
+      />
 
       {/* SECTION 2 — Active Section Banner (shown when sections exist) */}
       {hasSections && state.activeSection && (
