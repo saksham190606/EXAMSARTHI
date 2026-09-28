@@ -179,6 +179,11 @@ export const translations = {
     progressingWell: 'Progressing Well',
     focusArea: 'Focus Area',
     needsMorePractice: 'Needs More Practice',
+    goodMorning: 'Good morning',
+    goodAfternoon: 'Good afternoon',
+    goodEvening: 'Good evening',
+    welcomeToExamSarthi: 'Welcome to EXAMSARTHI.',
+    replayWelcome: 'Replay welcome greeting',
   },
 
   hi: {
@@ -359,6 +364,11 @@ export const translations = {
     progressingWell: 'अच्छी प्रगति',
     focusArea: 'ध्यान देने योग्य क्षेत्र',
     needsMorePractice: 'अधिक अभ्यास आवश्यक',
+    goodMorning: 'सुप्रभात',
+    goodAfternoon: 'शुभ दोपहर',
+    goodEvening: 'शुभ संध्या',
+    welcomeToExamSarthi: 'EXAMSARTHI में आपका स्वागत है।',
+    replayWelcome: 'स्वागत संदेश फिर से सुनें',
   },
 } as const;
 

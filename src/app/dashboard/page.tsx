@@ -40,6 +40,7 @@ import {
 } from "@/lib/api/examRepository"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n"
+import { PersonalizedWelcome } from "@/features/personalized-welcome"
 
 function formatTimestamp(timestamp: string | number | null | undefined): string {
   if (!timestamp) return "Recent attempt"
@@ -167,12 +168,15 @@ export default function DashboardPage() {
         aria-labelledby="welcome-heading"
       >
         <div className="space-y-1">
-          <h1
-            id="welcome-heading"
-            className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-foreground"
-          >
-            {t("welcomeBack")}, {candidateName}.
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1
+              id="welcome-heading"
+              className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-foreground"
+            >
+              {t("welcomeBack")}, {candidateName}.
+            </h1>
+            <PersonalizedWelcome />
+          </div>
           <p className="text-base text-muted-foreground">
             {t("dashboardSubtitle")}
           </p>

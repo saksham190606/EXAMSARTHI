@@ -583,6 +583,16 @@ export interface CandidateSubjectMetric {
   accuracy: number;
 }
 
+export interface CandidateTopicMetric {
+  topic: string;
+  subject: string;
+  totalQuestions: number;
+  attempted: number;
+  correct: number;
+  incorrect: number;
+  accuracy: number;
+}
+
 export interface CandidateDashboardAnalytics {
   completedAttemptsCount: number;
   averageScore: number;
@@ -590,6 +600,7 @@ export interface CandidateDashboardAnalytics {
   bestScore: number;
   totalQuestionsAttempted: number;
   subjectMetrics: CandidateSubjectMetric[];
+  topicMetrics: CandidateTopicMetric[];
   recentActivity: CandidateActivityItem[];
   trend: {
     hasTrend: boolean;
@@ -637,6 +648,7 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
     bestScore: 0,
     totalQuestionsAttempted: 0,
     subjectMetrics: [],
+    topicMetrics: [],
     recentActivity: [],
     trend: {
       hasTrend: false,
@@ -658,20 +670,72 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
 
   try {
     const supabase = createClient();
-    if (!supabase) return emptyAnalytics;
+    let user: any = null;
+    let attempts: any[] = [];
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return emptyAnalytics;
+    if (supabase) {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      user = userData?.user;
 
-    // Fetch ONLY completed attempts for this candidate under RLS
-    const { data: attempts, error } = await supabase
-      .from('exam_attempts')
-      .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at, exams(id, title, subject, category)')
-      .eq('user_id', user.id)
-      .eq('status', 'completed')
-      .order('submitted_at', { ascending: false });
+      if (!authError && user) {
+        // Fetch ONLY completed attempts for this candidate under RLS
+        const { data: remoteAttempts, error } = await supabase
+          .from('exam_attempts')
+          .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at, exams(id, title, subject, category)')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('submitted_at', { ascending: false });
 
-    if (error || !attempts || attempts.length === 0) {
+        if (!error && remoteAttempts) {
+          attempts = remoteAttempts;
+        }
+      }
+    }
+
+    // Fallback to local offline mock history if remote attempts are unavailable
+    if (attempts.length === 0 && typeof window !== 'undefined') {
+      try {
+        const { getPerformanceHistory } = await import('@/lib/personalization/history');
+        const localHistory = getPerformanceHistory();
+        if (localHistory && localHistory.length > 0) {
+          attempts = localHistory.map((h, i) => ({
+            id: `local-mock-${i}`,
+            user_id: user?.id || 'local-user',
+            exam_id: h.examId || 'mock',
+            status: 'completed',
+            score: h.correct,
+            accuracy: h.accuracy,
+            total_questions: h.totalQuestions,
+            attempted_count: h.attempted,
+            correct_count: h.correct,
+            incorrect_count: h.attempted - h.correct,
+            time_used_seconds: 0,
+            summary_metrics: {
+              subjectMetrics: h.subjects?.map(s => ({
+                subject: s.subject,
+                totalQuestions: s.totalQuestions,
+                attempted: s.attempted,
+                correct: s.correct,
+                incorrect: s.incorrect,
+                accuracy: s.accuracy,
+              })) || []
+            },
+            started_at: new Date(h.timestamp).toISOString(),
+            submitted_at: new Date(h.timestamp).toISOString(),
+            exams: {
+              id: h.examId || 'mock',
+              title: 'Offline Mock Practice',
+              subject: h.subjects?.[0]?.subject || 'General',
+              category: 'Practice',
+            }
+          }));
+        }
+      } catch (err) {
+        console.warn('[ExamRepository] Failed to load local history fallback:', err);
+      }
+    }
+
+    if (attempts.length === 0) {
       return emptyAnalytics;
     }
 
@@ -732,6 +796,63 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
 
     // Sort subject metrics by lowest accuracy first to highlight improvement areas
     subjectMetrics.sort((a, b) => a.accuracy - b.accuracy);
+
+    // Aggregate topic metrics across completed attempts
+    const topicMap: Record<string, CandidateTopicMetric> = {};
+    for (const att of attempts) {
+      const topicArray = (att.summary_metrics as any)?.topicMetrics;
+      if (Array.isArray(topicArray)) {
+        for (const tm of topicArray) {
+          const key = `${tm.subject}:::${tm.topic}`;
+          if (!topicMap[key]) {
+            topicMap[key] = {
+              topic: tm.topic,
+              subject: tm.subject,
+              totalQuestions: 0,
+              attempted: 0,
+              correct: 0,
+              incorrect: 0,
+              accuracy: 0,
+            };
+          }
+          topicMap[key].totalQuestions += Number(tm.totalQuestions) || 0;
+          topicMap[key].attempted += Number(tm.attempted) || 0;
+          topicMap[key].correct += Number(tm.correct) || 0;
+          topicMap[key].incorrect += Number(tm.incorrect) || 0;
+        }
+      }
+      const subjArray = (att.summary_metrics as any)?.subjectMetrics;
+      if (Array.isArray(subjArray)) {
+        for (const sm of subjArray) {
+          if (Array.isArray(sm.topics)) {
+            for (const tm of sm.topics) {
+              const key = `${sm.subject}:::${tm.topic}`;
+              if (!topicMap[key]) {
+                topicMap[key] = {
+                  topic: tm.topic,
+                  subject: sm.subject,
+                  totalQuestions: 0,
+                  attempted: 0,
+                  correct: 0,
+                  incorrect: 0,
+                  accuracy: 0,
+                };
+              }
+              topicMap[key].totalQuestions += Number(tm.totalQuestions) || 0;
+              topicMap[key].attempted += Number(tm.attempted) || 0;
+              topicMap[key].correct += Number(tm.correct) || 0;
+              topicMap[key].incorrect += Number(tm.incorrect) || 0;
+            }
+          }
+        }
+      }
+    }
+
+    const topicMetrics: CandidateTopicMetric[] = Object.values(topicMap).map(t => ({
+      ...t,
+      accuracy: t.attempted > 0 ? Math.round((t.correct / t.attempted) * 100) : 0,
+    }));
+    topicMetrics.sort((a, b) => a.accuracy - b.accuracy);
 
     // Calculate trend from last 2 attempts
     const latestAttempt = recentActivity.length > 0 ? recentActivity[0] : null;
@@ -804,6 +925,7 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
       bestScore,
       totalQuestionsAttempted,
       subjectMetrics,
+      topicMetrics,
       recentActivity,
       trend: {
         hasTrend,

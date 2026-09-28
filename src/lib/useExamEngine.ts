@@ -107,13 +107,16 @@ export function useExamEngine(
 
   // Track latest state for callbacks
   const activeSectionIndexRef = useRef(activeSectionIndex);
-  activeSectionIndexRef.current = activeSectionIndex;
   const sectionsRef = useRef(sections);
-  sectionsRef.current = sections;
   const sectionQuestionIndicesRef = useRef(sectionQuestionIndices);
-  sectionQuestionIndicesRef.current = sectionQuestionIndices;
   const onSectionCompleteRef = useRef(onSectionComplete);
-  onSectionCompleteRef.current = onSectionComplete;
+
+  useEffect(() => {
+    activeSectionIndexRef.current = activeSectionIndex;
+    sectionsRef.current = sections;
+    sectionQuestionIndicesRef.current = sectionQuestionIndices;
+    onSectionCompleteRef.current = onSectionComplete;
+  }, [activeSectionIndex, sections, sectionQuestionIndices, onSectionComplete]);
 
   const toggleFlag = useCallback((questionId: string) => {
     setFlagged(prev => {

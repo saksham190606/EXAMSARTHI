@@ -4,6 +4,12 @@ import { formatSpeechPronunciation, getNaturalFemaleVoice } from '@/lib/accessib
 
 export type SpeechStatus = 'Speech stopped' | 'Reading question' | 'Reading options' | 'Voice feedback' | 'Unsupported';
 
+export interface SpeakOptions {
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: (e: SpeechSynthesisErrorEvent) => void;
+}
+
 export function useSpeech() {
   const [status, setStatus] = useState<SpeechStatus>('Speech stopped');
   const { voiceSpeed, speechRate, language } = useAccessibilityStore();
@@ -18,14 +24,22 @@ export function useSpeech() {
   }, [synth]);
 
   const speak = useCallback(
-    (text: string, context: SpeechStatus) => {
+    (text: string, context: SpeechStatus, options?: SpeakOptions) => {
       if (!synth) {
         setStatus('Unsupported');
+        if (options?.onError) {
+          options.onError({ error: 'not-supported' } as any);
+        }
         return;
       }
 
-      // Stop any current speech
-      stop();
+      // Cancel any ongoing speech silently without triggering 'Speech stopped'
+      if (synth.speaking) {
+        synth.cancel();
+      }
+
+      // Set status immediately so we don't have an intermediate 'Speech stopped' state
+      setStatus(context);
 
       const utterance = new SpeechSynthesisUtterance(formatSpeechPronunciation(text));
 
@@ -48,14 +62,17 @@ export function useSpeech() {
       // Handle events
       utterance.onstart = () => {
         setStatus(context);
+        options?.onStart?.();
       };
       utterance.onend = () => {
         setStatus('Speech stopped');
+        options?.onEnd?.();
       };
       utterance.onerror = (e) => {
         if (e.error !== 'canceled') {
           setStatus('Speech stopped');
         }
+        options?.onError?.(e);
       };
 
       utteranceRef.current = utterance;

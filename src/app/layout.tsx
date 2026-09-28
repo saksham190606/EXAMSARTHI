@@ -6,6 +6,7 @@ import { AccessibilityProvider } from "@/components/providers/AccessibilityProvi
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Header } from "@/components/layout/Header";
 import { DotPattern } from "@/components/ui/dot-pattern";
+import { SarthiWidget } from "@/components/assistant/SarthiWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,6 +67,7 @@ export default function RootLayout({
                 <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col outline-none bg-transparent">
                   {children}
                 </main>
+                <SarthiWidget />
               </AccessibilityProvider>
             </AuthProvider>
           </ThemeProvider>
