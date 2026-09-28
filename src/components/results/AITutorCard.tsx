@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { speakText } from '@/lib/voice/useVoiceEngine';
+import { speakText, startListening } from '@/lib/voice/useVoiceEngine';
 
 interface AITutorCardProps {
   results: { score: number; totalQuestions: number };
-  startReviewWalkthrough: () => void;
+  startReviewWalkthrough?: () => void;
 }
 
 export default function AITutorCard({ results, startReviewWalkthrough }: AITutorCardProps) {
@@ -38,7 +38,7 @@ export default function AITutorCard({ results, startReviewWalkthrough }: AITutor
     setIsSpeakingSummary(true);
     speakText(summary, () => {
       setIsSpeakingSummary(false);
-      startReviewWalkthrough();
+      startListening(); // Automatically open mic here
     });
   };
 

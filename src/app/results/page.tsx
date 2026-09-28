@@ -29,13 +29,14 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
 import { useSearchParams } from 'next/navigation';
-import { getQuestionsForContext, getQuestionsByIds, MockExamQuestions } from '@/lib/examData';
+import { getQuestionsForContext, getQuestionsByIds, MockExamQuestions, evaluateAnswer } from '@/lib/examData';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
+import { QuestionReview } from '@/components/results/QuestionReview';
 import dynamic from 'next/dynamic';
 
 const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), { 
@@ -277,6 +278,30 @@ function ResultsContent() {
     const calculated = calculateResults(examQuestions, stateToProcess, 900);
     setResults(calculated);
 
+    // Populate reviewQuestions for local fallback if not already set from remote attempt
+    if (!attemptId && examQuestions.length > 0) {
+      setReviewQuestions(examQuestions.map((q, idx) => {
+        const anyQ = q as any;
+        const rawCorrect = anyQ.correctAnswerId || anyQ.correctAnswerIds || anyQ.correctAnswer || 'N/A';
+        const userAns = stateToProcess.answers[q.id];
+        const isCorr = evaluateAnswer(q, userAns);
+
+        return {
+          questionId: q.id,
+          orderIndex: idx + 1,
+          text: q.text,
+          type: q.type || 'multiple-choice',
+          subject: q.subject || 'General Assessment',
+          userAnswer: userAns || 'Not Answered',
+          correctAnswer: Array.isArray(rawCorrect) ? rawCorrect.join(', ') : String(rawCorrect),
+          isCorrect: isCorr,
+          isAnswered: Boolean(userAns),
+          explanation: (q as any).explanation || '',
+          options: (q as any).options || []
+        };
+      }));
+    }
+
     // Personalization & History Pipeline
     const newProfile = analyzePerformance(calculated, examQuestions, stateToProcess.answers);
     setProfile(newProfile);
@@ -297,7 +322,37 @@ function ResultsContent() {
     const recs = generateRecommendations(newProfile, history);
     setRecommendations(recs);
 
-  }, [finalState]);
+  }, [finalState, attemptId]);
+
+  // Walkthrough Results data mapping for AI Voice Review Walkthrough
+  const walkthroughResults = useMemo(() => {
+    return {
+      questions: reviewQuestions.map((q, idx) => ({
+        id: q.questionId || String(idx),
+        questionText: (q as any).questionText || q.text || `Question ${idx + 1}`,
+        text: (q as any).questionText || q.text || `Question ${idx + 1}`,
+        userAnswer: q.userAnswer !== undefined && q.userAnswer !== null ? String(q.userAnswer) : 'Not Answered',
+        correctAnswer: q.correctAnswer !== undefined && q.correctAnswer !== null ? String(q.correctAnswer) : 'N/A',
+        isCorrect: typeof q.isCorrect === 'boolean' ? q.isCorrect : (q.userAnswer === q.correctAnswer),
+        explanation: q.explanation || '',
+        options: q.options || []
+      }))
+    };
+  }, [reviewQuestions]);
+
+  // Global listener specifically for the "REVIEW" command to trigger the walkthrough
+  useEffect(() => {
+    const handleHandoff = (e: any) => {
+      const { intent, target } = e.detail || {};
+      const upperTarget = (target || '').toUpperCase();
+      // Trigger when user says "Review"
+      if (intent === 'CONTROL' && (upperTarget === 'REVIEW' || upperTarget === 'START')) {
+        setIsWalkthroughActive(true);
+      }
+    };
+    window.addEventListener('ai_voice_command', handleHandoff);
+    return () => window.removeEventListener('ai_voice_command', handleHandoff);
+  }, []);
 
   // Synchronize Walkthrough State with Global AI Voice Commands
   useEffect(() => {
@@ -487,6 +542,16 @@ function ResultsContent() {
               window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
             }
           }}
+        />
+      )}
+
+      {/* Fully Narrated Question Walkthrough UI */}
+      {isWalkthroughActive && (
+        <QuestionReview
+          results={walkthroughResults}
+          isWalkthroughActive={isWalkthroughActive}
+          setIsWalkthroughActive={setIsWalkthroughActive}
+          onClose={() => setIsWalkthroughActive(false)}
         />
       )}
 

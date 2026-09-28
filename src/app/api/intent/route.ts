@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     INTENTS: 
     - NAVIGATE: user wants to go to a page (targets: '/dashboard', '/exam', '/practice', '/settings')
     - EXAM_LAUNCH: user wants to start a test (targets: 'ssc-cgl', 'upsc-cse', 'ibps-po', 'rrb-ntpc', 'vision-ai', 'gk-geography')
-    - CONTROL: user is taking a test (targets: 'NEXT', 'PREVIOUS', 'PAUSE', 'RESUME', 'REPEAT', 'SUBMIT')
+    - CONTROL: user is taking a test or reviewing (targets: 'NEXT', 'PREVIOUS', 'PAUSE', 'RESUME', 'REPEAT', 'SUBMIT', 'REVIEW', 'START', 'STOP')
     - ANSWER: user is answering a question (targets: 'A', 'B', 'C', 'D', 'TRUE', 'FALSE', or the raw text for fill-in-blanks)
     - UNKNOWN: cannot determine.
     
@@ -27,6 +27,8 @@ export async function POST(req: Request) {
     Example 2: "start ssc cgl mock" -> {"intent": "EXAM_LAUNCH", "target": "ssc-cgl"}
     Example 3: "agla prashn" -> {"intent": "CONTROL", "target": "NEXT"}
     Example 4: "option b" -> {"intent": "ANSWER", "target": "B"}
+    Example 5: "review" -> {"intent": "CONTROL", "target": "REVIEW"}
+    Example 6: "begin review" -> {"intent": "CONTROL", "target": "REVIEW"}
     
     User speech: "${transcript}"`;
 
