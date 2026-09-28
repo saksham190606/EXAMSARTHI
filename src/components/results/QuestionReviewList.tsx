@@ -706,8 +706,30 @@ export function QuestionReviewList({
       }
     };
 
+    const handleNextEvent = () => handleNextQuestion();
+    const handlePrevEvent = () => handlePrevQuestion();
+    const handleStopEvent = () => {
+      setIsWalkthroughActive(false);
+      stopAudioWalkthrough();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+    const handleRepeatEvent = () => readCurrentQuestion();
+
     window.addEventListener('ai_voice_command', handleVoiceCommand);
-    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
+    window.addEventListener('examsarthi_review_next', handleNextEvent);
+    window.addEventListener('examsarthi_review_prev', handlePrevEvent);
+    window.addEventListener('examsarthi_review_stop', handleStopEvent);
+    window.addEventListener('examsarthi_review_repeat', handleRepeatEvent);
+
+    return () => {
+      window.removeEventListener('ai_voice_command', handleVoiceCommand);
+      window.removeEventListener('examsarthi_review_next', handleNextEvent);
+      window.removeEventListener('examsarthi_review_prev', handlePrevEvent);
+      window.removeEventListener('examsarthi_review_stop', handleStopEvent);
+      window.removeEventListener('examsarthi_review_repeat', handleRepeatEvent);
+    };
   }, [handleNextQuestionReview, handlePrevQuestionReview, stopAudioWalkthrough, handleRepeatQuestionReview, handleResume]);
 
   // 4. Individual Question Explanation Handler

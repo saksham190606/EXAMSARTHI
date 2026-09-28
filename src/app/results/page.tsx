@@ -306,10 +306,23 @@ function ResultsContent() {
       const upperTarget = (target || '').toUpperCase();
 
       if (intent === 'CONTROL') {
-        if (upperTarget === 'STOP' || upperTarget === 'PAUSE') {
+        if (upperTarget === 'NEXT') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('examsarthi_review_next'));
+          }
+        } else if (upperTarget === 'PREVIOUS' || upperTarget === 'PREV') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('examsarthi_review_prev'));
+          }
+        } else if (upperTarget === 'STOP' || upperTarget === 'PAUSE') {
           setIsWalkthroughActive(false);
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
+          if (typeof window !== 'undefined') {
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            window.dispatchEvent(new CustomEvent('examsarthi_review_stop'));
+          }
+        } else if (upperTarget === 'REPEAT') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('examsarthi_review_repeat'));
           }
         }
       }
