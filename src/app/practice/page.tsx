@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { useVoiceEngine, speakText } from "@/lib/voice/useVoiceEngine"
+import { registerVoiceContext, routeVoiceCommand, unregisterVoiceContext } from "@/lib/voice/commandRouter"
 import { useAccessibilityStore } from "@/store/useAccessibilityStore"
 
 import { PracticeSets } from "@/lib/mockData"
@@ -220,82 +221,104 @@ function PracticeContent() {
   const lastCommandTimeRef = React.useRef(0)
 
   const handlePracticeVoiceCommand = React.useCallback((rawTranscript: string) => {
-    // 1. Mutex Guard: Ignore if system is speaking (Prevents Echo Loop)
-    if (typeof window !== 'undefined' && (window as any).isSystemSpeaking) return;
+    if (typeof window !== 'undefined' && (window as any).isSystemSpeaking) return
 
-    // 2. Debounce Guard: Prevent multi-fire (1.5s cooldown)
-    const now = Date.now();
-    if (now - lastCommandTimeRef.current < 1500) return;
+    const now = Date.now()
+    if (now - lastCommandTimeRef.current < 1500) return
 
-    // 3. Clean Transcript
-    const text = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const text = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim()
 
-    // --- SUBJECT FILTERING ---
-    // QUANTITATIVE APTITUDE: ["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"]
+    const routed = routeVoiceCommand(rawTranscript, 'practice')
+    if (routed.handled) {
+      lastCommandTimeRef.current = now
+      if (routed.type === 'next' || routed.type === 'previous' || routed.type === 'repeat-question' || routed.type === 'clear-answer' || routed.type === 'flag-unflag' || routed.type === 'submit') {
+        const message = routed.readback || 'Command processed'
+        if (routed.type === 'next' || routed.type === 'previous') {
+          speakText(message)
+        } else {
+          speakText(message)
+        }
+      }
+      if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
+        const subjectMap = {
+          0: 'Quantitative Aptitude',
+          1: 'Reasoning',
+          2: 'English',
+          3: 'General Knowledge',
+        } as const
+        const selected = subjectMap[routed.optionIndex as keyof typeof subjectMap]
+        if (selected) {
+          handleSubjectSelect(selected)
+          speakText(`Filtering by ${selected}`)
+          return
+        }
+      }
+      if (routed.type === 'confirm' && filteredSetsRef.current.length === 1) {
+        const set = filteredSetsRef.current[0]
+        speakText(`Starting ${set.title}`)
+        triggerPracticeLaunch(set.id)
+        return
+      }
+      return
+    }
+
     if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("Quantitative Aptitude");
-      speakText("Filtering by Quantitative Aptitude");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("Quantitative Aptitude")
+      speakText("Filtering by Quantitative Aptitude")
+      return
     }
-    // REASONING: ["reasoning", "logical", "logic", "रीजनिंग", "तर्क"]
     if (["reasoning", "logical", "logic", "रीजनिंग", "तर्क"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("Reasoning");
-      speakText("Filtering by Reasoning");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("Reasoning")
+      speakText("Filtering by Reasoning")
+      return
     }
-    // ENGLISH: ["english", "grammar", "verbal", "language", "अंग्रेजी", "इंग्लिश"]
     if (["english", "grammar", "verbal", "language", "अंग्रेजी", "इंग्लिश"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("English");
-      speakText("Filtering by English");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("English")
+      speakText("Filtering by English")
+      return
     }
-    // GENERAL KNOWLEDGE: ["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"]
     if (["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("General Knowledge");
-      speakText("Filtering by General Knowledge");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("General Knowledge")
+      speakText("Filtering by General Knowledge")
+      return
     }
-    // MULTI-FORMAT SHOWCASE: ["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"]
     if (["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("Multi-Format Showcase");
-      speakText("Filtering by Multi-Format Showcase");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("Multi-Format Showcase")
+      speakText("Filtering by Multi-Format Showcase")
+      return
     }
-    // ALL SUBJECTS: ["all", "all subjects", "everything", "clear filter", "सभी", "सब"]
     if (["all", "all subjects", "everything", "clear filter", "सभी", "सब"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      handleSubjectSelect("All Subjects");
-      speakText("Showing all subjects");
-      return;
+      lastCommandTimeRef.current = now
+      handleSubjectSelect("All Subjects")
+      speakText("Showing all subjects")
+      return
     }
-
-    // --- DIRECT LAUNCHING ---
-    // GK & GEOGRAPHY: ["geography", "gk and geography", "geography practice", "भूगोल"]
     if (["geography", "gk and geography", "geography practice", "भूगोल"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now;
-      speakText("Starting General Knowledge and Geography practice");
-      triggerPracticeLaunch('gk-geography'); 
-      return;
+      lastCommandTimeRef.current = now
+      speakText("Starting General Knowledge and Geography practice")
+      triggerPracticeLaunch('gk-geography')
+      return
     }
-    
-    // Catch-all context starter
-    // START / BEGIN ACTIVE: ["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"]
     if (["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"].some(k => text.includes(k))) {
-      // If a filter is applied and only 1 set is available, launch it automatically
-      const sets = filteredSetsRef.current;
+      const sets = filteredSetsRef.current
       if (sets.length === 1) {
-         lastCommandTimeRef.current = now;
-         speakText(`Starting ${sets[0].title}`);
-         triggerPracticeLaunch(sets[0].id);
-         return;
+        lastCommandTimeRef.current = now
+        speakText(`Starting ${sets[0].title}`)
+        triggerPracticeLaunch(sets[0].id)
+        return
       }
     }
-  }, [handleSubjectSelect, triggerPracticeLaunch]);
+  }, [handleSubjectSelect, triggerPracticeLaunch])
+
+  React.useEffect(() => {
+    registerVoiceContext('practice', handlePracticeVoiceCommand)
+    return () => unregisterVoiceContext('practice')
+  }, [handlePracticeVoiceCommand])
 
   const { isListening, isSpeaking } = useVoiceEngine({
     lang: isHindi ? 'hi-IN' : 'en-US',
