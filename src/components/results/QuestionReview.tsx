@@ -40,6 +40,7 @@ export interface QuestionReviewProps {
   isWalkthroughActive?: boolean;
   setIsWalkthroughActive?: (active: boolean) => void;
   onClose?: () => void;
+  onStop?: () => void;
 }
 
 export function QuestionReview({
@@ -50,6 +51,7 @@ export function QuestionReview({
   isWalkthroughActive = true,
   setIsWalkthroughActive: propSetIsWalkthroughActive,
   onClose,
+  onStop,
   ...otherProps
 }: QuestionReviewProps & Record<string, any>) {
   const [internalIndex, setInternalIndex] = useState(0);
@@ -119,8 +121,15 @@ export function QuestionReview({
       if (!intent || intent === 'CONTROL') {
         if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
           if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-          if (typeof onClose === 'function') onClose();
-          if (typeof setIsWalkthroughActive === 'function') setIsWalkthroughActive(false);
+          
+          // CRITICAL: Execute the parent's function to forcefully unmount this panel
+          if (typeof onStop === 'function') {
+            onStop();
+          } else if (typeof onClose === 'function') {
+            onClose();
+          } else if (typeof setIsWalkthroughActive === 'function') {
+            setIsWalkthroughActive(false);
+          }
         } else if (target === 'PREVIOUS') {
           setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
         } else if (target === 'NEXT') {
@@ -140,7 +149,7 @@ export function QuestionReview({
 
     window.addEventListener('ai_voice_command', handleNavigation);
     return () => window.removeEventListener('ai_voice_command', handleNavigation);
-  }, [results, currentWalkthroughIndex, setCurrentWalkthroughIndex, setIsWalkthroughActive, onClose]);
+  }, [results, currentWalkthroughIndex, setCurrentWalkthroughIndex, setIsWalkthroughActive, onClose, onStop]);
 
   // If walkthrough is not active, fallback to standard review list
   if (!isWalkthroughActive) {
@@ -164,6 +173,8 @@ export function QuestionReview({
   };
 
   const handleClose = () => {
+    if (typeof onStop === 'function') onStop();
+    if (typeof onClose === 'function') onClose();
     setIsWalkthroughActive(false);
     if (typeof window !== 'undefined') {
       window.speechSynthesis.cancel();

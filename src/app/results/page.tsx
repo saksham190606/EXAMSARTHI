@@ -521,6 +521,7 @@ function ResultsContent() {
           currentWalkthroughIndex={currentWalkthroughIndex}
           setCurrentWalkthroughIndex={setCurrentWalkthroughIndex}
           setIsWalkthroughActive={setIsWalkthroughActive}
+          onStop={() => setIsWalkthroughActive(false)}
           onClose={() => setIsWalkthroughActive(false)}
         /> 
       ) : (
