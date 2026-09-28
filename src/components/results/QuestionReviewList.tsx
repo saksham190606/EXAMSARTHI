@@ -50,6 +50,7 @@ interface QuestionReviewListProps {
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  isWalkthroughActive?: boolean;
 }
 
 /**
@@ -194,6 +195,7 @@ export function QuestionReviewList({
   isLoading = false,
   error = null,
   onRetry,
+  isWalkthroughActive: externalWalkthroughActive = false,
 }: QuestionReviewListProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
@@ -493,6 +495,22 @@ export function QuestionReviewList({
       readQuestionReview(0, true);
     }
   }, [isAudioReviewActive, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
+
+  useEffect(() => {
+    if (externalWalkthroughActive && !isAudioReviewActive && filteredQuestions.length > 0) {
+      readQuestionReview(0, true);
+    }
+  }, [externalWalkthroughActive, isAudioReviewActive, filteredQuestions.length, readQuestionReview]);
+
+  useEffect(() => {
+    const handleStartEvent = () => {
+      if (!isAudioReviewActiveRef.current && filteredQuestionsRef.current.length > 0) {
+        readQuestionReview(0, true);
+      }
+    };
+    window.addEventListener('examsarthi-start-walkthrough', handleStartEvent);
+    return () => window.removeEventListener('examsarthi-start-walkthrough', handleStartEvent);
+  }, [readQuestionReview]);
 
   // Playback Navigation Handlers
   const handlePause = useCallback(() => {

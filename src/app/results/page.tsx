@@ -36,6 +36,7 @@ import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
+import AITutorCard from '@/components/results/AITutorCard';
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
@@ -83,6 +84,7 @@ function ResultsContent() {
   const [reviewQuestions, setReviewQuestions] = useState<QuestionReviewItem[]>([]);
   const [loadingReview, setLoadingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [isWalkthroughActive, setIsWalkthroughActive] = useState<boolean>(false);
   const { t } = useTranslation();
 
   const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
@@ -433,6 +435,13 @@ function ResultsContent() {
     : null;
   const activeTitle = activePracticeSet?.title || activeExam?.title || t('examName');
 
+  const examData = useMemo(() => {
+    return {
+      score: results?.score ?? 0,
+      totalQuestions: results?.totalQuestions ?? 0,
+    };
+  }, [results?.score, results?.totalQuestions]);
+
   return (
     <div className="min-h-screen bg-background text-foreground py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8">
       
@@ -450,6 +459,17 @@ function ResultsContent() {
           <span>{t('evalSession')}</span>
         </Badge>
       </nav>
+
+      {/* AI Tutor Performance Overview */}
+      <AITutorCard
+        results={examData}
+        startReviewWalkthrough={() => {
+          setIsWalkthroughActive(true);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
+          }
+        }}
+      />
 
       {/* SECTION A — RESULT HEADER */}
       <header className="space-y-3 border-b border-border/80 pb-6">
@@ -682,6 +702,7 @@ function ResultsContent() {
           questions={reviewQuestions}
           isLoading={loadingReview}
           error={reviewError}
+          isWalkthroughActive={isWalkthroughActive}
           onRetry={() => {
             if (remoteAttempt?.id) {
               fetchQuestionReview(remoteAttempt.id);
