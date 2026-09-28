@@ -1,84 +1,103 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getHighFidelityVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
+import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 
-/**
- * EXAMSARTHI — Centralized Global Audio & Voice Engine
- * 
- * Guarantees:
- * 1. STRICT SINGLETON SpeechRecognition: Exactly ONE active recognition instance
- *    across the entire application lifecycle, preventing mic collisions and abort errors.
- * 2. Speech Synthesis Safety: Prevents GC audio drops and pauses listening while speaking.
- * 3. Clean Fallback & Language Recovery: Gracefully falls back from hi-IN to en-US.
- * 4. User-Gesture Warmup: Reusable mic permission check that releases test stream immediately.
- */
+export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
-// Module-level Singleton State
+const PRIORITY_RANK: Record<VoicePriority, number> = {
+  critical: 4,
+  response: 3,
+  content: 2,
+  talkback: 1,
+};
+
 let globalRecognition: any = null;
 let isListeningGlobal = false;
 let isSpeakingGlobal = false;
 let globalTranscript = '';
 let globalLastError: string | null = null;
 let currentUtteranceGlobal: SpeechSynthesisUtterance | null = null;
-let activeLang = 'en-US';
+let activeLang = 'en-IN';
+let currentSpeechPriority: VoicePriority | null = null;
+let recognitionRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let recognitionRetryDelay = 200;
 
-// Global Speaking Guard (Strict Audio Mutex Ref)
-// Synchronous mutable ref pattern ensures zero React closure staleness inside event listeners
 export const isSystemSpeakingRef: { current: boolean } = { current: false };
 export const recognitionRef: { current: any } = {
-  get current() {
-    return globalRecognition;
-  },
-  set current(val: any) {
-    globalRecognition = val;
-  },
+  get current() { return globalRecognition; },
+  set current(val: any) { globalRecognition = val; },
 };
 
-// Listeners and subscribers
-const transcriptSubscribers = new Set<(t: string) => void>();
+const transcriptSubscribers = new Set<(text: string) => void>();
 const stateSubscribers = new Set<() => void>();
 
 function notifyState(): void {
   stateSubscribers.forEach((callback) => {
-    try {
-      callback();
-    } catch (e) {
-      console.warn('[VoiceEngine] Error in state subscriber callback:', e);
-    }
+    try { callback(); } catch (e) { console.warn('[VoiceEngine] state subscriber error:', e); }
   });
 }
 
-/**
- * Clean up / destroy any existing SpeechRecognition listener.
- * Guarantees no lingering or duplicate audio capture sessions.
- */
+function normalizeLanguage(lang?: string): string {
+  const v = (lang || 'en-IN').toLowerCase();
+  return v.startsWith('hi') ? 'hi-IN' : 'en-IN';
+}
+
+function scheduleRecognitionRestart(delayMs: number): void {
+  if (recognitionRetryTimer) {
+    clearTimeout(recognitionRetryTimer);
+  }
+  recognitionRetryTimer = setTimeout(() => {
+    if (!isSpeakingGlobal && isListeningGlobal && globalRecognition && typeof globalRecognition.start === 'function') {
+      try {
+        globalRecognition.start();
+      } catch (_) {}
+    }
+  }, delayMs);
+}
+
+function clearRetryTimer(): void {
+  if (recognitionRetryTimer) {
+    clearTimeout(recognitionRetryTimer);
+    recognitionRetryTimer = null;
+  }
+  recognitionRetryDelay = 200;
+}
+
+export function subscribe(handler: (text: string) => void): () => void {
+  transcriptSubscribers.add(handler);
+  if (transcriptSubscribers.size > 3) {
+    console.warn('[VoiceEngine] More than 3 transcript subscribers; ensure cleanup is used.');
+  }
+  return () => transcriptSubscribers.delete(handler);
+}
+
+export function isSpeaking(): boolean {
+  return Boolean(isSpeakingGlobal || isSystemSpeakingRef.current || (typeof window !== 'undefined' && (window as any).isSystemSpeaking));
+}
+
+export function isListening(): boolean {
+  return isListeningGlobal;
+}
+
 export function stopListening(): void {
+  clearRetryTimer();
   if (globalRecognition) {
     try {
       globalRecognition.onend = null;
       globalRecognition.onerror = null;
       globalRecognition.onresult = null;
-      globalRecognition.onaudiostart = null;
-      globalRecognition.onspeechstart = null;
-      globalRecognition.onspeechend = null;
       globalRecognition.onnomatch = null;
       globalRecognition.abort();
-    } catch (e) {
-      // Ignore benign abort errors
-    }
+    } catch (_) {}
     globalRecognition = null;
   }
   isListeningGlobal = false;
   notifyState();
 }
 
-/**
- * Explicit Permission & Hardware Warmup.
- * Requests mic permission, immediately releases stream tracks to free hardware.
- */
 export async function requestMicAccess(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     return false;
@@ -86,15 +105,13 @@ export async function requestMicAccess(): Promise<boolean> {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((track) => track.stop()); // release test stream
-
+    stream.getTracks().forEach((track) => track.stop());
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.setItem('examAudioUnlocked', 'true');
         (window as any).__examsarthi_mic_granted = true;
-      } catch (e) {}
+      } catch (_) {}
     }
-
     globalLastError = null;
     notifyState();
     return true;
@@ -106,150 +123,274 @@ export async function requestMicAccess(): Promise<boolean> {
   }
 }
 
-/**
- * Fuzzy Matcher Utility: Before checking commands, ALWAYS clean the transcript.
- */
 export function cleanVoiceTranscript(transcript: string): string {
   if (!transcript) return '';
-  return transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+  return transcript.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '').trim();
 }
 
-/**
- * Speech Synthesis Safety Wrapper with Strict Half-Duplex (Walkie-Talkie) Audio Mutex.
- * 1. Hard-stops the microphone and detaches restart loops (onend = null).
- * 2. Anchors utterance to window scope to avoid Chromium garbage collection bug.
- * 3. Restarts microphone only after speaking completes + 400ms room echo buffer.
- */
-export const speakText = (
-  text: string,
-  arg2?: string | (() => void),
-  arg3?: () => void
-): void => {
+export function stopSpeaking(): void {
+  if (typeof window !== 'undefined') {
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+    (window as any).isSystemSpeaking = false;
+  }
+  isSystemSpeakingRef.current = false;
+  isSpeakingGlobal = false;
+  currentSpeechPriority = null;
+  currentUtteranceGlobal = null;
+  notifyState();
+}
+
+function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; rate?: number } = {}) {
+  const priority = opts.priority ?? 'content';
+  const wasListeningBefore = isListeningGlobal;
+  const currentPriority = currentSpeechPriority ?? 'talkback';
+
+  if (isSpeakingGlobal) {
+    const incoming = PRIORITY_RANK[priority] ?? 0;
+    const current = PRIORITY_RANK[currentPriority] ?? 0;
+    if (incoming < current) {
+      if (opts.onEnd) setTimeout(opts.onEnd, 0);
+      return;
+    }
+  }
+
   if (typeof window === 'undefined') {
-    if (typeof arg2 === 'function') arg2();
-    if (typeof arg3 === 'function') arg3();
+    if (opts.onEnd) opts.onEnd();
     return;
   }
 
-  let lang = 'en-US';
-  let onComplete: (() => void) | undefined;
-  if (typeof arg2 === 'function') {
-    onComplete = arg2;
-  } else if (typeof arg2 === 'string') {
-    lang = arg2;
-    onComplete = arg3;
-  } else if (typeof arg3 === 'function') {
-    onComplete = arg3;
+  if (wasListeningBefore) {
+    stopListening();
   }
 
-  // 1. ENGAGE GLOBAL LOCK
-  (window as any).isSystemSpeaking = true;
+  if (typeof window !== 'undefined') {
+    (window as any).isSystemSpeaking = true;
+  }
   isSystemSpeakingRef.current = true;
   isSpeakingGlobal = true;
+  currentSpeechPriority = priority;
   notifyState();
 
-  // 2. HARD KILL MIC
-  if ((window as any).globalRecognitionInstance) {
-    try {
-      (window as any).globalRecognitionInstance.onend = null;
-      (window as any).globalRecognitionInstance.abort();
-    } catch (e) {}
-  }
-  if (recognitionRef.current) {
-    try {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.abort();
-    } catch (e) {}
-    recognitionRef.current = null;
-  }
-  isListeningGlobal = false;
-  notifyState();
-
-  window.speechSynthesis.cancel();
-  const store = useAccessibilityStore.getState();
-  const sanitizedText = sanitizeExamTextForSpeech(text, lang);
-  const utterance = new SpeechSynthesisUtterance(sanitizedText);
-  utterance.lang = lang;
-  utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
-  const voice = getHighFidelityVoice(lang, store.selectedVoiceURI);
-  if (voice) {
-    utterance.voice = voice;
-  }
-
-  const handleRecognitionEnd = () => {
-    if ((window as any).isSystemSpeaking === true) return;
-    if (isListeningGlobal && !isSpeakingGlobal) {
-      setTimeout(() => {
-        if ((window as any).isSystemSpeaking === true) return;
-        try {
-          (window as any).globalRecognitionInstance?.start();
-        } catch (e) {}
-      }, 150);
-    }
-  };
-
-  utterance.onend = () => {
-    // 3. WAIT 500MS FOR ROOM ECHO TO FADE, THEN UNLOCK
-    setTimeout(() => {
-      (window as any).isSystemSpeaking = false;
-      isSystemSpeakingRef.current = false;
-      isSpeakingGlobal = false;
-      currentUtteranceGlobal = null;
-      (window as any).__currentUtterance = null;
-      notifyState();
-
-      if ((window as any).globalRecognitionInstance) {
-        // Reattach auto-restart and boot mic
-        (window as any).globalRecognitionInstance.onend = handleRecognitionEnd;
-        try {
-          (window as any).globalRecognitionInstance.start();
-        } catch (e) {}
+  const chunks = (text || '')
+    .split(/(?<=[.!?。！？])\s+|(?<=\n)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<string[]>((acc, part) => {
+      const buffer = acc[acc.length - 1] || '';
+      const candidate = buffer ? `${buffer} ${part}` : part;
+      if (candidate.length <= 160) {
+        if (!buffer) acc.push(part); else acc[acc.length - 1] = candidate;
+      } else {
+        if (buffer) acc[acc.length - 1] = buffer;
+        const words = part.split(/\s+/);
+        let currentChunk = '';
+        for (const word of words) {
+          if ((currentChunk + ' ' + word).trim().length > 160) {
+            if (currentChunk) acc.push(currentChunk.trim());
+            currentChunk = word;
+          } else {
+            currentChunk = (currentChunk ? `${currentChunk} ${word}` : word).trim();
+          }
+        }
+        if (currentChunk) acc.push(currentChunk.trim());
       }
+      return acc;
+    }, []);
 
-      if (onComplete) onComplete();
-    }, 500);
+  const safeChunks = chunks.length > 0 ? chunks : [text.trim()].filter(Boolean);
+  let chunkIndex = 0;
+
+  const speakNextChunk = () => {
+    if (chunkIndex >= safeChunks.length) {
+      const finish = () => {
+        currentSpeechPriority = null;
+        isSpeakingGlobal = false;
+        isSystemSpeakingRef.current = false;
+        if (typeof window !== 'undefined') {
+          (window as any).isSystemSpeaking = false;
+        }
+        currentUtteranceGlobal = null;
+        notifyState();
+        if (wasListeningBefore) {
+          setTimeout(() => {
+            if (!isSpeakingGlobal && typeof window !== 'undefined') {
+              startListening(activeLang);
+            }
+          }, 350);
+        }
+        if (opts.onEnd) opts.onEnd();
+      };
+      setTimeout(finish, 350);
+      return;
+    }
+
+    const chunk = safeChunks[chunkIndex++];
+    const store = useAccessibilityStore.getState();
+    const utterance = new SpeechSynthesisUtterance(sanitizeExamTextForSpeech(chunk, lang));
+    utterance.lang = normalizeLanguage(lang);
+    utterance.rate = Math.min(1.5, Math.max(0.7, opts.rate ?? store.speechRate ?? 1));
+    utterance.onstart = () => {
+      currentUtteranceGlobal = utterance;
+      if (typeof window !== 'undefined') {
+        (window as any).__currentUtterance = utterance;
+      }
+      if (opts.onStart) opts.onStart();
+    };
+    utterance.onend = () => {
+      if (typeof window !== 'undefined') {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+      speakNextChunk();
+    };
+    utterance.onerror = () => {
+      speakNextChunk();
+    };
+
+    const keepalive = setInterval(() => {
+      if (!isSpeakingGlobal || !currentUtteranceGlobal || currentUtteranceGlobal !== utterance) return;
+      try {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          setTimeout(() => {
+            try { window.speechSynthesis.resume(); } catch (_) {}
+          }, 50);
+        }
+      } catch (_) {}
+    }, 10000);
+
+    const cleanupKeepalive = () => {
+      clearInterval(keepalive);
+    };
+    utterance.onstart = () => {
+      currentUtteranceGlobal = utterance;
+      if (typeof window !== 'undefined') {
+        (window as any).__currentUtterance = utterance;
+      }
+      if (opts.onStart) opts.onStart();
+      if (typeof window !== 'undefined') {
+        const keepaliveRef = setInterval(() => {
+          if (!isSpeakingGlobal || !currentUtteranceGlobal || currentUtteranceGlobal !== utterance) return;
+          try {
+            if (window.speechSynthesis.speaking) {
+              window.speechSynthesis.pause();
+              setTimeout(() => {
+                try { window.speechSynthesis.resume(); } catch (_) {}
+              }, 60);
+            }
+          } catch (_) {}
+        }, 10000);
+        (utterance as any).__keepalive = keepaliveRef;
+      }
+    };
+    utterance.onend = () => {
+      cleanupKeepalive();
+      if (typeof window !== 'undefined') {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+      speakNextChunk();
+    };
+    utterance.onerror = () => {
+      cleanupKeepalive();
+      speakNextChunk();
+    };
+
+    const voice = getBestVoice(lang, store.selectedVoiceURI);
+    if (voice) utterance.voice = voice;
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.speak(utterance);
+    } catch (_) {
+      speakNextChunk();
+    }
   };
 
-  utterance.onerror = utterance.onend;
-  currentUtteranceGlobal = utterance;
-  (window as any).__currentUtterance = utterance; // GC fix
+  speakNextChunk();
+}
 
-  try {
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {
-    (window as any).isSystemSpeaking = false;
-    isSystemSpeakingRef.current = false;
-    isSpeakingGlobal = false;
-    notifyState();
-    if (onComplete) onComplete();
-  }
-};
-
-export const speakQuestion = (
+export function speak(
   text: string,
-  arg2?: string | (() => void),
-  arg3?: () => void
-): void => {
-  speakText(text, arg2, arg3);
-};
-
-/**
- * Start Listening with Singleton SpeechRecognition.
- * Destroys any prior listener to guarantee conflict-free capture.
- */
-export function startListening(lang = 'en-US', onTranscript?: (text: string) => void): void {
-  if (typeof window === 'undefined') return;
-
-  // Never capture while text-to-speech talkback is active
-  if (isSpeakingGlobal) {
-    console.log('[VoiceEngine] Speech synthesis is active. Delaying listening start.');
+  options: {
+    lang?: string;
+    rate?: number;
+    priority?: VoicePriority;
+    interrupt?: boolean;
+    onStart?: () => void;
+    onEnd?: () => void;
+  } = {}
+): void {
+  if (!text || !text.trim()) {
+    if (options.onEnd) options.onEnd();
     return;
   }
 
-  // Ensure there is ONLY ONE active instance across the entire lifecycle
+  if (typeof window === 'undefined') {
+    if (options.onEnd) options.onEnd();
+    return;
+  }
+
+  const lang = normalizeLanguage(options.lang);
+  activeLang = lang;
+  queueSpeechChunk(text, lang, options);
+}
+
+export const speakText = (text: string, langOrCb?: string | (() => void), onComplete?: () => void): void => {
+  if (typeof langOrCb === 'function') {
+    speak(text, { priority: 'content', onEnd: langOrCb });
+    return;
+  }
+  speak(text, { lang: langOrCb || 'en-IN', priority: 'content', onEnd: onComplete });
+};
+
+export const speakQuestion = (text: string, langOrCb?: string | (() => void), onComplete?: () => void): void => {
+  if (typeof langOrCb === 'function') {
+    speak(text, { priority: 'response', onEnd: langOrCb });
+    return;
+  }
+  speak(text, { lang: langOrCb || 'en-IN', priority: 'response', onEnd: onComplete });
+};
+
+function handleRecognitionError(error: any): void {
+  const code = error?.error || '';
+  if (code === 'aborted' || code === 'no-speech') {
+    return;
+  }
+
+  const fallbackText = 'Voice unavailable, use keyboard: Alt+N, Alt+P, 1-4';
+  if (['network', 'not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(code)) {
+    stopListening();
+    globalLastError = code;
+    notifyState();
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_voice_error = fallbackText;
+    }
+    speak(fallbackText, { lang: activeLang, priority: 'response', interrupt: true });
+    return;
+  }
+
+  if (code) {
+    globalLastError = code;
+    notifyState();
+  }
+
+  if (isListeningGlobal) {
+    recognitionRetryDelay = Math.min(recognitionRetryDelay * 2, 2000);
+    scheduleRecognitionRestart(recognitionRetryDelay);
+  }
+}
+
+export function startListening(lang = 'en-IN', onTranscript?: (text: string) => void): void {
+  if (typeof window === 'undefined') return;
+  const normalized = normalizeLanguage(lang);
+  activeLang = normalized;
+  if (onTranscript) {
+    subscribe(onTranscript);
+  }
+  if (isSpeakingGlobal) {
+    return;
+  }
+
   stopListening();
 
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -259,115 +400,63 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     return;
   }
 
-  activeLang = lang;
-  if (onTranscript) {
-    transcriptSubscribers.add(onTranscript);
-  }
-
   try {
     const recognition = new SpeechRecognition();
-    // Store the instance globally so speakText can reach it
     (window as any).globalRecognitionInstance = recognition;
-    recognition.continuous = false; // Discrete cycles prevent Chromium audio buffer lock
+    recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 5;
-    recognition.lang = lang;
-
-    // Inject JSGF grammar
+    recognition.lang = normalized;
     injectExamGrammar(recognition);
 
-    recognition.onaudiostart = () => console.log('[VoiceEngine] Audio capture started (mic is hot)');
-    recognition.onsoundstart = () => console.log('[VoiceEngine] Sound detected in room');
-    recognition.onspeechstart = () => console.log('[VoiceEngine] Speech identified');
-    recognition.onspeechend = () => console.log('[VoiceEngine] Speech segment ended');
-    recognition.onnomatch = () => console.log('[VoiceEngine] Audio heard but no word matched');
-
-    recognition.onerror = (e: any) => {
-      // Benign events: aborted (from normal restart/stop) or no-speech (silence in room)
-      if (e.error === 'aborted' || e.error === 'no-speech') {
+    recognition.onresult = (event: any) => {
+      if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
         return;
       }
 
-      // Fallback: If regional voice pack fails on hi-IN, fallback to en-US
-      if (e.error === 'language-not-supported' && recognition.lang !== 'en-US') {
-        console.warn('[VoiceEngine] Falling back to en-US speech recognition');
-        recognition.lang = 'en-US';
-        setTimeout(() => {
-          if (isListeningGlobal && !isSpeakingGlobal && globalRecognition === recognition) {
-            try {
-              recognition.start();
-            } catch (err) {}
-          }
-        }, 150);
+      const result = event?.results?.[event.resultIndex];
+      if (!result || result.isFinal === false) {
         return;
       }
+      const transcript = (result[0]?.transcript || '').trim();
+      if (!transcript) return;
 
-      console.warn('[VoiceEngine Error]', e.error, e.message);
-      globalLastError = e.error;
-      notifyState();
-    };
-
-    recognition.onresult = (e: any) => {
-      // IF SYSTEM IS SPEAKING, DROP EVERYTHING IMMEDIATELY
-      if ((window as any).isSystemSpeaking === true) {
-        console.warn("BLOCKED ECHO: System is currently speaking.");
-        return;
-      }
-      if (isSystemSpeakingRef.current || isSpeakingGlobal) {
-        console.warn("BLOCKED ECHO: System is currently speaking.");
-        return;
-      }
-
-      const candidates = extractTranscriptsFromEvent(e);
-      let raw = candidates[0] || e?.results?.[0]?.[0]?.transcript || '';
-
-      // Check multi-alternatives and phonetic error correction
+      const candidates = extractTranscriptsFromEvent(event);
+      let raw = candidates[0] || transcript;
       if (candidates.length > 0) {
         const resolved = resolveMultiAlternativeCommand(candidates);
-        if (resolved) {
-          raw = resolved.matchedToken;
-          console.log('[VoiceEngine Phonetic Resolved]:', resolved.action, 'from', candidates);
-        }
+        if (resolved) raw = resolved.matchedToken;
       }
 
-      const transcript = (raw || '').toLowerCase().trim();
-      console.log('[VoiceEngine Result Captured]:', transcript);
-      if (transcript) {
-        globalTranscript = transcript;
-        notifyState();
-        transcriptSubscribers.forEach((sub) => {
-          try {
-            sub(transcript);
-          } catch (err) {
-            console.warn('[VoiceEngine] Error in transcript subscriber:', err);
-          }
-        });
-      }
+      const finalTranscript = cleanVoiceTranscript(raw || transcript);
+      if (!finalTranscript) return;
+      globalTranscript = finalTranscript;
+      globalLastError = null;
+      notifyState();
+      transcriptSubscribers.forEach((cb) => {
+        try { cb(finalTranscript); } catch (_) {}
+      });
     };
 
-    const handleRecognitionEnd = () => {
-      if ((window as any).isSystemSpeaking === true) return;
-      if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal) {
-        setTimeout(() => {
-          if ((window as any).isSystemSpeaking === true) return;
-          if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal && globalRecognition === recognition) {
-            try {
-              recognition.start();
-            } catch (e) {
-              // Safe ignore if busy
-            }
-          }
-        }, 150);
-      }
+    recognition.onerror = (event: any) => {
+      handleRecognitionError(event);
     };
 
-    recognition.onend = handleRecognitionEnd;
+    recognition.onend = () => {
+      if (isSpeakingGlobal || !isListeningGlobal) return;
+      const delay = Math.min(recognitionRetryDelay, 2000);
+      scheduleRecognitionRestart(delay);
+    };
+
+    recognition.onnomatch = () => {
+      globalLastError = 'no-match';
+      notifyState();
+    };
 
     globalRecognition = recognition;
     isListeningGlobal = true;
     globalLastError = null;
     notifyState();
-
     recognition.start();
   } catch (err: any) {
     console.warn('[VoiceEngine] Recognition start error:', err);
@@ -383,9 +472,6 @@ export interface UseVoiceEngineOptions {
   autoStart?: boolean;
 }
 
-/**
- * Centralized Global Voice Hook
- */
 export function useVoiceEngine(options?: UseVoiceEngineOptions) {
   const [isListening, setIsListening] = useState<boolean>(isListeningGlobal);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(isSpeakingGlobal);
@@ -393,23 +479,16 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
   const [lastError, setLastError] = useState<string | null>(globalLastError);
   const [hasMicPermission, setHasMicPermission] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return (
-        Boolean((window as any).__examsarthi_mic_granted) ||
-        sessionStorage.getItem('examAudioUnlocked') === 'true'
-      );
+      return Boolean((window as any).__examsarthi_mic_granted) || sessionStorage.getItem('examAudioUnlocked') === 'true';
     }
     return false;
   });
 
   const onTranscriptRef = useRef(options?.onTranscript);
-  useEffect(() => {
-    onTranscriptRef.current = options?.onTranscript;
-  }, [options?.onTranscript]);
+  useEffect(() => { onTranscriptRef.current = options?.onTranscript; }, [options?.onTranscript]);
 
-  const langRef = useRef(options?.lang || 'en-US');
-  useEffect(() => {
-    langRef.current = options?.lang || 'en-US';
-  }, [options?.lang]);
+  const langRef = useRef(options?.lang || 'en-IN');
+  useEffect(() => { langRef.current = options?.lang || 'en-IN'; }, [options?.lang]);
 
   useEffect(() => {
     const handleStateUpdate = () => {
@@ -417,26 +496,19 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
       setIsSpeaking(isSpeakingGlobal);
       setTranscript(globalTranscript);
       setLastError(globalLastError);
-
       if (typeof window !== 'undefined') {
-        const granted =
-          Boolean((window as any).__examsarthi_mic_granted) ||
-          sessionStorage.getItem('examAudioUnlocked') === 'true';
+        const granted = Boolean((window as any).__examsarthi_mic_granted) || sessionStorage.getItem('examAudioUnlocked') === 'true';
         if (granted) setHasMicPermission(true);
       }
     };
 
     stateSubscribers.add(handleStateUpdate);
-
     const handleTranscriptReceived = (t: string) => {
       setTranscript(t);
-      if (onTranscriptRef.current) {
-        onTranscriptRef.current(t);
-      }
+      if (onTranscriptRef.current) onTranscriptRef.current(t);
     };
     transcriptSubscribers.add(handleTranscriptReceived);
 
-    // Initial check
     handleStateUpdate();
 
     if (options?.autoStart && !isListeningGlobal && !isSpeakingGlobal) {
@@ -453,15 +525,10 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
     startListening(customLang || langRef.current);
   }, []);
 
-  const handleStop = useCallback(() => {
-    stopListening();
-  }, []);
-
+  const handleStop = useCallback(() => stopListening(), []);
   const handleRequestMic = useCallback(async () => {
     const granted = await requestMicAccess();
-    if (granted) {
-      setHasMicPermission(true);
-    }
+    if (granted) setHasMicPermission(true);
     return granted;
   }, []);
 
@@ -488,29 +555,20 @@ export interface AIIntentResult {
   target: string;
 }
 
-/**
- * AI-Driven Intent Router Client:
- * Sends the candidate's speech transcript to /api/intent for natural language
- * intent classification powered by Groq Llama 3.1 8B.
- */
 export async function fetchAIIntent(transcript: string): Promise<AIIntentResult> {
   if (!transcript || !transcript.trim()) {
     return { intent: 'UNKNOWN', target: '' };
   }
+
   try {
     const res = await fetch('/api/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript }),
     });
-    if (!res.ok) {
-      return { intent: 'UNKNOWN', target: '' };
-    }
+    if (!res.ok) return { intent: 'UNKNOWN', target: '' };
     const data = await res.json();
-    return {
-      intent: data.intent || 'UNKNOWN',
-      target: data.target || '',
-    };
+    return { intent: data.intent || 'UNKNOWN', target: data.target || '' };
   } catch (err) {
     console.error('[VoiceEngine] AI Intent Routing failed:', err);
     return { intent: 'UNKNOWN', target: '' };

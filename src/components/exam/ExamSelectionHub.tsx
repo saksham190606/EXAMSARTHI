@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Clock, HelpCircle, ArrowRight, Sparkles, BookOpen, Volume2, Mic, MicOff } from 'lucide-react';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { useVoiceEngine } from '@/lib/voice/useVoiceEngine';
+import { routeVoiceCommand, registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
 import { EXAM_VOICE_ROUTES, matchExamTokens, matchExamVoiceRoute, ExamVoiceRoute } from '@/lib/voice/exam-router';
 import { cn } from '@/lib/utils';
 
@@ -84,7 +85,6 @@ export function ExamSelectionHub() {
   const [launchingTitle, setLaunchingTitle] = useState<string | null>(null);
   const isLaunchingRef = useRef<boolean>(false);
 
-  // 1. Centralized Global Voice Hook Connection
   const {
     isListening,
     isSpeaking,
@@ -100,12 +100,11 @@ export function ExamSelectionHub() {
     onTranscript: (capturedText) => {
       if (isLaunchingRef.current) return;
 
-      // 2. Token Matching:
-      // SSC CGL: ["cgl", "ssc", "staff selection", "सीजीएल", "एसएससी"]
-      // UPSC: ["upsc", "cse", "prelims", "civil services", "यूपीएससी", "प्रीलिम्स"]
-      // IBPS / Banking: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ"]
-      // Railway: ["rrb", "ntpc", "railway", "railways", "रेलवे", "एनटीपीसी"]
-      // Vision AI: ["vision", "diagram", "visual", "विज़न", "डायग्राम"]
+      const routed = routeVoiceCommand(capturedText, 'hub');
+      if (routed.handled && routed.type === 'confirm') {
+        return;
+      }
+
       const match =
         matchExamTokens(capturedText) ||
         (matchExamVoiceRoute(capturedText)
@@ -113,10 +112,76 @@ export function ExamSelectionHub() {
           : null);
 
       if (match) {
-        launchExam(match.route, match.examName);
+        const route = match.route;
+        if (isLaunchingRef.current) return;
+        isLaunchingRef.current = true;
+        const targetName = match.examName || route.title;
+        setLaunchingTitle(targetName);
+        setHighlightedExamId(route.id);
+        const cardEl = document.getElementById(`exam-card-${route.id}`);
+        if (cardEl) {
+          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
+        speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
+          router.push(`/exam?set=${route.param}`);
+        });
+        setTimeout(() => {
+          router.push(`/exam?set=${route.param}`);
+        }, 2000);
       }
     },
   });
+
+  const launchExam = useCallback(
+    (route: { id: string; param: string; title: string }, examName?: string) => {
+      if (isLaunchingRef.current) return;
+      isLaunchingRef.current = true;
+      const targetName = examName || route.title;
+
+      setLaunchingTitle(targetName);
+      setHighlightedExamId(route.id);
+
+      const cardEl = document.getElementById(`exam-card-${route.id}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
+      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
+        router.push(`/exam?set=${route.param}`);
+      });
+
+      setTimeout(() => {
+        router.push(`/exam?set=${route.param}`);
+      }, 2000);
+    },
+    [isHindi, router, speakText]
+  );
+
+  const handleExamHubVoiceCommand = useCallback((capturedText: string) => {
+    if (isLaunchingRef.current) return;
+
+    const routed = routeVoiceCommand(capturedText, 'hub');
+    if (routed.handled && routed.type === 'confirm') {
+      return;
+    }
+
+    const match =
+      matchExamTokens(capturedText) ||
+      (matchExamVoiceRoute(capturedText)
+        ? { route: matchExamVoiceRoute(capturedText)!, examName: matchExamVoiceRoute(capturedText)!.title }
+        : null);
+
+    if (match) {
+      launchExam(match.route, match.examName);
+    }
+  }, [launchExam]);
+
+  useEffect(() => {
+    registerVoiceContext('hub', handleExamHubVoiceCommand)
+    return () => unregisterVoiceContext('hub')
+  }, [handleExamHubVoiceCommand])
 
   // Announce the exam selection screen upon landing
   useEffect(() => {
@@ -127,37 +192,6 @@ export function ExamSelectionHub() {
       startListening(isHindi ? 'hi-IN' : 'en-US');
     });
   }, [isHindi, speakText, startListening]);
-
-  // 3. Instant Launch & Auditory Feedback
-  const launchExam = useCallback(
-    (route: { id: string; param: string; title: string }, examName?: string) => {
-      if (isLaunchingRef.current) return;
-      isLaunchingRef.current = true;
-      const targetName = examName || route.title;
-
-      setLaunchingTitle(targetName);
-      setHighlightedExamId(route.id);
-
-      // Smoothly focus and scroll to the exam card
-      const cardEl = document.getElementById(`exam-card-${route.id}`);
-      if (cardEl) {
-        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-
-      // 1. Call speakText("Opening " + examName)
-      // 2. Transition immediately to that exam URL
-      const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
-      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
-        router.push(`/exam?set=${route.param}`);
-      });
-
-      // Safety transition fallback if TTS completion lags
-      setTimeout(() => {
-        router.push(`/exam?set=${route.param}`);
-      }, 2000);
-    },
-    [isHindi, router, speakText]
-  );
 
   // Alt+M Keyboard Shortcut to toggle Voice Router
   useEffect(() => {

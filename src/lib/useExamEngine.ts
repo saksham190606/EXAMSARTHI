@@ -172,13 +172,10 @@ export function useExamEngine(
   }, []);
 
   const goToNext = useCallback(() => {
-    // 1. STRICT LOCK CHECK
     if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
       return;
     }
 
-    // 2. ENGAGE LOCK
     if (typeof window !== 'undefined') {
       (window as any).isNavigatingRightNow = true;
     }
@@ -210,13 +207,10 @@ export function useExamEngine(
   }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
 
   const goToPrevious = useCallback(() => {
-    // 1. STRICT LOCK CHECK
     if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
       return;
     }
 
-    // 2. ENGAGE LOCK
     if (typeof window !== 'undefined') {
       (window as any).isNavigatingRightNow = true;
     }

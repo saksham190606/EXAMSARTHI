@@ -10,6 +10,7 @@ import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
 import { getHighFidelityVoice, sanitizeExamTextForSpeech } from '@/lib/voice/speech-synthesis';
+import { routeVoiceCommand } from '@/lib/voice/commandRouter';
 import { cn } from '@/lib/utils';
 
 import { 
@@ -269,10 +270,18 @@ export default function ExamSarthiHero() {
 
           // 5. Execute Action based on AI's structured response
           if (data.intent === 'NAVIGATE') {
-            const dest = data.target || '/dashboard';
-            const pageName = dest.replace('/', '');
-            speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
-            router.push(dest);
+            const target = (data.target || 'dashboard').toLowerCase();
+            const routed = routeVoiceCommand(target === 'home' ? 'dashboard' : target, 'global-nav');
+            if (routed.handled && routed.path) {
+              const pageName = routed.path === '/dashboard' ? 'dashboard' : routed.path === '/exam' ? 'exam' : routed.path === '/practice' ? 'practice' : routed.path === '/settings' ? 'settings' : 'login';
+              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
+              router.push(routed.path);
+            } else {
+              const dest = data.target || '/dashboard';
+              const pageName = dest.replace('/', '');
+              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
+              router.push(dest);
+            }
           } else if (data.intent === 'EXAM_LAUNCH') {
             speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : `Launching exam`);
             launchExam(data.target);

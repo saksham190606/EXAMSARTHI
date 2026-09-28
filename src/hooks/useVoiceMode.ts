@@ -15,6 +15,7 @@ import {
   stopListening,
   requestMicAccess,
 } from '@/lib/voice/useVoiceEngine';
+import { routeVoiceCommand } from '@/lib/voice/commandRouter';
 
 export type VoiceStatus =
   | 'Ready'
@@ -224,6 +225,10 @@ export function useVoiceMode({
   // 3. Question Read-Out Adaptation by Type:
   // Update TTS reader to announce the format clearly so visually impaired candidates know how to answer
   const readQuestion = useCallback((index: number) => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
+
     const questionsList = questionsRef.current;
     const targetQ = (questionsList && questionsList[index]) ? questionsList[index] : currentQuestionRef.current;
     if (!targetQ) return;
@@ -351,7 +356,82 @@ export function useVoiceMode({
     }
 
     const words = transcript.split(/\s+/);
+    const routed = routeVoiceCommand(transcript, 'exam');
     const phoneticMatch = matchTokenToCommand(transcript);
+
+    if (routed.handled) {
+      lastCommandTimeRef.current = now;
+      playVoiceFeedbackChime();
+      const feedback = routed.readback || 'Command recognized';
+      setLastActionFeedback(`✓ ${feedback}`);
+      announceToScreenReader(feedback);
+      if (routed.type === 'next') {
+        handleNextQuestion();
+        return;
+      }
+      if (routed.type === 'previous') {
+        handlePrevQuestion();
+        return;
+      }
+      if (routed.type === 'clear-answer') {
+        handleClearAnswer();
+        return;
+      }
+      if (routed.type === 'flag-unflag') {
+        handleToggleFlag();
+        return;
+      }
+      if (routed.type === 'repeat-question') {
+        readCurrentQuestion();
+        return;
+      }
+      if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
+        const q = currentQuestionRef.current;
+        if (q && q.options && routed.optionIndex >= 0 && routed.optionIndex < q.options.length) {
+          handleSelectOption(routed.optionIndex);
+          return;
+        }
+      }
+      if (routed.type === 'submit') {
+        handleSubmitTrigger();
+        return;
+      }
+      if (routed.type === 'describe-diagram') {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('examsarthi-voice-action', { detail: { action: 'describe-diagram' } }));
+        }
+        return;
+      }
+      if (routed.type === 'pause' || routed.type === 'stop') {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try { window.speechSynthesis.cancel(); } catch {}
+        }
+        return;
+      }
+      if (routed.type === 'resume') {
+        readCurrentQuestion();
+        return;
+      }
+      if (routed.type === 'confirm' || routed.type === 'cancel') {
+        if (pendingActionRef.current) {
+          if (routed.type === 'confirm') {
+            const confMsg = isHi ? 'परीक्षा सबमिट कर दी गई है।' : 'Exam submitted.';
+            setPendingAction(null);
+            pendingActionRef.current = null;
+            if (onCloseSubmitDialogRef.current) onCloseSubmitDialogRef.current();
+            actionsRef.current.submitExam();
+            speakText(confMsg, speechLang, () => setIsActive(false));
+            return;
+          }
+          const cancelMsg = isHi ? 'कार्रवाई रद्द की गई।' : 'Submission cancelled.';
+          setPendingAction(null);
+          pendingActionRef.current = null;
+          if (onCloseSubmitDialogRef.current) onCloseSubmitDialogRef.current();
+          speakText(cancelMsg, speechLang, () => startListening(speechLang));
+          return;
+        }
+      }
+    }
 
     // =========================================================================
     // 2. CORE VOICE EXAM COMMANDS (Take immediate precedence across all types)
@@ -683,21 +763,20 @@ export function useVoiceMode({
     isActiveRef.current = true;
     userManuallyMutedRef.current = false;
 
-    // Trigger non-blocking mic warmup
     requestMicAccess().catch(() => {});
 
-    // Auto-read question 1 after short buffer
     const timer = setTimeout(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       readQuestion(state.currentQuestionIndex);
     }, 400);
 
     return () => clearTimeout(timer);
   }, [currentQuestion, readQuestion, state.currentQuestionIndex]);
 
-  // Auto-read question whenever question index changes
   useEffect(() => {
     if (!hasInitializedMountRef.current) return;
     if (userManuallyMutedRef.current || !isActive) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
 
     if (lastReadIndexRef.current !== state.currentQuestionIndex) {
       lastReadIndexRef.current = state.currentQuestionIndex;

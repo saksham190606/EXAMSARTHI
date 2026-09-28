@@ -126,7 +126,6 @@ export function getHighFidelityVoice(lang = 'en-US', preferredVoiceURI?: string 
   const voices = getAvailableVoices();
   if (!voices || voices.length === 0) return null;
 
-  // 1. Check preferred voice URI
   if (preferredVoiceURI) {
     const match = voices.find((v) => v.voiceURI === preferredVoiceURI);
     if (match) return match;
@@ -141,7 +140,6 @@ export function getHighFidelityVoice(lang = 'en-US', preferredVoiceURI?: string 
     return voices[0] || null;
   }
 
-  // 2. Try priority search order
   for (const query of searchOrder) {
     const qLower = query.toLowerCase();
     const matched = langVoices.find((v) => 
@@ -151,16 +149,23 @@ export function getHighFidelityVoice(lang = 'en-US', preferredVoiceURI?: string 
     if (matched) return matched;
   }
 
-  // 3. Fallback to any natural/online voice in language
   const naturalFallback = langVoices.find((v) => {
     const n = v.name.toLowerCase();
     return n.includes("natural") || n.includes("online") || n.includes("google");
   });
   if (naturalFallback) return naturalFallback;
 
-  // 4. Return first language voice
   return langVoices[0];
 }
+
+export function getBestVoice(lang = 'en-IN', preferredVoiceURI?: string | null): SpeechSynthesisVoice | null {
+  const resolvedLang = (lang || 'en-IN').toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-US';
+  const voice = getHighFidelityVoice(resolvedLang, preferredVoiceURI);
+  if (voice) return voice;
+  return getAvailableVoices()[0] || null;
+}
+
+export const hindiVoiceMissing = false;
 
 /**
  * Exam Text-to-Phonetics Pre-Processor
