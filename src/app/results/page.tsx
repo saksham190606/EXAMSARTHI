@@ -30,12 +30,14 @@ import { Badge } from '@/components/ui/badge';
 
 import { useSearchParams } from 'next/navigation';
 import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
+import { evaluateAnswer } from '@/lib/questionEvaluation';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
+import { QuestionReview } from '@/components/results/QuestionReview';
 import dynamic from 'next/dynamic';
 
 const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), { 
@@ -90,6 +92,7 @@ function ResultsContent() {
   const [loadingReview, setLoadingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [isWalkthroughActive, setIsWalkthroughActive] = useState<boolean>(false);
+  const [currentWalkthroughIndex, setCurrentWalkthroughIndex] = useState<number>(0);
   const { t } = useTranslation();
 
   const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
@@ -260,6 +263,30 @@ function ResultsContent() {
     const calculated = calculateResults(examQuestions, stateToProcess, 900);
     setResults(calculated);
 
+    // Populate reviewQuestions for local fallback if not already set from remote attempt
+    if (!attemptId && examQuestions.length > 0) {
+      setReviewQuestions(examQuestions.map((q, idx) => {
+        const anyQ = q as any;
+        const rawCorrect = anyQ.correctAnswerId || anyQ.correctAnswerIds || anyQ.correctAnswer || 'N/A';
+        const userAns = stateToProcess.answers[q.id];
+        const isCorr = evaluateAnswer(q, userAns);
+
+        return {
+          questionId: q.id,
+          orderIndex: idx + 1,
+          text: q.text,
+          type: q.type || 'multiple-choice',
+          subject: q.subject || 'General Assessment',
+          userAnswer: userAns || 'Not Answered',
+          correctAnswer: Array.isArray(rawCorrect) ? rawCorrect.join(', ') : String(rawCorrect),
+          isCorrect: isCorr,
+          isAnswered: Boolean(userAns),
+          explanation: (q as any).explanation || '',
+          options: (q as any).options || []
+        };
+      }));
+    }
+
     // Personalization & History Pipeline
     const newProfile = analyzePerformance(calculated, examQuestions, stateToProcess.answers);
     setProfile(newProfile);
@@ -280,7 +307,64 @@ function ResultsContent() {
     const recs = generateRecommendations(newProfile, history);
     setRecommendations(recs);
 
-  }, [finalState]);
+  }, [finalState, attemptId]);
+
+  // Walkthrough Results data mapping for AI Voice Review Walkthrough
+  const walkthroughResults = useMemo(() => {
+    return {
+      ...(results || {}),
+      questions: reviewQuestions.map((q, idx) => ({
+        id: q.questionId || String(idx),
+        questionText: (q as any).questionText || q.text || `Question ${idx + 1}`,
+        text: (q as any).questionText || q.text || `Question ${idx + 1}`,
+        userAnswer: q.userAnswer !== undefined && q.userAnswer !== null ? String(q.userAnswer) : 'Not Answered',
+        correctAnswer: q.correctAnswer !== undefined && q.correctAnswer !== null ? String(q.correctAnswer) : 'N/A',
+        isCorrect: typeof q.isCorrect === 'boolean' ? q.isCorrect : (q.userAnswer === q.correctAnswer),
+        explanation: q.explanation || '',
+        options: q.options || []
+      }))
+    };
+  }, [results, reviewQuestions]);
+
+  // Fail-proof voice navigation listener for Walkthrough
+  useEffect(() => {
+    const handleVoiceCommand = (e: any) => {
+      const { intent, target } = e.detail || {};
+      
+      if (intent === 'CONTROL' || !intent) {
+        if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
+          if (typeof window !== 'undefined') {
+            window.speechSynthesis?.cancel();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          // Revert to the dashboard results view
+          setIsWalkthroughActive(false); 
+        } else if (target === 'PREVIOUS') {
+          setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
+        } else if (target === 'NEXT') {
+          const totalQuestions = walkthroughResults?.questions?.length || (results as any)?.questions?.length || 1;
+          setCurrentWalkthroughIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
+        } else if (target === 'REVIEW' || target === 'START') {
+          setIsWalkthroughActive(true);
+        }
+      }
+    };
+
+    const handleExplicitStop = () => {
+      if (typeof window !== 'undefined') {
+        window.speechSynthesis?.cancel();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      setIsWalkthroughActive(false);
+    };
+
+    window.addEventListener('ai_voice_command', handleVoiceCommand);
+    window.addEventListener('examsarthi_review_stop', handleExplicitStop);
+    return () => {
+      window.removeEventListener('ai_voice_command', handleVoiceCommand);
+      window.removeEventListener('examsarthi_review_stop', handleExplicitStop);
+    };
+  }, [results, walkthroughResults]);
 
   // Extract weak topics directly from profile
   const weakTopics = useMemo<WeakTopicItem[]>(() => {
@@ -442,17 +526,26 @@ function ResultsContent() {
         </Badge>
       </nav>
 
-      {/* AI Tutor Performance Overview */}
-      {examData && (
-        <AITutorCard
-          results={examData}
-          startReviewWalkthrough={() => {
-            setIsWalkthroughActive(true);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
-            }
-          }}
-        />
+      {/* AI Tutor Summary Card OR Question Review Walkthrough Panel */}
+      {isWalkthroughActive ? (
+        // THE PANEL MUST BE MOUNTED HERE
+        <QuestionReview 
+          results={walkthroughResults} 
+          questions={reviewQuestions}
+          currentWalkthroughIndex={currentWalkthroughIndex}
+          setCurrentWalkthroughIndex={setCurrentWalkthroughIndex}
+          setIsWalkthroughActive={setIsWalkthroughActive}
+          onStop={() => setIsWalkthroughActive(false)}
+          onClose={() => setIsWalkthroughActive(false)}
+        /> 
+      ) : (
+        // THE SUMMARY CARD
+        examData && (
+          <AITutorCard 
+            results={examData} 
+            startReviewWalkthrough={() => setIsWalkthroughActive(true)} 
+          />
+        )
       )}
 
       {/* SECTION A — RESULT HEADER */}
@@ -687,6 +780,20 @@ function ResultsContent() {
           isLoading={loadingReview}
           error={reviewError}
           isWalkthroughActive={isWalkthroughActive}
+          onStop={() => {
+            setIsWalkthroughActive(false);
+            if (typeof window !== 'undefined') {
+              window.speechSynthesis?.cancel();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          onStopWalkthrough={() => {
+            setIsWalkthroughActive(false);
+            if (typeof window !== 'undefined') {
+              window.speechSynthesis?.cancel();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
           onRetry={() => {
             if (remoteAttempt?.id) {
               fetchQuestionReview(remoteAttempt.id);
@@ -978,5 +1085,3 @@ function ResultsContent() {
     </div>
   );
 }
-
-

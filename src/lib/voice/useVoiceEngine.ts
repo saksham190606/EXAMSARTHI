@@ -468,6 +468,40 @@ export function startListening(
       transcriptSubscribers.forEach((cb) => {
         try { cb(finalTranscript); } catch (_) {}
       });
+
+      const lower = transcript.toLowerCase().trim();
+      const rawLower = (raw || '').toLowerCase().trim();
+      const finalLower = (finalTranscript || '').toLowerCase().trim();
+      const matches = (w: string) => lower.includes(w) || rawLower.includes(w) || finalLower.includes(w);
+
+      if (matches('stop') || matches('exit')) {
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'STOP' } 
+        }));
+        return; 
+      }
+      if (matches('previous') || matches('back')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+        }));
+        return;
+      }
+      if (matches('next')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'NEXT' } 
+        }));
+        return;
+      }
+      if (matches('review') || matches('start')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'REVIEW' } 
+        }));
+        return;
+      }
+
+      // Broadcast recognized speech through AI Intent router
+      fetchAIIntent(finalTranscript).catch(() => {});
     };
 
     recognition.onerror = (event: any) => {
@@ -589,14 +623,49 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     return { intent: 'UNKNOWN', target: '' };
   }
 
+  const lowerTranscript = transcript.toLowerCase().trim();
+  
+  if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit')) {
+    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'STOP' } 
+    }));
+    return { intent: 'CONTROL', target: 'STOP' };
+  }
+  if (lowerTranscript.includes('previous') || lowerTranscript.includes('back')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+    }));
+    return { intent: 'CONTROL', target: 'PREVIOUS' };
+  }
+  if (lowerTranscript.includes('next')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'NEXT' } 
+    }));
+    return { intent: 'CONTROL', target: 'NEXT' };
+  }
+  if (lowerTranscript.includes('review') || lowerTranscript.includes('start')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'REVIEW' } 
+    }));
+    return { intent: 'CONTROL', target: 'REVIEW' };
+  }
+
   try {
     const res = await fetch('/api/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript }),
     });
-    if (!res.ok) return { intent: 'UNKNOWN', target: '' };
     const data = await res.json();
+
+    // Dispatches the exact intent and target globally
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: data.intent, target: data.target } 
+      }));
+    }
+
     return { intent: data.intent || 'UNKNOWN', target: data.target || '' };
   } catch (err) {
     console.error('[VoiceEngine] AI Intent Routing failed:', err);

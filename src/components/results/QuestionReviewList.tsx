@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 import { getHighFidelityVoice } from '@/lib/voice/speech-synthesis';
+import { fetchAIIntent } from '@/lib/voice/useVoiceEngine';
 
 export interface QuestionReviewItem {
   questionId: string;
@@ -51,6 +52,8 @@ interface QuestionReviewListProps {
   error?: string | null;
   onRetry?: () => void;
   isWalkthroughActive?: boolean;
+  onStop?: () => void;
+  onStopWalkthrough?: () => void;
 }
 
 /**
@@ -209,6 +212,8 @@ export function QuestionReviewList({
   error = null,
   onRetry,
   isWalkthroughActive: externalWalkthroughActive = false,
+  onStop,
+  onStopWalkthrough,
 }: QuestionReviewListProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
@@ -230,12 +235,14 @@ export function QuestionReviewList({
   const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isAudioReviewActiveRef = useRef(isAudioReviewActive);
+  const isWalkthroughActiveRef = useRef(isWalkthroughActive);
   const activeReviewIndexRef = useRef(activeReviewIndex);
   const isPausedRef = useRef(isPaused);
   const isSpeakingRef = useRef(isSpeaking);
   const isWaitingForConsentRef = useRef(isWaitingForConsent);
   const isHindiRef = useRef(isHindi);
   const isTransitioningRef = useRef<boolean>(false);
+  const isStoppingRef = useRef<boolean>(false);
 
   // Background Listening & Barge-In Refs
   const recognitionRef = useRef<any>(null);
@@ -246,6 +253,10 @@ export function QuestionReviewList({
   useEffect(() => {
     isAudioReviewActiveRef.current = isAudioReviewActive;
   }, [isAudioReviewActive]);
+
+  useEffect(() => {
+    isWalkthroughActiveRef.current = isWalkthroughActive;
+  }, [isWalkthroughActive]);
 
   useEffect(() => {
     activeReviewIndexRef.current = activeReviewIndex;
@@ -340,23 +351,41 @@ export function QuestionReviewList({
 
   // Stop walkthrough helper
   const stopAudioWalkthrough = useCallback(() => {
-    clearAudioTimers();
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch (e) {}
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+    try {
+      clearAudioTimers();
+      if (typeof window !== 'undefined') {
+        try {
+          if (window.speechSynthesis) window.speechSynthesis.cancel();
+        } catch (e) {}
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.abort();
+        } catch (e) {}
+      }
+      activeUtteranceRef.current = null;
+      if (typeof window !== 'undefined') {
+        (window as any).__reviewUtterance = null;
+      }
+      setIsSpeaking(false);
+      setIsAudioReviewActive(false);
+      setIsWalkthroughActive(false);
+      setActiveReviewIndex(-1);
+      setIsPaused(false);
+      setIndividualPlayingId(null);
+
+      // Call parent exit callbacks to return to the results dashboard
+      if (typeof onStop === 'function') onStop();
+      if (typeof onStopWalkthrough === 'function') onStopWalkthrough();
+    } finally {
+      isStoppingRef.current = false;
     }
-    activeUtteranceRef.current = null;
-    if (typeof window !== 'undefined') {
-      (window as any).__reviewUtterance = null;
-    }
-    setIsSpeaking(false);
-    setIsAudioReviewActive(false);
-    setIsWalkthroughActive(false);
-    setActiveReviewIndex(-1);
-    setIsPaused(false);
-    setIndividualPlayingId(null);
-  }, [clearAudioTimers]);
+  }, [clearAudioTimers, onStop, onStopWalkthrough]);
 
   // Explicitly start or re-arm the microphone listener safely
   const startListeningSafely = useCallback(() => {
@@ -519,6 +548,12 @@ export function QuestionReviewList({
       readQuestionReview(0, true);
     }
   }, [externalWalkthroughActive, isAudioReviewActive, filteredQuestions.length, readQuestionReview]);
+
+  useEffect(() => {
+    if (!externalWalkthroughActive && (isWalkthroughActive || isAudioReviewActive)) {
+      stopAudioWalkthrough();
+    }
+  }, [externalWalkthroughActive, isWalkthroughActive, isAudioReviewActive, stopAudioWalkthrough]);
 
   useEffect(() => {
     const handleStartEvent = () => {
@@ -689,6 +724,52 @@ export function QuestionReviewList({
 
   const goToPreviousQuestion = handlePrevQuestionReview;
   const goToNextQuestion = handleNextQuestionReview;
+  const handleNextQuestion = handleNextQuestionReview;
+  const handlePrevQuestion = handlePrevQuestionReview;
+  const readCurrentQuestion = handleRepeatQuestionReview;
+
+  // Global AI Voice Command Listener for Results Walkthrough
+  useEffect(() => {
+    const handleVoiceCommand = (e: any) => {
+      const { intent, target } = e.detail || {};
+      const normalizedTarget = (target || '').toUpperCase();
+
+      if (intent === 'CONTROL' || !intent) {
+        if (normalizedTarget === 'NEXT') {
+          handleNextQuestion();
+        } else if (normalizedTarget === 'PREVIOUS' || normalizedTarget === 'PREV') {
+          handlePrevQuestion();
+        } else if (normalizedTarget === 'STOP' || normalizedTarget === 'EXIT' || normalizedTarget === 'QUIT') {
+          stopAudioWalkthrough();
+        } else if (normalizedTarget === 'PAUSE') {
+          handleTogglePause();
+        } else if (normalizedTarget === 'REPEAT' || normalizedTarget === 'AGAIN') {
+          readCurrentQuestion();
+        } else if (normalizedTarget === 'RESUME') {
+          handleResume();
+        }
+      }
+    };
+
+    const handleNextEvent = () => handleNextQuestion();
+    const handlePrevEvent = () => handlePrevQuestion();
+    const handleStopEvent = () => stopAudioWalkthrough();
+    const handleRepeatEvent = () => readCurrentQuestion();
+
+    window.addEventListener('ai_voice_command', handleVoiceCommand);
+    window.addEventListener('examsarthi_review_next', handleNextEvent);
+    window.addEventListener('examsarthi_review_prev', handlePrevEvent);
+    window.addEventListener('examsarthi_review_stop', handleStopEvent);
+    window.addEventListener('examsarthi_review_repeat', handleRepeatEvent);
+
+    return () => {
+      window.removeEventListener('ai_voice_command', handleVoiceCommand);
+      window.removeEventListener('examsarthi_review_next', handleNextEvent);
+      window.removeEventListener('examsarthi_review_prev', handlePrevEvent);
+      window.removeEventListener('examsarthi_review_stop', handleStopEvent);
+      window.removeEventListener('examsarthi_review_repeat', handleRepeatEvent);
+    };
+  }, [handleNextQuestionReview, handlePrevQuestionReview, stopAudioWalkthrough, handleRepeatQuestionReview, handleResume, handleTogglePause]);
 
   // 4. Individual Question Explanation Handler
   const handlePlayIndividualQuestion = useCallback((q: QuestionReviewItem) => {
@@ -774,7 +855,7 @@ export function QuestionReviewList({
         };
 
         recognition.onresult = (event: any) => {
-          if (!isAudioReviewActiveRef.current && !isWaitingForConsentRef.current && !isSpeakingRef.current) return;
+          if (!isAudioReviewActiveRef.current && !isWalkthroughActiveRef.current && !isWaitingForConsentRef.current && !isSpeakingRef.current) return;
           if (!event.results || !event.results[0] || !event.results[0][0]) return;
 
           const rawTranscript = event.results[event.results.length - 1]?.[0]?.transcript || event.results[0][0].transcript;
@@ -785,7 +866,13 @@ export function QuestionReviewList({
           const isNext = matchesList(cleanCmd, nextCommands);
           const isPrev = matchesList(cleanCmd, prevCommands);
           const isRepeat = matchesList(cleanCmd, repeatCommands);
-          const isStop = matchesList(cleanCmd, stopCommands);
+          const isStop = matchesList(cleanCmd, stopCommands) || cleanCmd.includes("stop") || cleanCmd.includes("exit") || cleanCmd.includes("quit");
+
+          // CRITICAL: Stop voice command executes immediately with zero cooldown lock
+          if (isStop) {
+            handleStop();
+            return;
+          }
 
           // Barge-in: If the system is currently speaking, ONLY accept explicit review barge-in commands!
           // Filter out room echo / TTS audio that does not match an explicit review control keyword.
@@ -817,6 +904,11 @@ export function QuestionReviewList({
           } else if (isStop) {
             lastActionTimestampRef.current = now;
             handleStop();
+          } else if (cleanCmd && cleanCmd.length > 1) {
+            // Asynchronously query AI Intent router for complex natural language commands
+            fetchAIIntent(cleanCmd).catch((err) => {
+              console.warn('[ReviewIntent] Failed to resolve AI intent:', err);
+            });
           }
         };
 

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     Their strong areas: ${correctTopics}. Their weak areas: ${weakTopics}.
     
     Write a very short, conversational, encouraging summary (maximum 3 sentences). 
-    End with exactly this sentence: "When you are ready, say 'Next' to begin reviewing your questions one by one."
+    End with exactly this sentence: "When you are ready, say 'Review' to begin reviewing your questions one by one."
     Do not use emojis, asterisks, or markdown. Use plain spoken text.`;
 
     const chatCompletion = await groq.chat.completions.create({
@@ -25,6 +25,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ summary: chatCompletion.choices[0]?.message?.content });
   } catch (error) {
-    return NextResponse.json({ summary: "Exam complete. Say 'Next' to review your answers." });
+    return NextResponse.json({ summary: "Exam complete. Say 'Review' to review your answers." });
   }
 }
