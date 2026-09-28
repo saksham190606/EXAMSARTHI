@@ -91,6 +91,7 @@ function ResultsContent() {
   const [loadingReview, setLoadingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [isWalkthroughActive, setIsWalkthroughActive] = useState<boolean>(false);
+  const [currentWalkthroughIndex, setCurrentWalkthroughIndex] = useState<number>(0);
   const { t } = useTranslation();
 
   const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
@@ -340,52 +341,31 @@ function ResultsContent() {
     };
   }, [reviewQuestions]);
 
-  // Global listener specifically for the "REVIEW" command to trigger the walkthrough
+  // Fail-proof voice navigation listener for Walkthrough
   useEffect(() => {
-    const handleHandoff = (e: any) => {
-      const { intent, target } = e.detail || {};
-      const upperTarget = (target || '').toUpperCase();
-      // Trigger when user says "Review"
-      if (intent === 'CONTROL' && (upperTarget === 'REVIEW' || upperTarget === 'START')) {
+    const handleNav = (e: any) => {
+      const { target } = e.detail || {};
+      const upper = (target || '').toUpperCase();
+      
+      if (upper === 'STOP' || upper === 'EXIT' || upper === 'PAUSE') {
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        // CRITICAL: This unmounts the review panel and returns to the Results page
+        setIsWalkthroughActive(false); 
+      } else if (upper === 'PREVIOUS' || upper === 'PREV' || upper === 'BACK') {
+        // Decrements question, stops at 0 (Question 1)
+        setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0));
+      } else if (upper === 'NEXT') {
+        // Increments question, stops at max length
+        const total = walkthroughResults?.questions?.length || 1;
+        setCurrentWalkthroughIndex(prev => Math.min(prev + 1, total - 1));
+      } else if (upper === 'REVIEW' || upper === 'START') {
         setIsWalkthroughActive(true);
       }
     };
-    window.addEventListener('ai_voice_command', handleHandoff);
-    return () => window.removeEventListener('ai_voice_command', handleHandoff);
-  }, []);
 
-  // Synchronize Walkthrough State with Global AI Voice Commands
-  useEffect(() => {
-    const handleVoiceCommand = (e: any) => {
-      const { intent, target } = e.detail || {};
-      const upperTarget = (target || '').toUpperCase();
-
-      if (intent === 'CONTROL') {
-        if (upperTarget === 'NEXT') {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi_review_next'));
-          }
-        } else if (upperTarget === 'PREVIOUS' || upperTarget === 'PREV') {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi_review_prev'));
-          }
-        } else if (upperTarget === 'STOP' || upperTarget === 'PAUSE' || upperTarget === 'EXIT') {
-          setIsWalkthroughActive(false);
-          if (typeof window !== 'undefined') {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-            window.dispatchEvent(new CustomEvent('examsarthi_review_stop'));
-          }
-        } else if (upperTarget === 'REPEAT') {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi_review_repeat'));
-          }
-        }
-      }
-    };
-
-    window.addEventListener('ai_voice_command', handleVoiceCommand);
-    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
-  }, []);
+    window.addEventListener('ai_voice_command', handleNav);
+    return () => window.removeEventListener('ai_voice_command', handleNav);
+  }, [walkthroughResults]);
 
   // Extract weak topics directly from profile
   const weakTopics = useMemo<WeakTopicItem[]>(() => {
@@ -538,6 +518,8 @@ function ResultsContent() {
         <QuestionReview 
           results={walkthroughResults} 
           questions={reviewQuestions}
+          currentWalkthroughIndex={currentWalkthroughIndex}
+          setCurrentWalkthroughIndex={setCurrentWalkthroughIndex}
           setIsWalkthroughActive={setIsWalkthroughActive}
           onClose={() => setIsWalkthroughActive(false)}
         /> 

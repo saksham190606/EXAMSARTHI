@@ -35,6 +35,8 @@ export interface QuestionReviewProps {
     }>;
   };
   questions?: any[];
+  currentWalkthroughIndex?: number;
+  setCurrentWalkthroughIndex?: React.Dispatch<React.SetStateAction<number>>;
   isWalkthroughActive?: boolean;
   setIsWalkthroughActive?: (active: boolean) => void;
   onClose?: () => void;
@@ -43,12 +45,16 @@ export interface QuestionReviewProps {
 export function QuestionReview({
   results: propResults,
   questions: propQuestions,
+  currentWalkthroughIndex: propIndex,
+  setCurrentWalkthroughIndex: propSetIndex,
   isWalkthroughActive = true,
   setIsWalkthroughActive: propSetIsWalkthroughActive,
   onClose,
   ...otherProps
 }: QuestionReviewProps & Record<string, any>) {
-  const [currentWalkthroughIndex, setCurrentWalkthroughIndex] = useState(0);
+  const [internalIndex, setInternalIndex] = useState(0);
+  const currentWalkthroughIndex = propIndex !== undefined ? propIndex : internalIndex;
+  const setCurrentWalkthroughIndex = propSetIndex || setInternalIndex;
 
   // Normalize questions array
   const normalizedQuestions = useMemo(() => {
@@ -108,22 +114,16 @@ export function QuestionReview({
   // NAVIGATION: Handle NEXT, PREVIOUS, STOP, PAUSE voice commands
   useEffect(() => {
     const handleNavigation = (e: any) => {
-      const { intent, target } = e.detail || {};
-      if (intent !== 'CONTROL') return;
-
+      const { target } = e.detail || {};
       const upper = (target || '').toUpperCase();
 
-      if (target === 'NEXT' || upper === 'NEXT') {
+      if (upper === 'NEXT') {
         setCurrentWalkthroughIndex(prev => Math.min(prev + 1, (results?.questions?.length || 1) - 1));
-      } else if (target === 'PREVIOUS' || upper === 'PREVIOUS' || upper === 'PREV') {
+      } else if (upper === 'PREVIOUS' || upper === 'PREV' || upper === 'BACK') {
         setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0));
-      } else if (target === 'STOP' || target === 'PAUSE' || upper === 'STOP' || upper === 'PAUSE' || upper === 'EXIT') {
+      } else if (upper === 'STOP' || upper === 'PAUSE' || upper === 'EXIT') {
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        
-        // If this component takes a prop to close itself (e.g., onClose={() => setIsWalkthroughActive(false)}), call it:
         if (typeof onClose === 'function') onClose();
-        
-        // OR if the state is local:
         if (typeof setIsWalkthroughActive === 'function') setIsWalkthroughActive(false);
       } else if (upper === 'REPEAT') {
         if (results?.questions && results.questions[currentWalkthroughIndex]) {

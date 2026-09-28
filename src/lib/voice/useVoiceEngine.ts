@@ -437,27 +437,24 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
         try { cb(finalTranscript); } catch (_) {}
       });
 
-      const lowerTranscript = transcript.toLowerCase().trim();
+      const lower = (raw || transcript || '').toLowerCase().trim();
       
-      // SLEDGEHAMMER BYPASS: If the user says "review", instantly trigger the panel and skip the AI.
-      if (lowerTranscript.includes('review') || finalTranscript.toLowerCase().includes('review')) {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'REVIEW' } 
-          }));
-        }
-        return; // CRITICAL: Stop execution here so it does NOT go to Groq
+      if (lower.includes('stop') || lower.includes('exit')) {
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'STOP', intent: 'CONTROL' } }));
+        return; // Skips AI completely
       }
-
-      // SLEDGEHAMMER BYPASS: If the user says "stop" or "exit", instantly close panel and kill TTS.
-      if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit') || finalTranscript.toLowerCase().includes('stop') || finalTranscript.toLowerCase().includes('exit')) {
-        if (typeof window !== 'undefined') {
-          window.speechSynthesis.cancel(); // Instantly kill any ongoing TTS narration
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'STOP' } 
-          }));
-        }
-        return; // CRITICAL: Stop execution so it does not ping Groq
+      if (lower.includes('previous') || lower.includes('back')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PREVIOUS', intent: 'CONTROL' } }));
+        return;
+      }
+      if (lower.includes('next')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'NEXT', intent: 'CONTROL' } }));
+        return;
+      }
+      if (lower.includes('review') || lower.includes('start')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'REVIEW', intent: 'CONTROL' } }));
+        return;
       }
 
       // Broadcast recognized speech through AI Intent router
@@ -588,25 +585,22 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
 
   const lowerTranscript = transcript.toLowerCase().trim();
   
-  // SLEDGEHAMMER BYPASS: If the user says "review", instantly trigger the panel and skip the AI.
-  if (lowerTranscript.includes('review')) {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'REVIEW' } 
-      }));
-    }
-    return { intent: 'CONTROL', target: 'REVIEW' }; // CRITICAL: Stop execution here so it does NOT go to Groq
-  }
-
-  // SLEDGEHAMMER BYPASS: If the user says "stop" or "exit", instantly close panel and kill TTS.
   if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit')) {
-    if (typeof window !== 'undefined') {
-      window.speechSynthesis.cancel(); // Instantly kill any ongoing TTS narration
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'STOP' } 
-      }));
-    }
-    return { intent: 'CONTROL', target: 'STOP' }; // CRITICAL: Stop execution so it does not ping Groq
+    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'STOP', intent: 'CONTROL' } }));
+    return { intent: 'CONTROL', target: 'STOP' };
+  }
+  if (lowerTranscript.includes('previous') || lowerTranscript.includes('back')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PREVIOUS', intent: 'CONTROL' } }));
+    return { intent: 'CONTROL', target: 'PREVIOUS' };
+  }
+  if (lowerTranscript.includes('next')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'NEXT', intent: 'CONTROL' } }));
+    return { intent: 'CONTROL', target: 'NEXT' };
+  }
+  if (lowerTranscript.includes('review') || lowerTranscript.includes('start')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'REVIEW', intent: 'CONTROL' } }));
+    return { intent: 'CONTROL', target: 'REVIEW' };
   }
 
   try {
