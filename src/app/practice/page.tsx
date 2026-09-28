@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   BookOpen,
   Clock,
@@ -14,6 +14,9 @@ import {
   X,
   SlidersHorizontal,
 } from "lucide-react"
+
+import { useVoiceEngine, speakText } from "@/lib/voice/useVoiceEngine"
+import { useAccessibilityStore } from "@/store/useAccessibilityStore"
 
 import { PracticeSets } from "@/lib/mockData"
 import { Button } from "@/components/ui/button"
@@ -51,13 +54,18 @@ const SUBJECT_CATEGORIES = [
 ]
 
 function getSubjectDisplayName(slug: string): string {
-  const found = SUBJECT_CATEGORIES.find((s) => s.id === slug)
+  const found = SUBJECT_CATEGORIES.find(
+    (s) => s.id === slug || s.label.toLowerCase() === slug.toLowerCase()
+  )
   return found ? found.label : slug
 }
 
 function PracticeContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useTranslation()
+  const language = useAccessibilityStore((s) => s.language)
+  const isHindi = language === 'hi'
 
   const urlSubject = searchParams?.get("subject") || "all"
   const urlTopic = searchParams?.get("topic") || ""
@@ -74,12 +82,21 @@ function PracticeContent() {
   const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
 
   // 1. Reset Child Filters on Subject Change
-  const handleSubjectSelect = (newSubject: string) => {
-    setSubjectFilter(newSubject);
+  const handleSubjectSelect = React.useCallback((newSubject: string) => {
+    const foundCat = SUBJECT_CATEGORIES.find(
+      (c) => c.label.toLowerCase() === newSubject.toLowerCase() || c.id === newSubject.toLowerCase()
+    )
+    const resolvedId = foundCat ? foundCat.id : newSubject
+    setSubjectFilter(resolvedId)
     // Force clear incompatible child filters
-    setTopicFilter(""); 
-    setSearchQuery("");
-  };
+    setTopicFilter("") 
+    setSearchQuery("")
+  }, [])
+
+  const triggerPracticeLaunch = React.useCallback((setId: string) => {
+    const targetId = setId === 'gk-geography' ? 'p2' : setId
+    router.push(`/exam?set=${targetId}`)
+  }, [router])
 
   // Keep state synchronized with URL search params (e.g. from recommendation clicks)
   React.useEffect(() => {
@@ -192,6 +209,99 @@ function PracticeContent() {
     setSubjectFilter("all")
     setDifficultyFilter("all")
   }
+
+  // Ref to access live filteredSets in voice callbacks without stale closures
+  const filteredSetsRef = React.useRef(filteredSets)
+  React.useEffect(() => {
+    filteredSetsRef.current = filteredSets
+  }, [filteredSets])
+
+  // 3. Implementation Logic (with Debounce & Mutex Guard)
+  const lastCommandTimeRef = React.useRef(0)
+
+  const handlePracticeVoiceCommand = React.useCallback((rawTranscript: string) => {
+    // 1. Mutex Guard: Ignore if system is speaking (Prevents Echo Loop)
+    if (typeof window !== 'undefined' && (window as any).isSystemSpeaking) return;
+
+    // 2. Debounce Guard: Prevent multi-fire (1.5s cooldown)
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < 1500) return;
+
+    // 3. Clean Transcript
+    const text = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+
+    // --- SUBJECT FILTERING ---
+    // QUANTITATIVE APTITUDE: ["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"]
+    if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("Quantitative Aptitude");
+      speakText("Filtering by Quantitative Aptitude");
+      return;
+    }
+    // REASONING: ["reasoning", "logical", "logic", "रीजनिंग", "तर्क"]
+    if (["reasoning", "logical", "logic", "रीजनिंग", "तर्क"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("Reasoning");
+      speakText("Filtering by Reasoning");
+      return;
+    }
+    // ENGLISH: ["english", "grammar", "verbal", "language", "अंग्रेजी", "इंग्लिश"]
+    if (["english", "grammar", "verbal", "language", "अंग्रेजी", "इंग्लिश"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("English");
+      speakText("Filtering by English");
+      return;
+    }
+    // GENERAL KNOWLEDGE: ["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"]
+    if (["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("General Knowledge");
+      speakText("Filtering by General Knowledge");
+      return;
+    }
+    // MULTI-FORMAT SHOWCASE: ["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"]
+    if (["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("Multi-Format Showcase");
+      speakText("Filtering by Multi-Format Showcase");
+      return;
+    }
+    // ALL SUBJECTS: ["all", "all subjects", "everything", "clear filter", "सभी", "सब"]
+    if (["all", "all subjects", "everything", "clear filter", "सभी", "सब"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      handleSubjectSelect("All Subjects");
+      speakText("Showing all subjects");
+      return;
+    }
+
+    // --- DIRECT LAUNCHING ---
+    // GK & GEOGRAPHY: ["geography", "gk and geography", "geography practice", "भूगोल"]
+    if (["geography", "gk and geography", "geography practice", "भूगोल"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now;
+      speakText("Starting General Knowledge and Geography practice");
+      triggerPracticeLaunch('gk-geography'); 
+      return;
+    }
+    
+    // Catch-all context starter
+    // START / BEGIN ACTIVE: ["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"]
+    if (["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"].some(k => text.includes(k))) {
+      // If a filter is applied and only 1 set is available, launch it automatically
+      const sets = filteredSetsRef.current;
+      if (sets.length === 1) {
+         lastCommandTimeRef.current = now;
+         speakText(`Starting ${sets[0].title}`);
+         triggerPracticeLaunch(sets[0].id);
+         return;
+      }
+    }
+  }, [handleSubjectSelect, triggerPracticeLaunch]);
+
+  const { isListening, isSpeaking } = useVoiceEngine({
+    lang: isHindi ? 'hi-IN' : 'en-US',
+    autoStart: true,
+    onTranscript: handlePracticeVoiceCommand,
+  });
 
   return (
     <div className="flex-1 space-y-10 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full">
@@ -315,6 +425,12 @@ function PracticeContent() {
             <h2 id="filters-heading" className="text-xl font-bold text-foreground">
               Filter Practice Sets
             </h2>
+            {isListening && (
+              <Badge variant="outline" className="ml-2 gap-1.5 text-2xs font-semibold text-emerald-400 border-emerald-500/40 bg-emerald-950/30">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Voice Active</span>
+              </Badge>
+            )}
           </div>
           {hasActiveFilters && (
             <Button
