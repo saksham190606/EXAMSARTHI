@@ -478,6 +478,41 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
     speakText,
     speakQuestion,
     cleanVoiceTranscript,
+    fetchAIIntent,
     requestMicAccess: handleRequestMic,
   };
+}
+
+export interface AIIntentResult {
+  intent: 'NAVIGATE' | 'EXAM_LAUNCH' | 'CONTROL' | 'ANSWER' | 'UNKNOWN';
+  target: string;
+}
+
+/**
+ * AI-Driven Intent Router Client:
+ * Sends the candidate's speech transcript to /api/intent for natural language
+ * intent classification powered by Groq Llama 3.1 8B.
+ */
+export async function fetchAIIntent(transcript: string): Promise<AIIntentResult> {
+  if (!transcript || !transcript.trim()) {
+    return { intent: 'UNKNOWN', target: '' };
+  }
+  try {
+    const res = await fetch('/api/intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript }),
+    });
+    if (!res.ok) {
+      return { intent: 'UNKNOWN', target: '' };
+    }
+    const data = await res.json();
+    return {
+      intent: data.intent || 'UNKNOWN',
+      target: data.target || '',
+    };
+  } catch (err) {
+    console.error('[VoiceEngine] AI Intent Routing failed:', err);
+    return { intent: 'UNKNOWN', target: '' };
+  }
 }

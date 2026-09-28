@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 
 import { 
   matchNavigationIntent, 
-  handleVoiceNavigation, 
   DASHBOARD_KEYWORDS, 
   EXAMS_KEYWORDS, 
   PRACTICE_KEYWORDS, 
@@ -105,9 +104,31 @@ export default function ExamSarthiHero() {
   // 1. Global Speaking Guard (Strict Audio Mutex Ref)
   const isSystemSpeakingRef = useRef(false);
   const isVoiceModeActiveRef = useRef(false);
+  const lastCommandTimeRef = useRef(0);
 
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
+
+  const launchExam = useCallback((target: string) => {
+    const t = (target || '').toLowerCase().trim();
+    if (t.includes('gk') || t.includes('geography')) {
+      router.push('/exam?set=p2');
+    } else if (t.includes('ssc')) {
+      router.push('/exam?exam=e1');
+    } else if (t.includes('upsc')) {
+      router.push('/exam?exam=e3');
+    } else if (t.includes('ibps')) {
+      router.push('/exam?exam=e2');
+    } else if (t.includes('rrb')) {
+      router.push('/exam?exam=e1');
+    } else if (t.includes('vision')) {
+      router.push('/exam?exam=e4');
+    } else if (t) {
+      router.push(`/exam?exam=${t}`);
+    } else {
+      router.push('/exam');
+    }
+  }, [router]);
 
   // 2. Hard-Stop Microphone Before Speech with Global Window Mutex
   const speakText = useCallback((text: string, lang?: string, onComplete?: () => void) => {
@@ -187,26 +208,6 @@ export default function ExamSarthiHero() {
     }
   }, [isHindi]);
 
-  const handleVoiceResult = useCallback((transcript: string) => {
-    setStatusMessage(transcript);
-    const handled = handleVoiceNavigation(
-      transcript,
-      router,
-      (text, lang) => speakText(text, lang),
-      isHindi
-    );
-
-    if (!handled) {
-      const speechLang = isHindi ? 'hi-IN' : 'en-US';
-      speakText(
-        isHindi
-          ? `मैंने सुना "${transcript}", लेकिन गंतव्य समझ नहीं आया। 'डैशबोर्ड', 'परीक्षा', या 'प्रैक्टिस' बोलें।`
-          : `I heard "${transcript}", but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.`,
-        speechLang
-      );
-    }
-  }, [isHindi, router, speakText]);
-
   const startListening = useCallback(() => {
     if (typeof window === 'undefined') return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -234,19 +235,80 @@ export default function ExamSarthiHero() {
         setIsListening(true);
       };
 
-      // 3. Hard Guard in the Recognition Listener:
-      recognition.onresult = (event: any) => {
-        // IF SYSTEM IS SPEAKING, DROP EVERYTHING IMMEDIATELY
-        if ((window as any).isSystemSpeaking === true) {
-          console.warn("BLOCKED ECHO: System is currently speaking.");
-          return;
+      // 3. AI-Driven Intent Router Listener (with Mutex & Debounce Guard)
+      recognition.onresult = async (event: any) => {
+        if (!event.results || !event.results[0] || !event.results[0][0]) return;
+        const transcript = event.results[0][0].transcript.toLowerCase().trim();
+        if (!transcript) return;
+
+        // 1. Mutex Guard
+        if ((window as any).isSystemSpeaking === true) return;
+
+        // 2. Debounce Guard
+        const now = Date.now();
+        if (now - lastCommandTimeRef.current < 1500) return;
+        lastCommandTimeRef.current = now;
+
+        setStatusMessage(transcript);
+
+        // 3. Pause listening while AI thinks
+        if ((window as any).globalRecognitionInstance) {
+          try {
+            (window as any).globalRecognitionInstance.stop();
+          } catch (_) {}
         }
 
-        if (!event.results || !event.results[0] || !event.results[0][0]) return;
-        const rawTranscript = event.results[0][0].transcript.toLowerCase();
-        const cleanTranscript = rawTranscript.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-        if (cleanTranscript) {
-          handleVoiceResult(cleanTranscript);
+        // 4. Fetch AI Intent
+        try {
+          const res = await fetch('/api/intent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript }),
+          });
+          const data = await res.json();
+
+          // 5. Execute Action based on AI's structured response
+          if (data.intent === 'NAVIGATE') {
+            const dest = data.target || '/dashboard';
+            const pageName = dest.replace('/', '');
+            speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
+            router.push(dest);
+          } else if (data.intent === 'EXAM_LAUNCH') {
+            speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : `Launching exam`);
+            launchExam(data.target);
+          } else if (data.intent === 'CONTROL') {
+            if (data.target === 'NEXT') {
+              speakText(isHindi ? 'अगला' : 'Next');
+            } else if (data.target === 'PREVIOUS') {
+              speakText(isHindi ? 'पिछला' : 'Previous');
+            } else if (data.target === 'SUBMIT') {
+              speakText(isHindi ? 'सबमिट किया जा रहा है' : 'Submitting');
+            }
+          } else if (data.intent === 'ANSWER') {
+            speakText(isHindi ? `विकल्प ${data.target} चुना गया` : `Option ${data.target} selected`);
+          } else {
+            // UNKNOWN or unrecognized: check local navigation fallback
+            const fallback = matchIntent(transcript);
+            if (fallback !== 'UNKNOWN') {
+              const pathMap: Record<string, string> = {
+                DASHBOARD: '/dashboard',
+                EXAMS: '/exam',
+                PRACTICE: '/practice',
+                SETTINGS: '/settings',
+                LOGIN: '/login',
+              };
+              const fallbackPath = pathMap[fallback];
+              if (fallbackPath) {
+                speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
+                router.push(fallbackPath);
+                return;
+              }
+            }
+            speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+          }
+        } catch (err) {
+          console.error("AI Routing failed", err);
+          speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
         }
       };
 
@@ -278,7 +340,7 @@ export default function ExamSarthiHero() {
     } catch (err) {
       console.warn('[Landing Voice Recognition Start Error]', err);
     }
-  }, [handleVoiceResult, isHindi, speakText]);
+  }, [isHindi, launchExam, router, speakText]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {
