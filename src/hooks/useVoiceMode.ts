@@ -14,6 +14,7 @@ import {
   startListening,
   stopListening,
   requestMicAccess,
+  stopSpeaking,
 } from '@/lib/voice/useVoiceEngine';
 import { routeVoiceCommand } from '@/lib/voice/commandRouter';
 
@@ -73,10 +74,12 @@ export function useVoiceMode({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isAudioUnlocked, setIsAudioUnlocked] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return (
-        Boolean((window as any).__examsarthi_audio_unlocked) ||
-        sessionStorage.getItem('examAudioUnlocked') === 'true'
-      );
+      try {
+        return Boolean((window as any).__examsarthi_audio_unlocked) ||
+          sessionStorage.getItem('examAudioUnlocked') === 'true';
+      } catch {
+        return Boolean((window as any).__examsarthi_audio_unlocked);
+      }
     }
     return false;
   });
@@ -404,7 +407,7 @@ export function useVoiceMode({
       }
       if (routed.type === 'pause' || routed.type === 'stop') {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          try { window.speechSynthesis.cancel(); } catch {}
+          stopSpeaking();
         }
         return;
       }
@@ -447,7 +450,7 @@ export function useVoiceMode({
       playVoiceFeedbackChime();
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         try {
-          window.speechSynthesis.cancel();
+          stopSpeaking();
         } catch (e) {}
       }
       readCurrentQuestion();
@@ -704,6 +707,7 @@ export function useVoiceMode({
   const {
     isListening: engineIsListening,
     isSpeaking: engineIsSpeaking,
+    isSupported: engineIsSupported,
   } = useVoiceEngine({
     lang: isHindi ? 'hi-IN' : 'en-US',
     autoStart: true,
@@ -712,6 +716,14 @@ export function useVoiceMode({
 
   // Explicit user-gesture mic unlock handler
   const handleManualMicActivation = useCallback(async () => {
+    if (!engineIsSupported) {
+      setIsActive(false);
+      isActiveRef.current = false;
+      setStatus('Unsupported');
+      setVoiceStatus('Speech recognition is not supported in this browser.');
+      setErrorMessage('Use keyboard controls to navigate and answer questions.');
+      return;
+    }
     setVoiceStatus('Requesting microphone permission...');
     const granted = await requestMicAccess();
     if (!granted) {
@@ -727,7 +739,7 @@ export function useVoiceMode({
     setVoiceStatus('Listening (mic is hot)');
     setStatus('Listening');
     startListening(languageRef.current === 'hi' ? 'hi-IN' : 'en-US');
-  }, []);
+  }, [engineIsSupported]);
 
   const unlockAudio = useCallback(async () => {
     await handleManualMicActivation();
@@ -763,7 +775,7 @@ export function useVoiceMode({
     isActiveRef.current = true;
     userManuallyMutedRef.current = false;
 
-    requestMicAccess().catch(() => {});
+    void requestMicAccess();
 
     const timer = setTimeout(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -792,7 +804,7 @@ export function useVoiceMode({
       setIsActive(false);
       isActiveRef.current = false;
       stopListening();
-      try { window.speechSynthesis?.cancel(); } catch (e) {}
+      stopSpeaking();
       setStatus('Ready');
       setVoiceStatus('Voice Muted');
       setLastActionFeedback(null);
@@ -830,8 +842,8 @@ export function useVoiceMode({
   }, []);
 
   return {
-    isActive,
-    status: engineIsSpeaking ? 'Speaking' : (engineIsListening ? 'Listening' : status),
+    isActive: isActive && engineIsSupported,
+    status: !engineIsSupported ? 'Unsupported' : engineIsSpeaking ? 'Speaking' : (engineIsListening ? 'Listening' : status),
     isSpeaking: engineIsSpeaking || status === 'Speaking',
     lastCommand,
     lastTranscript,

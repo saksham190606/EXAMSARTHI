@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
@@ -11,6 +11,7 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { CandidateQuestion } from '@/types/question';
 import { ExamState } from '@/lib/useExamEngine';
+import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
 import { ArrowLeft, ArrowRight, Flag, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 
 export interface ExamInterfaceActions {
@@ -63,23 +64,11 @@ export function ExamInterface({
     );
   }, [questions]);
 
-  // 1. Fix Infinite "Loading Next Question" State & Implement Global Navigation Padlock:
+  // Keep a brief loading state while the exam engine changes the active question.
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
 
   const handleNextQuestion = () => {
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
-      return;
-    }
-
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT +1 INCREMENT
     if (currentIndex < validQuestions.length - 1) {
       setIsLoading(true);
       actions.goToNext();
@@ -89,49 +78,21 @@ export function ExamInterface({
       // Reached the end
       onOpenSubmitDialog();
     }
-
-    // 4. RELEASE LOCK AFTER 2 SECONDS (Ensures completely single-step sequence)
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   const handlePrevQuestion = () => {
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
-      return;
-    }
-
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT -1 DECREMENT
     actions.goToPrevious();
-
-    // 4. RELEASE LOCK
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   const handleSubmitExam = () => {
-    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+    stopSpeaking();
     actions.submitExam();
   };
 
   // Clean up audio on exam teardown to prevent memory leak crashes during routing
   useEffect(() => {
     return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopSpeaking();
     };
   }, []);
 

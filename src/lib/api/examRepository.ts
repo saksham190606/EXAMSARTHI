@@ -52,28 +52,29 @@ export interface QuestionLoadResult {
 export function normalizeExamId(rawId: string | null | undefined): string {
   if (!rawId) return 'e1';
   const clean = rawId.toLowerCase().trim();
-  if (clean === 'e2' || clean.includes('bank') || clean.includes('ibps') || clean.includes('sbi')) {
-    return 'e2';
-  }
-  if (clean === 'e3' || clean.includes('csat') || clean.includes('upsc')) {
-    return 'e3';
-  }
-  return 'e1';
+  if (!clean) return 'e1';
+  if (clean === 'e1' || clean === 'e2' || clean === 'e3') return clean;
+  if (clean.includes('bank') || clean.includes('ibps') || clean.includes('sbi')) return 'e2';
+  if (clean.includes('csat') || clean.includes('upsc')) return 'e3';
+  if (clean.includes('ssc') || clean.includes('cgl')) return 'e1';
+  return clean;
 }
 
 /**
- * Normalizes input practice set ID or string to remote database ID ('p1'..'p5').
+ * Normalizes input practice set ID or string to remote database ID ('p1'..'p6').
  */
 export function normalizePracticeSetId(rawId: string | null | undefined): string {
   if (!rawId) return 'p1';
   const clean = rawId.toLowerCase().trim();
-  if (clean === 'p1' || clean.includes('quant')) return 'p1';
-  if (clean === 'p2' || clean.includes('gk') || clean.includes('general')) return 'p2';
-  if (clean === 'p3' || clean.includes('reason')) return 'p3';
-  if (clean === 'p4' || clean.includes('english')) return 'p4';
-  if (clean === 'p5' || clean.includes('showcase') || clean.includes('multi')) return 'p5';
-  if (clean === 'p6' || clean.includes('diagram') || clean.includes('vision')) return 'p6';
-  return 'p1';
+  if (!clean) return 'p1';
+  if (['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].includes(clean)) return clean;
+  if (clean.includes('quant')) return 'p1';
+  if (clean.includes('gk') || clean.includes('general')) return 'p2';
+  if (clean.includes('reason')) return 'p3';
+  if (clean.includes('english')) return 'p4';
+  if (clean.includes('showcase') || clean.includes('multi')) return 'p5';
+  if (clean.includes('diagram') || clean.includes('visual') || clean.includes('vision')) return 'p6';
+  return clean;
 }
 
 /**
@@ -89,7 +90,6 @@ function mapSafeRowToQuestion(row: any): CandidateQuestion {
     topic: row.topic || undefined,
     difficulty: row.difficulty || undefined,
     options: Array.isArray(row.options) ? (row.options as QuestionOption[]) : undefined,
-    explanation: row.explanation || undefined,
     order_index: typeof row.order_index === 'number' ? row.order_index : 0,
     exam_id: row.exam_id,
     section_name: row.section_name || undefined,
@@ -187,7 +187,7 @@ export async function getRemoteQuestionsForExam(rawExamId: string): Promise<Ques
     const [questionsRes, examRes] = await Promise.all([
       supabase
         .from('exam_active_questions')
-        .select('question_id, type, text, subject, topic, difficulty, options, explanation, order_index, exam_id, section_name')
+        .select('question_id, type, text, subject, topic, difficulty, options, order_index, exam_id, section_name')
         .eq('exam_id', examId)
         .order('order_index', { ascending: true }),
       supabase
@@ -259,7 +259,7 @@ export async function getRemoteQuestionsForPracticeSet(rawSetId: string): Promis
 
     const { data, error } = await supabase
       .from('exam_active_questions')
-      .select('question_id, type, text, subject, topic, difficulty, options, explanation, order_index, exam_id, section_name')
+      .select('question_id, type, text, subject, topic, difficulty, options, order_index, exam_id, section_name')
       .eq('exam_id', setId)
       .order('order_index', { ascending: true });
 

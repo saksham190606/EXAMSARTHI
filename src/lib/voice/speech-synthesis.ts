@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccessibilityStore } from "@/store/useAccessibilityStore";
+import { speak as speakWithVoiceEngine, stopSpeaking } from './useVoiceEngine';
 
 /**
  * EXAMSARTHI — High-Fidelity Neural Speech Synthesis & Phonetic Sanitizer
@@ -44,10 +45,10 @@ if (typeof window !== "undefined" && "speechSynthesis" in window) {
       if (v && v.length > 0) {
         voicesCache = v;
         voiceChangeListeners.forEach((cb) => {
-          try { cb(); } catch (e) {}
+          try { cb(); } catch {}
         });
       }
-    } catch (e) {
+    } catch {
       // Ignore
     }
   };
@@ -240,16 +241,16 @@ export interface SpeakHighFidelityOptions {
   voiceURI?: string | null;
   onStart?: () => void;
   onEnd?: () => void;
-  onError?: (err: any) => void;
+  onError?: (err: SpeechSynthesisErrorEvent) => void;
 }
 
-let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeSpeechGeneration: number | null = null;
 
 /**
  * Speaks text using the High-Fidelity Neural Voice Engine with phonetic pre-processing.
  */
 export function speakHighFidelity(text: string, options: SpeakHighFidelityOptions = {}): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === 'undefined') {
     if (options.onEnd) options.onEnd();
     return;
   }
@@ -260,71 +261,38 @@ export function speakHighFidelity(text: string, options: SpeakHighFidelityOption
   const rate = options.rate !== undefined ? options.rate : (store.speechRate || 1.0);
   const pitch = options.pitch || 1.0;
 
-  // 1. Cancel previous speech
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {}
-
-  // 2. Pre-process text to natural phonetics
-  const phoneticText = sanitizeExamTextForSpeech(text, lang);
-  if (!phoneticText) {
+  if (!text.trim()) {
     if (options.onEnd) options.onEnd();
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(phoneticText);
-  utterance.lang = lang;
-  utterance.rate = Math.min(1.5, Math.max(0.7, rate));
-  utterance.pitch = Math.min(1.3, Math.max(0.8, pitch));
-
-  // 3. Assign prioritized neural voice
-  const voice = getHighFidelityVoice(lang, preferredVoiceURI);
-  if (voice) {
-    utterance.voice = voice;
-  }
-
-  // 4. Global window anchor to eliminate Chromium garbage collection bug
-  activeUtterance = utterance;
-  (window as any).__highFidelityUtterance = utterance;
-
-  const finish = () => {
-    activeUtterance = null;
-    (window as any).__highFidelityUtterance = null;
-    if (options.onEnd) {
-      options.onEnd();
-    }
-  };
-
-  utterance.onstart = () => {
-    if (options.onStart) options.onStart();
-  };
-
-  utterance.onend = finish;
-  utterance.onerror = (e) => {
-    console.warn('[SpeechSynthesis] Utterance error or interrupt:', e);
-    if (options.onError) options.onError(e);
-    finish();
-  };
-
-  try {
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    console.warn('[SpeechSynthesis] speak error:', err);
-    finish();
-  }
+  activeSpeechGeneration = speakWithVoiceEngine(text, {
+    lang,
+    rate,
+    pitch,
+    voiceURI: preferredVoiceURI,
+    priority: 'response',
+    interrupt: true,
+    onStart: options.onStart,
+    onEnd: () => {
+      activeSpeechGeneration = null;
+      options.onEnd?.();
+    },
+    onError: (error) => {
+      if ('error' in error && error.error !== 'not-supported') {
+        console.warn('[SpeechSynthesis] Utterance error:', error.error);
+        options.onError?.(error);
+      }
+    },
+  });
 }
 
 /**
  * Cancel any ongoing speech synthesis immediately.
  */
 export function stopHighFidelitySpeech(): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {}
-  activeUtterance = null;
-  (window as any).__highFidelityUtterance = null;
+  if (activeSpeechGeneration !== null) {
+    stopSpeaking(activeSpeechGeneration);
+    activeSpeechGeneration = null;
+  }
 }

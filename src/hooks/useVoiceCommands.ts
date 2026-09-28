@@ -1,9 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { classifyIntentLocally, playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
+import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 import { matchExamIntent } from '@/lib/voice/exam-intents';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 
-import { startListening as engineStartListening, stopListening as engineStopListening } from '@/lib/voice/useVoiceEngine';
+import {
+  useVoiceRecognitionSupport,
+  startListening as engineStartListening,
+  stopListening as engineStopListening,
+} from '@/lib/voice/useVoiceEngine';
 
 export interface VoiceCommandConfig {
   isSubmitDialogOpen: boolean;
@@ -21,6 +25,7 @@ export interface VoiceCommandConfig {
 }
 
 export function useVoiceCommands(config: VoiceCommandConfig) {
+  const isSupported = useVoiceRecognitionSupport();
   const [isListening, setIsListening] = useState(false);
   const [statusText, setStatusText] = useState('Voice command ready');
 
@@ -30,9 +35,6 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
 
   const processCommand = useCallback((transcript: string) => {
     const {
@@ -231,13 +233,18 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
 
   const startListening = useCallback(() => {
     const isHi = useAccessibilityStore.getState().language === 'hi';
+    if (!isSupported) {
+      setIsListening(false);
+      setStatusText(isHi ? 'इस ब्राउज़र में वॉइस कमांड उपलब्ध नहीं हैं' : 'Voice commands are not supported in this browser');
+      return;
+    }
     setIsListening(true);
     isListeningRef.current = true;
     setStatusText('Listening for a voice command...');
     engineStartListening(isHi ? 'hi-IN' : 'en-US', (transcript) => {
       processCommand(transcript);
     });
-  }, [processCommand]);
+  }, [isSupported, processCommand]);
 
   const stopListening = useCallback(() => {
     setIsListening(false);
@@ -247,7 +254,7 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
   }, []);
 
   return {
-    isSupported: typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition),
+    isSupported,
     isListening,
     statusText,
     startListening,

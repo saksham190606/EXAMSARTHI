@@ -23,7 +23,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Percentages",
     difficulty: "Intermediate",
-    explanation: "Let initial expenditure be 100. New expenditure = (100 - 20) * (1 + 0.25) = 80 * 1.25 = 100. Net change is 0%.",
   },
   {
     id: "quant-2",
@@ -38,7 +37,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Time and Distance",
     difficulty: "Beginner",
-    explanation: "Speed in m/s = 72 * (5/18) = 20 m/s. Total distance = Speed * Time = 20 * 20 = 400 m. Train length = 400 - 250 = 150 metres.",
   },
   {
     id: "quant-3",
@@ -53,7 +51,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Ratio and Proportion",
     difficulty: "Intermediate",
-    explanation: "The numbers are 3 * 4 = 12 and 4 * 4 = 16. LCM(12, 16) = 48.",
   },
   {
     id: "quant-4",
@@ -68,7 +65,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Simple Interest",
     difficulty: "Advanced",
-    explanation: "Simple interest for 1 year = 854 - 815 = Rs. 39. Interest for 3 years = 39 * 3 = Rs. 117. Principal = 815 - 117 = Rs. 698.",
   },
   {
     id: "quant-5",
@@ -83,7 +79,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Beginner",
-    explanation: "29 and 37 are prime numbers as their only divisors are 1 and themselves. 33 is divisible by 3 and 11; 49 is divisible by 7.",
   },
   {
     id: "quant-6",
@@ -98,7 +93,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Intermediate",
-    explanation: "Product of negative integers is positive. Whole numbers include all natural numbers plus 0. Zero is an even number. Sum of two odd integers is always even.",
   },
   {
     id: "quant-7",
@@ -107,7 +101,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Number Systems",
     difficulty: "Beginner",
-    explanation: "False. Zero is neither positive nor negative; it is a sign-neutral integer.",
   },
   {
     id: "quant-8",
@@ -116,7 +109,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Geometry",
     difficulty: "Beginner",
-    explanation: "True. In Euclidean plane geometry, the sum of internal angles of any planar triangle is exactly 180°.",
   },
   {
     id: "quant-9",
@@ -126,7 +118,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Arithmetic",
     difficulty: "Beginner",
-    explanation: "25 * 25 = 625. Thus the principal square root is 25.",
   },
   {
     id: "quant-10",
@@ -136,7 +127,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Geometry",
     difficulty: "Beginner",
-    explanation: "An equilateral triangle has all three sides congruent and internal angles equal to 60 degrees.",
   },
   {
     id: "quant-diagram-1",
@@ -152,7 +142,6 @@ export const SafeQuantitativeQuestions: CandidateQuestion[] = [
     subject: "Quantitative Aptitude",
     topic: "Geometry & Trigonometry",
     difficulty: "Intermediate",
-    explanation: "Using the Pythagorean theorem: AC^2 = AB^2 + BC^2. 13^2 = 5^2 + BC^2 => 169 = 25 + BC^2 => BC^2 = 144 => BC = 12 cm.",
   },
 ];
 
@@ -171,7 +160,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Analogy",
     difficulty: "Beginner",
-    explanation: "As an ocean consists primarily of water, a glacier consists of solid ice.",
   },
   {
     id: "reason-2",
@@ -186,7 +174,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Series",
     difficulty: "Intermediate",
-    explanation: "Pattern is n^2 - 1 for n = 2, 3, 4, 5, 6, 7. For n = 7: 7^2 - 1 = 49 - 1 = 48.",
   },
   {
     id: "reason-3",
@@ -201,7 +188,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Blood Relations",
     difficulty: "Intermediate",
-    explanation: "Since the speaker has no siblings, 'my father's son' is the speaker himself. Thus 'that man's father is me', making it his son's photograph.",
   },
   {
     id: "reason-4",
@@ -216,7 +202,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Coding and Decoding",
     difficulty: "Beginner",
-    explanation: "Letter map: C=8, A=2, L=5, I=1, C=8, U=9, T=6. Result = 8251896.",
   },
   {
     id: "reason-5",
@@ -231,7 +216,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Syllogisms",
     difficulty: "Intermediate",
-    explanation: "By transitivity, All roses are plants. By conversion, Some plants are flowers, and Some flowers are roses.",
   },
   {
     id: "reason-6",
@@ -240,7 +224,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Deductive Logic",
     difficulty: "Beginner",
-    explanation: "True. The transitive rule of universal categorical syllogisms states that (A ⊆ B) and (B ⊆ C) logically entails (A ⊆ C).",
   },
   {
     id: "reason-7",
@@ -250,7 +233,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Ranking and Order",
     difficulty: "Beginner",
-    explanation: "Rank from bottom = Total students - Rank from top + 1 = 40 - 15 + 1 = 26th.",
   },
   {
     id: "reason-8",
@@ -260,7 +242,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Series",
     difficulty: "Beginner",
-    explanation: "Position sequence: A(1) + 2 = C(3); C(3) + 3 = F(6); F(6) + 4 = J(10); J(10) + 5 = O(15). The next letter is O.",
   },
   {
     id: "reason-diagram-1",
@@ -276,7 +257,6 @@ export const SafeReasoningQuestions: CandidateQuestion[] = [
     subject: "Reasoning",
     topic: "Data Interpretation",
     difficulty: "Beginner",
-    explanation: "According to the bar chart: 2018 is 45, 2019 is 60, 2020 is 85, and 2021 is 70 thousand metric tons. The highest production was in 2020.",
   },
 ];
 
@@ -295,7 +275,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Vocabulary",
     difficulty: "Beginner",
-    explanation: "'Abundant' means existing or available in large quantities; plentiful.",
   },
   {
     id: "eng-2",
@@ -310,7 +289,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Grammar",
     difficulty: "Intermediate",
-    explanation: "The subject 'Neither' is singular, requiring the singular auxiliary verb 'has submitted' instead of 'have submitted'.",
   },
   {
     id: "eng-3",
@@ -325,7 +303,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Spelling",
     difficulty: "Advanced",
-    explanation: "'Accommodate' is correctly spelled with double 'c' and double 'm'.",
   },
   {
     id: "eng-4",
@@ -340,7 +317,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Vocabulary",
     difficulty: "Intermediate",
-    explanation: "'Meticulous' means showing great attention to detail. Its opposite is 'careless'.",
   },
   {
     id: "eng-5",
@@ -355,7 +331,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Parts of Speech",
     difficulty: "Advanced",
-    explanation: "In 'ran fast' and 'held fast', 'fast' modifies verbs ('ran' and 'held') as an adverb.",
   },
   {
     id: "eng-6",
@@ -364,7 +339,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Grammar",
     difficulty: "Beginner",
-    explanation: "True. All passive voice constructions require a form of the auxiliary 'to be' followed by the past participle (V3) of the main verb.",
   },
   {
     id: "eng-7",
@@ -374,7 +348,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Vocabulary",
     difficulty: "Beginner",
-    explanation: "A bibliophile is an enthusiastic book collector or lover.",
   },
   {
     id: "eng-8",
@@ -384,7 +357,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Prepositions",
     difficulty: "Intermediate",
-    explanation: "One agrees 'to' a proposal/plan, 'with' a person, and 'on/upon' a topic after deliberation.",
   },
   {
     id: "eng-diagram-1",
@@ -400,7 +372,6 @@ export const SafeEnglishQuestions: CandidateQuestion[] = [
     subject: "English",
     topic: "Technical Process Comprehension",
     difficulty: "Beginner",
-    explanation: "In the 4-stage flowchart, Stage 2 (Sorting & Cleaning) points directly to Stage 3 (Reprocessing).",
   },
 ];
 
@@ -419,7 +390,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Beginner",
-    explanation: "Bhopal is the capital city of Madhya Pradesh.",
   },
   {
     id: "gk-2",
@@ -434,7 +404,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Polity",
     difficulty: "Beginner",
-    explanation: "Dr. B. R. Ambedkar was the Chairman of the Drafting Committee of the Indian Constitution.",
   },
   {
     id: "gk-3",
@@ -449,7 +418,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Science",
     difficulty: "Beginner",
-    explanation: "Mars appears reddish due to the prevalence of iron oxide on its surface.",
   },
   {
     id: "gk-4",
@@ -464,7 +432,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Economy",
     difficulty: "Intermediate",
-    explanation: "The RBI was established on April 1, 1935, under the Reserve Bank of India Act, 1934.",
   },
   {
     id: "gk-5",
@@ -479,7 +446,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Polity",
     difficulty: "Intermediate",
-    explanation: "Right to Equality, Freedom, and against Exploitation are Fundamental Rights. Right to Property was moved to Article 300A as a legal right in 1978.",
   },
   {
     id: "gk-6",
@@ -494,7 +460,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Intermediate",
-    explanation: "Ganga and Brahmaputra originate in the Himalayas. Godavari originates in Western Ghats, and Narmada in the Amarkantak plateau.",
   },
   {
     id: "gk-7",
@@ -503,7 +468,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Geography",
     difficulty: "Beginner",
-    explanation: "True. It passes through Gujarat, Rajasthan, MP, Chhattisgarh, Jharkhand, West Bengal, Tripura, and Mizoram.",
   },
   {
     id: "gk-8",
@@ -512,7 +476,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Science",
     difficulty: "Intermediate",
-    explanation: "False. Sound is a mechanical longitudinal wave requiring a material medium to travel.",
   },
   {
     id: "gk-9",
@@ -522,7 +485,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Economy",
     difficulty: "Beginner",
-    explanation: "The official currency of the United Kingdom is the Pound Sterling (GBP).",
   },
   {
     id: "gk-10",
@@ -532,7 +494,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Science",
     difficulty: "Beginner",
-    explanation: "Gold's symbol 'Au' derives from its Latin name 'Aurum', meaning shining dawn.",
   },
   {
     id: "gk-diagram-1",
@@ -548,7 +509,6 @@ export const SafeGKQuestions: CandidateQuestion[] = [
     subject: "General Knowledge",
     topic: "Physics & Electronics",
     difficulty: "Beginner",
-    explanation: "For resistors in series, equivalent resistance Req = R1 + R2 = 4 Ω + 6 Ω = 10 Ω.",
   },
 ];
 

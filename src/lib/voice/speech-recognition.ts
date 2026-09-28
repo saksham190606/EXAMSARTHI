@@ -141,12 +141,24 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
 
   // 2. Individual word token matching
   const words = candidate.split(/\s+/).map(normalizeToken);
+  const isExplicitSelection = /\b(?:option|opt|choice|select|choose|answer)\s+(?:option\s+)?[a-d1-4]\b/i.test(candidate);
+  const allowsFuzzyCommand = words.length === 1 ||
+    /\b(?:go|move|navigate|select|choose|answer|pause|stop|resume|repeat|read|flag|mark|clear|submit|finish|skip)\b/i.test(candidate);
+  const isChoiceAction = (action: CanonicalAction) =>
+    action === 'SELECT_A' ||
+    action === 'SELECT_B' ||
+    action === 'SELECT_C' ||
+    action === 'SELECT_D' ||
+    action === 'SELECT_TRUE' ||
+    action === 'SELECT_FALSE';
+
   for (const word of words) {
     if (!word) continue;
     for (const action of actions) {
       const list = PHONETIC_MAP[action];
       for (const phrase of list) {
         if (!phrase.includes(' ') && word === phrase) {
+          if (isChoiceAction(action) && words.length > 1 && !isExplicitSelection) continue;
           return { action, matchedToken: phrase, confidence: 0.9 };
         }
       }
@@ -155,7 +167,7 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
 
   // 3. Levenshtein edit-distance match for near-sounds
   // Only evaluate for tokens of length >= 3 to avoid false positive collapses on 'a', 'b', 'c', 'd'
-  for (const word of words) {
+  for (const word of allowsFuzzyCommand ? words : []) {
     if (word.length < 3) continue;
 
     for (const action of actions) {
@@ -163,6 +175,7 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
       for (const phrase of list) {
         // Skip single-character targets
         if (phrase.length < 3 || phrase.includes(' ')) continue;
+        if (isChoiceAction(action) && words.length > 1 && !isExplicitSelection) continue;
 
         const dist = levenshteinDistance(word, phrase);
         const maxLen = Math.max(word.length, phrase.length);
@@ -171,7 +184,7 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
         // Allow distance of 1 for 4-5 letter words ('next' vs 'nest', 'pass' vs 'pause')
         // Allow distance of 2 for words >= 7 letters ('previous' vs 'privious')
         const isClose = (maxLen <= 5 && dist <= 1) || (maxLen > 5 && dist <= 2);
-        if (isClose && similarity >= 0.75) {
+        if (isClose && similarity >= 0.8) {
           return { action, matchedToken: phrase, confidence: similarity };
         }
       }

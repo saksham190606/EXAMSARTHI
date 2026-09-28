@@ -3,13 +3,13 @@ import { createSupabaseServerClient, getSupabaseAdminClient } from '@/lib/supaba
 
 /**
  * GET /api/exam/attempt-review?attemptId=...
- * 
- * Secure endpoint providing question-by-question review for an official completed exam attempt.
+ *
+ * Candidate-safe review endpoint for a completed exam attempt.
  * Enforces strict security constraints:
- * 1. Requires valid authenticated Supabase session.
- * 2. Strictly verifies candidate ownership (`attempt.user_id === user.id`).
- * 3. Strictly verifies attempt is `completed` (NEVER exposes answer keys for in-progress or abandoned attempts).
- * 4. Returns question text, candidate's submitted answer, correct answer, and explanation.
+ * 1. Requires a valid authenticated Supabase session.
+ * 2. Verifies ownership (`attempt.user_id === user.id`).
+ * 3. Allows review only for `completed` attempts.
+ * 4. NEVER exposes official answer keys, accepted answers, or explanations to the candidate.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -104,10 +104,10 @@ export async function GET(req: NextRequest) {
 
     const questionIds = examQuestions.map(eq => eq.question_id);
 
-    // 4. Fetch raw questions (with answer keys & explanations)
+    // 4. Fetch only candidate-safe metadata. Do not expose official answer data.
     const { data: rawQuestions, error: rawError } = await admin
       .from('questions')
-      .select('id, text, type, subject, topic, difficulty, options, correct_answer, acceptable_answers, explanation')
+      .select('id, text, type, subject, topic, difficulty, options')
       .in('id', questionIds);
 
     if (rawError || !rawQuestions) {
@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
 
     const answersMap = new Map((attemptAnswers || []).map(a => [a.question_id, a]));
 
-    // 6. Build the candidate review payload
+    // 6. Build the candidate-safe review payload.
     const reviewItems = examQuestions.map((eq) => {
       const q = questionMap.get(eq.question_id);
       const ans = answersMap.get(eq.question_id);
@@ -145,9 +145,9 @@ export async function GET(req: NextRequest) {
         userAnswer: ans?.user_answer ?? null,
         isCorrect: ans?.is_correct ?? false,
         isAnswered: ans?.user_answer !== undefined && ans?.user_answer !== null,
-        correctAnswer: q?.correct_answer ?? null,
-        acceptableAnswers: q?.acceptable_answers ?? undefined,
-        explanation: q?.explanation || undefined,
+        correctAnswer: null,
+        acceptableAnswers: undefined,
+        explanation: undefined,
       };
     });
 

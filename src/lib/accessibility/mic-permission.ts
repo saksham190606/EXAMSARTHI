@@ -1,3 +1,5 @@
+import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
+
 /**
  * Exam Saarthi - Audio Session & Microphone Initializer
  * Executed during explicit user gestures (e.g. clicking "Start Practice", "Take Mock Exam", or entering exam)
@@ -12,7 +14,7 @@ export async function initializeExamAudioSession(): Promise<boolean> {
   // 1. Prime SpeechSynthesis under user gesture to unlock browser audio autoplay
   if ('speechSynthesis' in window) {
     try {
-      window.speechSynthesis.cancel();
+      stopSpeaking();
       const primeUtterance = new SpeechSynthesisUtterance('');
       window.speechSynthesis.speak(primeUtterance);
       if (window.speechSynthesis.paused) {

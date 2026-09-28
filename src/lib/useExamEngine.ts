@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { CandidateQuestion, UserAnswer, ExamAnswers } from '@/types/question';
 import { ExamSectionConfig } from '@/types/section';
+import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
 
 export interface ExamState {
   currentQuestionIndex: number;
@@ -67,7 +68,26 @@ export function useExamEngine(
   const [timeRemaining, setTimeRemaining] = useState(safeInitialDuration);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const isSubmittedRef = useRef(false);
-  isSubmittedRef.current = isSubmitted;
+  const navigationLockRef = useRef(false);
+  const navigationLockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    isSubmittedRef.current = isSubmitted;
+  }, [isSubmitted]);
+
+  const lockNavigation = useCallback(() => {
+    if (navigationLockRef.current) return false;
+
+    navigationLockRef.current = true;
+    if (navigationLockTimeoutRef.current) {
+      clearTimeout(navigationLockTimeoutRef.current);
+    }
+    navigationLockTimeoutRef.current = setTimeout(() => {
+      navigationLockRef.current = false;
+      navigationLockTimeoutRef.current = null;
+    }, 250);
+    return true;
+  }, []);
 
   // Sectional state
   const hasSections = Array.isArray(sections) && sections.length > 0;
@@ -172,13 +192,7 @@ export function useExamEngine(
   }, []);
 
   const goToNext = useCallback(() => {
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
+    if (!lockNavigation()) return;
 
     if (hasSections) {
       const pos = currentSectionIndices.indexOf(currentQuestionIndex);
@@ -197,23 +211,10 @@ export function useExamEngine(
         announceToScreenReader(`End of examination reached.`);
       }
     }
-
-    // RELEASE LOCK AFTER 2 SECONDS
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
-  }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
+  }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length, lockNavigation]);
 
   const goToPrevious = useCallback(() => {
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
+    if (!lockNavigation()) return;
 
     if (hasSections) {
       const pos = currentSectionIndices.indexOf(currentQuestionIndex);
@@ -230,14 +231,7 @@ export function useExamEngine(
         announceToScreenReader(`Question ${currentQuestionIndex} of ${questions.length}.`);
       }
     }
-
-    // RELEASE LOCK AFTER 2 SECONDS
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
-  }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
+  }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length, lockNavigation]);
 
   const goToQuestion = useCallback((index: number) => {
     if (index < 0 || index >= questions.length) return;
@@ -254,7 +248,7 @@ export function useExamEngine(
   }, [currentSectionIndices, hasSections, questions.length]);
 
   const submitExam = useCallback(() => {
-    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+    stopSpeaking();
     if (isSubmittedRef.current) return;
     isSubmittedRef.current = true;
     setIsSubmitted(true);
