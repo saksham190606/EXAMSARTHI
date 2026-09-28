@@ -1414,6 +1414,10 @@ class VoiceNavigationEngine {
         this.navigate("/settings", isHi ? recognized.announcementHi : recognized.announcementEn);
         return;
 
+      case "NAVIGATE_LOGIN":
+        this.navigate("/login", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
+
       case "NAVIGATE_BACK": {
         const inExam = typeof window !== "undefined" && window.location.pathname.startsWith("/exam");
         const prevBtn = document.querySelector<HTMLElement>(
@@ -1665,8 +1669,8 @@ class VoiceNavigationEngine {
     // Fallback: Unrecognized
     speak(
       isHi
-        ? "कमांड समझ नहीं आया। सहायता के लिए 'मदद' कहें।"
-        : "Command not recognized. Say Help for a list of commands."
+        ? `मैंने सुना "${input}", लेकिन गंतव्य समझ नहीं आया। 'डैशबोर्ड', 'परीक्षा', या 'प्रैक्टिस' बोलें।`
+        : `I heard ${input}, but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.`
     );
   }
 

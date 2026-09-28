@@ -10,6 +10,7 @@ export type CanonicalVoiceIntent =
   | 'NAVIGATE_EXAMS'
   | 'NAVIGATE_RESULTS'
   | 'NAVIGATE_SETTINGS'
+  | 'NAVIGATE_LOGIN'
   | 'NAVIGATE_BACK'
   | 'START_EXAM'
   | 'START_PRACTICE'
@@ -125,7 +126,7 @@ const INTENT_METADATA: Record<
 > = {
   NAVIGATE_DASHBOARD: {
     targetPath: '/dashboard',
-    announcementEn: 'Navigating to Dashboard',
+    announcementEn: 'Navigating to your Dashboard',
     announcementHi: 'डैशबोर्ड पर जा रहे हैं',
   },
   NAVIGATE_PRACTICE: {
@@ -135,7 +136,7 @@ const INTENT_METADATA: Record<
   },
   NAVIGATE_EXAMS: {
     targetPath: '/exam',
-    announcementEn: 'Opening Exams Hub',
+    announcementEn: 'Opening the Exams Hub',
     announcementHi: 'परीक्षा केंद्र खोला जा रहा है',
   },
   NAVIGATE_RESULTS: {
@@ -147,6 +148,11 @@ const INTENT_METADATA: Record<
     targetPath: '/settings',
     announcementEn: 'Opening Settings',
     announcementHi: 'सेटिंग्स खोली जा रही हैं',
+  },
+  NAVIGATE_LOGIN: {
+    targetPath: '/login',
+    announcementEn: 'Opening Sign In page',
+    announcementHi: 'साइन इन पृष्ठ खोला जा रहा है',
   },
   NAVIGATE_BACK: {
     announcementEn: 'Going back',
@@ -200,6 +206,22 @@ const INTENT_METADATA: Record<
   },
 };
 
+export const DASHBOARD_KEYWORDS = ["dashboard", "home", "main screen", "profile", "डैशबोर्ड", "होम", "मुख्य पृष्ठ"];
+export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
+export const PRACTICE_KEYWORDS = ["practice", "learn", "study", "prepare", "प्रैक्टिस", "अभ्यास", "पढ़ाई"];
+export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "विकल्प"];
+export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
+
+export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
+  const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+  if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
+  if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
+  if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
+  if (SETTINGS_KEYWORDS.some(k => clean.includes(k))) return 'SETTINGS';
+  if (LOGIN_KEYWORDS.some(k => clean.includes(k))) return 'LOGIN';
+  return 'UNKNOWN';
+};
+
 /**
  * Fast deterministic local keyword classifier. Executes in < 0.2ms.
  */
@@ -244,50 +266,56 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  // 2. Navigation: Dashboard
-  if (
-    /(?:dashboard|home\s+screen|main\s+screen|home\s+page|डैशबोर्ड|होम\s+स्क्रीन|होम|मुख्य\s+स्क्रीन)/i.test(norm) ||
-    fuzzyContains(norm, 'dashboard', 2) ||
-    fuzzyContains(norm, 'डैशबोर्ड', 1)
-  ) {
+  // 2. Fuzzy Keyword Intent Matcher for Primary Destinations
+  const fuzzyIntent = matchIntent(rawText);
+  if (fuzzyIntent === 'DASHBOARD') {
     return {
       intent: 'NAVIGATE_DASHBOARD',
-      confidence: 0.95,
+      confidence: 0.96,
       rawText,
       normalizedText: norm,
-      source: 'local_rule',
+      source: 'fuzzy_match',
       ...INTENT_METADATA.NAVIGATE_DASHBOARD,
     };
   }
-
-  // 3. Navigation: Practice
-  if (
-    /(?:practice\s+mode|practice\s+section|practice\s+chune|practice\s+jao|प्रैक्टिस|अभ्यास|प्रैक्टिस\s+चुनें|अभ्यास\s+चुनें)/i.test(norm) ||
-    (fuzzyContains(norm, 'practice', 1) && !/(?:start|begin|launch|shuru|शुरू)/i.test(norm)) ||
-    (norm === 'practice' || norm === 'अभ्यास' || norm === 'प्रैक्टिस')
-  ) {
+  if (fuzzyIntent === 'EXAMS') {
     return {
-      intent: 'NAVIGATE_PRACTICE',
-      confidence: 0.94,
+      intent: 'NAVIGATE_EXAMS',
+      confidence: 0.96,
       rawText,
       normalizedText: norm,
-      source: 'local_rule',
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.NAVIGATE_EXAMS,
+    };
+  }
+  if (fuzzyIntent === 'PRACTICE') {
+    return {
+      intent: 'NAVIGATE_PRACTICE',
+      confidence: 0.96,
+      rawText,
+      normalizedText: norm,
+      source: 'fuzzy_match',
       ...INTENT_METADATA.NAVIGATE_PRACTICE,
     };
   }
-
-  // 4. Navigation: Exams Hub
-  if (
-    /(?:exams?\s+hub|exam\s+portal|test\s+series|exams?\s+chune|exam\s+jao|परीक्षा\s+चुनें|परीक्षा\s+पोर्टल|परीक्षा\s+हब|परीक्षा|मॉक\s+टेस्ट\s+हब)/i.test(norm) ||
-    ((norm === 'exam' || norm === 'exams' || norm === 'pariksha') && !/(?:start|take|shuru|शुरू)/i.test(norm))
-  ) {
+  if (fuzzyIntent === 'SETTINGS') {
     return {
-      intent: 'NAVIGATE_EXAMS',
-      confidence: 0.94,
+      intent: 'NAVIGATE_SETTINGS',
+      confidence: 0.96,
       rawText,
       normalizedText: norm,
-      source: 'local_rule',
-      ...INTENT_METADATA.NAVIGATE_EXAMS,
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.NAVIGATE_SETTINGS,
+    };
+  }
+  if (fuzzyIntent === 'LOGIN') {
+    return {
+      intent: 'NAVIGATE_LOGIN',
+      confidence: 0.96,
+      rawText,
+      normalizedText: norm,
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.NAVIGATE_LOGIN,
     };
   }
 
@@ -304,22 +332,6 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
       normalizedText: norm,
       source: 'local_rule',
       ...INTENT_METADATA.NAVIGATE_RESULTS,
-    };
-  }
-
-  // 6. Navigation: Settings
-  if (
-    /(?:settings?|preferences|config|accessibility\s+settings|सेटिंग्स|प्राथमिकताएं)/i.test(norm) ||
-    fuzzyContains(norm, 'settings', 2) ||
-    fuzzyContains(norm, 'सेटिंग्स', 1)
-  ) {
-    return {
-      intent: 'NAVIGATE_SETTINGS',
-      confidence: 0.95,
-      rawText,
-      normalizedText: norm,
-      source: 'local_rule',
-      ...INTENT_METADATA.NAVIGATE_SETTINGS,
     };
   }
 

@@ -1,13 +1,32 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Volume2, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
+import { speakText } from '@/lib/voice/useVoiceEngine';
+import { cn } from '@/lib/utils';
+
+export const DASHBOARD_KEYWORDS = ["dashboard", "home", "main screen", "profile", "डैशबोर्ड", "होम", "मुख्य पृष्ठ"];
+export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
+export const PRACTICE_KEYWORDS = ["practice", "learn", "study", "prepare", "प्रैक्टिस", "अभ्यास", "पढ़ाई"];
+export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "विकल्प"];
+export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
+
+export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
+  const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+  if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
+  if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
+  if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
+  if (SETTINGS_KEYWORDS.some(k => clean.includes(k))) return 'SETTINGS';
+  if (LOGIN_KEYWORDS.some(k => clean.includes(k))) return 'LOGIN';
+  return 'UNKNOWN';
+};
 
 interface ExamBadge {
   name: string;
@@ -76,9 +95,124 @@ export function ExamTickerBar() {
 }
 
 export default function ExamSarthiHero() {
+  const router = useRouter();
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const recognitionRef = useRef<any>(null);
+
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
+
+  const handleVoiceResult = useCallback((transcript: string) => {
+    setStatusMessage(transcript);
+    const intent = matchIntent(transcript.toLowerCase());
+    const speechLang = isHindi ? 'hi-IN' : 'en-US';
+
+    if (intent === 'DASHBOARD') {
+      speakText("Navigating to your Dashboard", speechLang);
+      router.push('/dashboard');
+    } else if (intent === 'EXAMS') {
+      speakText("Opening the Exams Hub", speechLang);
+      router.push('/exam');
+    } else if (intent === 'PRACTICE') {
+      speakText("Opening Practice section", speechLang);
+      router.push('/practice');
+    } else if (intent === 'SETTINGS') {
+      speakText("Opening Settings", speechLang);
+      router.push('/settings');
+    } else if (intent === 'LOGIN') {
+      speakText("Opening Sign In page", speechLang);
+      router.push('/login');
+    } else {
+      // Only trigger fallback if absolutely no keyword was found
+      speakText(
+        "I heard " + transcript + ", but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.",
+        speechLang
+      );
+    }
+  }, [isHindi, router]);
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      speakText(isHindi ? "वॉइस पहचान समर्थित नहीं है।" : "Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    } catch (_) {}
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = isHindi ? 'hi-IN' : 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        if (!event.results || !event.results[0] || !event.results[0][0]) return;
+        const rawTranscript = event.results[0][0].transcript.toLowerCase();
+        const cleanTranscript = rawTranscript.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+        if (cleanTranscript) {
+          handleVoiceResult(cleanTranscript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error === 'aborted' || event.error === 'no-speech') return;
+        console.warn('[Landing Voice Recognition Error]', event.error);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+      setIsListening(true);
+    } catch (err) {
+      console.warn('[Landing Voice Recognition Start Error]', err);
+    }
+  }, [handleVoiceResult, isHindi]);
+
+  const toggleListening = useCallback(() => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (_) {}
+      }
+      setIsListening(false);
+    } else {
+      requestMicPermission();
+      startListening();
+    }
+  }, [isListening, startListening]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'v' || e.key === 'V' || e.code === 'KeyV')) {
+        e.preventDefault();
+        toggleListening();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleListening]);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (_) {}
+      }
+    };
+  }, []);
 
   return (
     <div className="relative w-full overflow-hidden bg-transparent text-black dark:text-white transition-colors">
@@ -175,7 +309,41 @@ export default function ExamSarthiHero() {
             >
               {isHindi ? "मॉक टेस्ट दें" : "Take Mock Exam"}
             </button>
+
+            <button
+              type="button"
+              onClick={toggleListening}
+              aria-label="Toggle voice navigation (Alt+V)"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-[2px] border px-6 py-3 text-sm font-semibold transition cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]",
+                isListening
+                  ? "bg-[#ffed00] text-black border-[#ffed00] shadow-[0_0_15px_rgba(255,237,0,0.5)] font-bold animate-pulse"
+                  : "border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10"
+              )}
+            >
+              <Mic className="h-4 w-4" />
+              <span>
+                {isListening
+                  ? (isHindi ? "सुन रहे हैं..." : "Listening...")
+                  : (isHindi ? "वॉइस नेविगेशन (Alt+V)" : "Voice Navigation (Alt+V)")}
+              </span>
+            </button>
           </motion.div>
+
+          {isListening && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mt-4 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md"
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>
+                {statusMessage
+                  ? (isHindi ? `सुना: "${statusMessage}"` : `Heard: "${statusMessage}"`)
+                  : (isHindi ? "बोलें: 'डैशबोर्ड', 'परीक्षा', 'प्रैक्टिस', 'सेटिंग्स', या 'साइन इन'" : "Say 'Dashboard', 'Exams', 'Practice', 'Settings', or 'Sign In'")}
+              </span>
+            </motion.div>
+          )}
 
           <motion.div
             initial={{ opacity: 0 }}
