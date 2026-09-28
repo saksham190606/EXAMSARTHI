@@ -19,14 +19,14 @@ export default function AITutorCard({ results, startReviewWalkthrough }: AITutor
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            score: results.score,
-            total: results.totalQuestions,
+            score: results?.score ?? 0,
+            total: results?.totalQuestions ?? 0,
             correctTopics: "Reasoning and Aptitude",
             weakTopics: "General Knowledge"
           })
         });
         const data = await res.json();
-        setSummary(data.summary);
+        setSummary(data?.summary || "Analysis complete. You may now review your answers.");
       } catch (err) {
         setSummary("Analysis complete. You may now review your answers.");
       }

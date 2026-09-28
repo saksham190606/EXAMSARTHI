@@ -36,7 +36,12 @@ import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
-import AITutorCard from '@/components/results/AITutorCard';
+import dynamic from 'next/dynamic';
+
+const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), { 
+  ssr: false,
+  loading: () => <div className="text-[#ffed00] p-4 text-center">Loading AI Tutor...</div>
+});
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
@@ -370,32 +375,10 @@ function ResultsContent() {
     );
   }
 
-  if (loadingAttempt || !results) {
+  if (!results) {
     return (
-      <div 
-        className="min-h-screen bg-background py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8"
-        role="status"
-        aria-live="polite"
-        aria-label="Loading examination results"
-      >
-        <div className="flex items-center justify-between pb-4 border-b border-border/60">
-          <div className="h-5 w-36 bg-muted rounded animate-pulse" />
-          <div className="h-6 w-28 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="space-y-3">
-          <div className="h-6 w-48 bg-muted rounded animate-pulse" />
-          <div className="h-10 w-96 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-64 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-28 rounded-none border border-border/60 bg-muted/20 animate-pulse p-4 space-y-3">
-              <div className="h-4 w-20 bg-muted rounded" />
-              <div className="h-8 w-16 bg-muted rounded" />
-            </div>
-          ))}
-        </div>
-        <div className="h-48 rounded-none border border-border/60 bg-muted/20 animate-pulse" />
+      <div className="min-h-screen bg-black flex items-center justify-center text-[#ffed00] text-xl font-bold">
+        Processing your results...
       </div>
     );
   }
@@ -461,15 +444,17 @@ function ResultsContent() {
       </nav>
 
       {/* AI Tutor Performance Overview */}
-      <AITutorCard
-        results={examData}
-        startReviewWalkthrough={() => {
-          setIsWalkthroughActive(true);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
-          }
-        }}
-      />
+      {examData && (
+        <AITutorCard
+          results={examData}
+          startReviewWalkthrough={() => {
+            setIsWalkthroughActive(true);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
+            }
+          }}
+        />
+      )}
 
       {/* SECTION A — RESULT HEADER */}
       <header className="space-y-3 border-b border-border/80 pb-6">

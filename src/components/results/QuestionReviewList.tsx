@@ -204,6 +204,7 @@ export function QuestionReviewList({
 
   // Audio Review Walkthrough States
   const [isAudioReviewActive, setIsAudioReviewActive] = useState<boolean>(false);
+  const [isWalkthroughActive, setIsWalkthroughActive] = useState(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState<number>(-1);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
@@ -338,6 +339,7 @@ export function QuestionReviewList({
     }
     setIsSpeaking(false);
     setIsAudioReviewActive(false);
+    setIsWalkthroughActive(false);
     setActiveReviewIndex(-1);
     setIsPaused(false);
     setIndividualPlayingId(null);
@@ -418,6 +420,7 @@ export function QuestionReviewList({
 
     if (isWalkthrough) {
       setIsAudioReviewActive(true);
+      setIsWalkthroughActive(true);
       setIndividualPlayingId(null);
     } else {
       setIndividualPlayingId(currentQ.questionId);
@@ -488,13 +491,15 @@ export function QuestionReviewList({
 
   // 1. UI Toggle Walkthrough Handler
   const toggleWalkthrough = useCallback(() => {
-    if (isAudioReviewActive) {
+    if (isAudioReviewActive || isWalkthroughActive) {
       stopAudioWalkthrough();
+      setIsWalkthroughActive(false);
     } else {
       if (filteredQuestions.length === 0) return;
-      readQuestionReview(0, true);
+      setIsWalkthroughActive(true);
+      readQuestionReview(activeReviewIndex >= 0 ? activeReviewIndex : 0, true);
     }
-  }, [isAudioReviewActive, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
+  }, [isAudioReviewActive, isWalkthroughActive, activeReviewIndex, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
 
   useEffect(() => {
     if (externalWalkthroughActive && !isAudioReviewActive && filteredQuestions.length > 0) {
@@ -813,11 +818,11 @@ export function QuestionReviewList({
           isRecognitionStartingRef.current = false;
           if (isDisposed) return;
 
-          const isWalkthroughActive = isAudioReviewActiveRef.current;
+          const isWalkthroughCurrentlyActive = isAudioReviewActiveRef.current;
           const isSpeakingNow = isSpeakingRef.current;
 
-          // Auto-reconnect in recognition.onend: if isWalkthroughActive is true and !isSpeaking, restart listening after a 200ms delay.
-          if (isWalkthroughActive && !isSpeakingNow) {
+          // Auto-reconnect in recognition.onend: if walkthrough is active and !isSpeaking, restart listening after a 200ms delay.
+          if (isWalkthroughCurrentlyActive && !isSpeakingNow) {
             if (restartTimerRef.current) {
               clearTimeout(restartTimerRef.current);
             }
@@ -1010,17 +1015,6 @@ export function QuestionReviewList({
   const currentIndex = activeReviewIndex;
   const totalQuestions = filteredQuestions.length;
 
-  const isWalkthroughActive = isAudioReviewActive;
-  const setIsWalkthroughActive = (val: boolean | ((prev: boolean) => boolean)) => {
-    const nextVal = typeof val === 'function' ? val(isAudioReviewActive) : val;
-    if (nextVal) {
-      if (filteredQuestions.length > 0) {
-        readQuestionReview(activeReviewIndex >= 0 ? activeReviewIndex : 0, true);
-      }
-    } else {
-      stopAudioWalkthrough();
-    }
-  };
 
   return (
     <>
@@ -1041,7 +1035,7 @@ export function QuestionReviewList({
               )}
               {/* Add this explicitly next to your "Sectional Breakdown" header */}
               <button 
-                onClick={() => setIsWalkthroughActive(!isWalkthroughActive)} 
+                onClick={toggleWalkthrough} 
                 className="ml-4 px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors z-10"
               >
                 {isWalkthroughActive ? "⏹ Stop Audio Review" : "🔊 Start Audio Walkthrough"}

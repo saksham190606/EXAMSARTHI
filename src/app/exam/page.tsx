@@ -103,6 +103,7 @@ function ActiveExamSession({
     questions,
     examDuration,
     async (finalState) => {
+      if (typeof window !== 'undefined') window.speechSynthesis.cancel();
       setIsSubmitting(true);
       setSubmitError(null);
 
@@ -565,7 +566,10 @@ function ActiveExamSession({
         onOpenChange={setIsSubmitDialogOpen}
         totalQuestions={totalQuestions}
         answeredCount={answeredCount}
-        onConfirmSubmit={actions.submitExam}
+        onConfirmSubmit={() => {
+          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+          actions.submitExam();
+        }}
       />
 
       {/* Section Advance Confirmation Dialog */}
