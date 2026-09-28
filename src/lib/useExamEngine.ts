@@ -33,7 +33,7 @@ export interface ExamActions {
 }
 
 export function useExamEngine(
-  questions: CandidateQuestion[],
+  rawQuestions: CandidateQuestion[],
   initialDurationSeconds: number,
   onExamComplete: (finalState: ExamState) => void,
   initialQuestionIndex = 0,
@@ -43,6 +43,21 @@ export function useExamEngine(
   sections?: ExamSectionConfig[] | null,
   onSectionComplete?: (sectionIndex: number, autoAdvanced: boolean) => void
 ) {
+  // Purge Multi-Select Questions: Filter incoming questions strictly
+  const questions = useMemo(() => {
+    return (rawQuestions || []).filter(q =>
+      // Exclude if it's explicitly typed as multiple select
+      (q.type as string) !== 'MULTIPLE_SELECT' &&
+      (q.type as string) !== 'multiple-choice' &&
+      // Exclude if correctOption/answer is an array (meaning multiple answers)
+      !Array.isArray((q as any).correctOption) &&
+      !Array.isArray((q as any).correctAnswer) &&
+      !Array.isArray((q as any).acceptableAnswers) &&
+      // Strictly allow only these 3 types
+      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+    );
+  }, [rawQuestions]);
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialQuestionIndex);
   const [answers, setAnswers] = useState<ExamAnswers>({});
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
@@ -170,8 +185,10 @@ export function useExamEngine(
     }
 
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
+      setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1));
       announceToScreenReader(`Question ${currentQuestionIndex + 2} of ${questions.length}.`);
+    } else {
+      announceToScreenReader(`End of examination reached.`);
     }
   }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
 
@@ -357,7 +374,7 @@ export function useExamEngine(
       goToNextSection,
       voiceActions
     },
-    currentQuestion: questions[currentQuestionIndex],
+    currentQuestion: questions[currentQuestionIndex] || (questions.length > 0 ? questions[Math.min(currentQuestionIndex, questions.length - 1)] : undefined),
   };
 }
 

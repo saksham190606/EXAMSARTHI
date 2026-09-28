@@ -257,6 +257,22 @@ function ActiveExamSession({
     };
   }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
 
+  // 1. Fix Infinite "Loading Next Question" State:
+  const [isLoading, setIsLoading] = useState(false);
+  const currentIndex = state.currentQuestionIndex;
+
+  const handleNextQuestion = () => {
+    if (currentIndex < questions.length - 1) {
+      setIsLoading(true);
+      actions.goToNext();
+      // Ensure loading state always resolves after render
+      setTimeout(() => setIsLoading(false), 300);
+    } else {
+      // Reached the end
+      setIsSubmitDialogOpen(true);
+    }
+  };
+
   // Synchronize global voice companion actions with active exam state
   useEffect(() => {
     const handleVoiceAction = (event: Event) => {
@@ -264,7 +280,7 @@ function ActiveExamSession({
       const { action, letter, index } = customEvent.detail || {};
 
       if (action === 'next') {
-        actions.goToNext();
+        handleNextQuestion();
       } else if (action === 'prev') {
         actions.goToPrevious();
       } else if (action === 'select-option' && currentQuestion) {
@@ -343,7 +359,7 @@ function ActiveExamSession({
       // Alt+N -> Next question
       if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
         e.preventDefault();
-        actions.goToNext();
+        handleNextQuestion();
         return;
       }
 
@@ -384,10 +400,33 @@ function ActiveExamSession({
   const nextSectionIndex = state.activeSectionIndex + 1;
   const nextSection = (sections && nextSectionIndex < sections.length) ? sections[nextSectionIndex] : null;
 
-  if (!currentQuestion) {
+  if (!questions || !questions[currentIndex] || !currentQuestion || isLoading) {
+    if (isLoading) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+          <LoaderOne label="Loading next question..." size="md" />
+        </div>
+      );
+    }
     return (
-      <div className="min-h-[50vh] flex items-center justify-center p-8 text-center">
-        <LoaderOne label="Loading question..." size="md" />
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+          <AlertTriangle className="size-6" />
+        </div>
+        <h2 className="text-lg font-bold text-foreground">
+          {language === 'hi' ? 'प्रश्न लोड करने में समस्या या परीक्षा पूर्ण' : 'Question Not Found or Examination Complete'}
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          {language === 'hi' ? 'आप अंतिम प्रश्न तक पहुँच चुके हैं या प्रश्न लोड नहीं हो सका।' : 'You have reached the end of the question cohort or the question could not be loaded.'}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={() => actions.goToQuestion(0)}>
+            {language === 'hi' ? 'पहले प्रश्न पर जाएं' : 'Return to Question 1'}
+          </Button>
+          <Button variant="default" onClick={() => setIsSubmitDialogOpen(true)}>
+            {language === 'hi' ? 'परीक्षा सबमिट करें' : 'Submit Examination'}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -396,20 +435,32 @@ function ActiveExamSession({
     <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6 relative">
       <LiveRegion />
 
-      {/* Active Glowing Sunlight Yellow Mic Indicator Pulse */}
-      {isActive && status === 'Listening' && (
-        <div 
-          aria-live="polite"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.6)] backdrop-blur-md animate-pulse"
-        >
-          <div className="relative flex items-center justify-center">
-            <span className="absolute -inset-1.5 rounded-full bg-[#ffed00]/60 animate-ping opacity-80" />
-            <span className="size-3 rounded-full bg-[#ffed00]" />
+      {/* Floating Mic / Speaking Indicator */}
+      {isActive && (
+        isSpeaking || status === 'Speaking' ? (
+          <div 
+            aria-live="polite"
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-900/95 border-2 border-red-500/70 shadow-[0_0_24px_rgba(239,68,68,0.5)] backdrop-blur-md"
+          >
+            <span className="size-3 rounded-full bg-red-500" />
+            <span className="text-xs font-bold tracking-wider text-red-400 uppercase font-mono">
+              [ 🔇 Mic Paused (Speaking) ]
+            </span>
           </div>
-          <span className="text-xs font-bold tracking-wider text-[#ffed00] uppercase font-mono">
-            {language === 'hi' ? 'सुन रहा है...' : 'Listening...'}
-          </span>
-        </div>
+        ) : status === 'Listening' ? (
+          <div 
+            aria-live="polite"
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.6)] backdrop-blur-md animate-pulse"
+          >
+            <div className="relative flex items-center justify-center">
+              <span className="absolute -inset-1.5 rounded-full bg-[#ffed00]/60 animate-ping opacity-80" />
+              <span className="size-3 rounded-full bg-[#ffed00]" />
+            </div>
+            <span className="text-xs font-bold tracking-wider text-[#ffed00] uppercase font-mono">
+              [ 🎙️ Listening ]
+            </span>
+          </div>
+        ) : null
       )}
 
       {/* Submission In-Progress Modal Overlay */}
@@ -699,11 +750,12 @@ function ActiveExamSession({
               <Button 
                 variant="default" 
                 size="lg"
-                onClick={actions.goToNext}
+                onClick={handleNextQuestion}
                 disabled={
-                  hasSections 
+                  isLoading ||
+                  (hasSections 
                     ? state.currentSectionIndices.indexOf(state.currentQuestionIndex) >= state.currentSectionIndices.length - 1
-                    : state.currentQuestionIndex === totalQuestions - 1
+                    : state.currentQuestionIndex >= totalQuestions - 1)
                 }
                 aria-label="Go to next question in section"
                 className="h-12 px-5 font-bold "
@@ -859,18 +911,28 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
     resolveCandidateQuestions({ setId, examId })
       .then((res) => {
         if (!isMounted) return;
-        if (res.questions.length === 0) {
-          const fallback = getSafeQuestionsForContext({ setId, examId });
-          setQuestions(fallback);
-          setIsRemote(false);
-          setSections((selectedExam as any)?.sections || null);
-          if (fallback.length === 0) {
-            setLoadError('No examination questions found for this exam code.');
-          }
-        } else {
-          setQuestions(res.questions);
-          setIsRemote(res.isRemote);
-          setSections(res.sections || (selectedExam as any)?.sections || null);
+        const fetchedQuestions = res.questions.length === 0
+          ? getSafeQuestionsForContext({ setId, examId })
+          : res.questions;
+
+        // 2. Purge Multi-Select Questions: Filter incoming questions strictly
+        const validQuestions = fetchedQuestions.filter(q =>
+          // Exclude if it's explicitly typed as multiple select
+          (q.type as string) !== 'MULTIPLE_SELECT' &&
+          (q.type as string) !== 'multiple-choice' &&
+          // Exclude if correctOption/answer is an array (meaning multiple answers)
+          !Array.isArray((q as any).correctOption) &&
+          !Array.isArray((q as any).correctAnswer) &&
+          !Array.isArray((q as any).acceptableAnswers) &&
+          // Strictly allow only these 3 types
+          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+        );
+
+        setQuestions(validQuestions);
+        setIsRemote(res.questions.length > 0 ? res.isRemote : false);
+        setSections(res.sections || (selectedExam as any)?.sections || null);
+        if (validQuestions.length === 0) {
+          setLoadError('No examination questions found for this exam code.');
         }
         setLoading(false);
       })
@@ -878,10 +940,18 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
         if (!isMounted) return;
         console.warn('[ExamPage] Failed to load remote questions, using safe fallback:', err);
         const fallback = getSafeQuestionsForContext({ setId, examId });
-        setQuestions(fallback);
+        const validQuestions = fallback.filter(q =>
+          (q.type as string) !== 'MULTIPLE_SELECT' &&
+          (q.type as string) !== 'multiple-choice' &&
+          !Array.isArray((q as any).correctOption) &&
+          !Array.isArray((q as any).correctAnswer) &&
+          !Array.isArray((q as any).acceptableAnswers) &&
+          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+        );
+        setQuestions(validQuestions);
         setIsRemote(false);
         setSections((selectedExam as any)?.sections || null);
-        if (fallback.length === 0) {
+        if (validQuestions.length === 0) {
           setLoadError('Failed to load examination questions.');
         }
         setLoading(false);

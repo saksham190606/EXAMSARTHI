@@ -54,24 +54,24 @@ export function ExamVoiceDebugVisualizer({
     );
   }
 
-  // 2. If speaking: 🔊 Reading Question...
+  // 2. If speaking: [ 🔇 Mic Paused (Speaking) ]
   if (isSpeaking || status === 'Speaking') {
     return (
       <div
         role="status"
         aria-live="polite"
         className={cn(
-          "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-sky-950/90 text-sky-300 border-2 border-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.35)] animate-pulse select-none",
+          "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold bg-neutral-900/95 text-red-400 border-2 border-red-500/70 shadow-[0_0_16px_rgba(239,68,68,0.35)] select-none",
           className
         )}
       >
-        <span className="text-sm" aria-hidden="true">🔊</span>
-        <span>Reading Question...</span>
+        <span className="text-sm" aria-hidden="true">🔇</span>
+        <span>[ 🔇 Mic Paused (Speaking) ]</span>
       </div>
     );
   }
 
-  // 3. When active: Pulsing Sunlight Yellow (#ffed00) pill showing 🎙️ Listening | Heard: "[transcript]"
+  // 3. When active: Pulsing Sunlight Yellow (#ffed00) pill showing [ 🎙️ Listening ]
   return (
     <div
       role="status"
@@ -88,7 +88,7 @@ export function ExamVoiceDebugVisualizer({
         <span className="size-2 rounded-full bg-[#ffed00]" />
       </span>
       <span className="truncate max-w-[240px] sm:max-w-md">
-        🎙️ Listening | Heard: &ldquo;{transcriptToDisplay || '...'}&rdquo;
+        [ 🎙️ Listening ]{transcriptToDisplay ? ` | Heard: "${transcriptToDisplay}"` : ''}
       </span>
     </div>
   );

@@ -10,6 +10,7 @@ import { matchTokenToCommand } from '@/lib/voice/speech-recognition';
 import {
   useVoiceEngine,
   speakText,
+  speakQuestion,
   startListening,
   stopListening,
   requestMicAccess,
@@ -128,7 +129,10 @@ export function useVoiceMode({
       setLastActionFeedback(`✓ ${feedback}`);
       announceToScreenReader(feedback);
     } else {
-      const atLast = languageRef.current === 'hi' ? 'यह अंतिम प्रश्न है।' : 'You are at the last question.';
+      if (onOpenSubmitDialog) {
+        onOpenSubmitDialog();
+      }
+      const atLast = languageRef.current === 'hi' ? 'यह अंतिम प्रश्न है। परीक्षा सबमिट करें।' : 'You have reached the end of the examination. Ready to submit.';
       setLastActionFeedback(atLast);
       speakText(atLast, languageRef.current === 'hi' ? 'hi-IN' : 'en-US', () => {
         if (isActiveRef.current && !userManuallyMutedRef.current) {
@@ -136,7 +140,7 @@ export function useVoiceMode({
         }
       });
     }
-  }, [totalQuestions]);
+  }, [totalQuestions, onOpenSubmitDialog]);
 
   const handlePrevQuestion = useCallback(() => {
     const s = stateRef.current;
@@ -271,13 +275,13 @@ export function useVoiceMode({
 
     lastReadIndexRef.current = index;
     setStatus('Speaking');
-    setVoiceStatus('Reading question...');
+    setVoiceStatus('[ 🔇 Mic Paused (Speaking) ]');
 
     // Wait until speaking completely finishes before starting the mic listener!
-    speakText(textToRead, speechLang, () => {
+    speakQuestion(textToRead, speechLang, () => {
       if (isActiveRef.current && !userManuallyMutedRef.current) {
         setStatus('Listening');
-        setVoiceStatus('Listening (mic is hot)');
+        setVoiceStatus('[ 🎙️ Listening ]');
         startListening(speechLang);
       } else {
         setStatus('Ready');
@@ -339,9 +343,9 @@ export function useVoiceMode({
     // =========================================================================
 
     // REPEAT / READ AGAIN:
-    // Keywords: ["repeat", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो", "दोबारा"]
+    // Keywords: ["repeat", "again", "dobara", "फिर से", "दोबारा"]
     const repeatKeywords = [
-      "repeat", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो", "दोबारा", "again", "फिर से"
+      "repeat", "again", "dobara", "फिर से", "दोबारा", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो"
     ];
     if (phoneticMatch?.action === 'REPEAT_QUESTION' || repeatKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
@@ -354,10 +358,10 @@ export function useVoiceMode({
       return;
     }
 
-    // FLAG / MARK FOR REVIEW:
-    // Keywords: ["flag", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग"]
+    // FLAG FOR REVIEW:
+    // Keywords: ["flag", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग"]
     const flagKeywords = [
-      "flag", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
+      "flag", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग", "flag for review", "mark for review", "बाद में देखेंगे", "bookmark", "चिह्नित"
     ];
     if (phoneticMatch?.action === 'FLAG_REVIEW' || flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
@@ -366,9 +370,9 @@ export function useVoiceMode({
     }
 
     // CLEAR RESPONSE:
-    // Keywords: ["clear", "clear response", "unselect", "remove answer", "साफ करो", "हटाओ"]
+    // Keywords: ["clear", "remove", "erase", "साफ करो", "हटाओ"]
     const clearKeywords = [
-      "clear response", "clear answer", "unselect", "remove answer", "साफ करो", "हटाओ", "clear"
+      "clear", "remove", "erase", "साफ करो", "हटाओ", "clear response", "clear answer", "unselect", "remove answer"
     ];
     if (phoneticMatch?.action === 'CLEAR_RESPONSE' || clearKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
@@ -376,16 +380,17 @@ export function useVoiceMode({
       return;
     }
 
-    // NEXT / PREVIOUS:
-    // Keywords for Next: ["next", "next question", "agla", "अगला", "आगे"] -> handleNextQuestion()
-    const nextKeywords = ["next", "next question", "agla", "अगला", "आगे"];
+    // NEXT QUESTION:
+    // Keywords: ["next", "agla", "अगला", "आगे"]
+    const nextKeywords = ["next", "agla", "अगला", "आगे", "next question"];
     if (phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
       playVoiceFeedbackChime();
       handleNextQuestion();
       return;
     }
 
-    // Keywords for Previous: ["previous", "back", "pichla", "पिछला", "पीछे"] -> handlePrevQuestion()
+    // PREVIOUS QUESTION:
+    // Keywords: ["previous", "back", "pichla", "पिछला", "पीछे"]
     const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
     if (phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
       playVoiceFeedbackChime();
@@ -394,9 +399,9 @@ export function useVoiceMode({
     }
 
     // SUBMIT EXAM:
-    // Keywords: ["submit exam", "submit test", "finish exam", "end test", "सबमिट करो", "परीक्षा समाप्त"]
+    // Keywords: ["submit exam", "finish test", "end test", "सबमिट करो", "परीक्षा समाप्त"]
     const submitKeywords = [
-      "submit exam", "submit test", "finish exam", "end test", "सबमिट करो", "परीक्षा समाप्त", "submit"
+      "submit exam", "finish test", "end test", "सबमिट करो", "परीक्षा समाप्त", "submit test", "finish exam", "submit"
     ];
     if (phoneticMatch?.action === 'SUBMIT_EXAM' || submitKeywords.some((k) => transcript === k || transcript.includes(k))) {
       playVoiceFeedbackChime();
@@ -521,14 +526,14 @@ export function useVoiceMode({
     // -------------------------------------------------------------------------
     // C. TYPE: "MCQ" (Standard 4 Options)
     // -------------------------------------------------------------------------
-    // Option A: "a", "option a", "1", "one", "पहला", "विकल्प ए" -> select Option 0. Speak "Selected A"
-    const optATokens = ["option a", "विकल्प ए", "पहला", "one", "a", "1", "ए", "एक"];
-    // Option B: "b", "option b", "2", "two", "दूसरा", "विकल्प बी" -> select Option 1. Speak "Selected B"
-    const optBTokens = ["option b", "विकल्प बी", "दूसरा", "two", "b", "2", "बी", "दो"];
-    // Option C: "c", "option c", "3", "three", "तीसरा", "विकल्प सी" -> select Option 2. Speak "Selected C"
-    const optCTokens = ["option c", "विकल्प सी", "तीसरा", "three", "c", "3", "सी", "तीन"];
-    // Option D: "d", "option d", "4", "four", "चौथा", "विकल्प डी" -> select Option 3. Speak "Selected D"
-    const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "4", "डी", "चार"];
+    // Option A: ["a", "ay", "hey", "one", "1", "option a", "ए", "विकल्प ए", "पहला"]
+    const optATokens = ["option a", "विकल्प ए", "पहला", "one", "a", "ay", "hey", "1", "ए", "एक"];
+    // Option B: ["b", "be", "bee", "two", "2", "option b", "बी", "विकल्प बी", "दूसरा"]
+    const optBTokens = ["option b", "विकल्प बी", "दूसरा", "two", "b", "be", "bee", "2", "बी", "दो"];
+    // Option C: ["c", "see", "sea", "three", "3", "option c", "सी", "विकल्प सी", "तीसरा"]
+    const optCTokens = ["option c", "विकल्प सी", "तीसरा", "three", "c", "see", "sea", "3", "सी", "तीन"];
+    // Option D: ["d", "dee", "four", "4", "option d", "डी", "विकल्प डी", "चौथा"]
+    const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "dee", "4", "डी", "चार"];
 
     if (phoneticMatch?.action === 'SELECT_A' || optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
       playVoiceFeedbackChime();

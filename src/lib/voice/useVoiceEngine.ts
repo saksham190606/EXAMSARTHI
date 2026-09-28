@@ -25,6 +25,18 @@ let globalLastError: string | null = null;
 let currentUtteranceGlobal: SpeechSynthesisUtterance | null = null;
 let activeLang = 'en-US';
 
+// Global Speaking Guard (Strict Audio Mutex Ref)
+// Synchronous mutable ref pattern ensures zero React closure staleness inside event listeners
+export const isSystemSpeakingRef: { current: boolean } = { current: false };
+export const recognitionRef: { current: any } = {
+  get current() {
+    return globalRecognition;
+  },
+  set current(val: any) {
+    globalRecognition = val;
+  },
+};
+
 // Listeners and subscribers
 const transcriptSubscribers = new Set<(t: string) => void>();
 const stateSubscribers = new Set<() => void>();
@@ -95,31 +107,56 @@ export async function requestMicAccess(): Promise<boolean> {
 }
 
 /**
- * Speech Synthesis Safety Wrapper.
- * - Stops listening while speaking to avoid mic collision/abort.
- * - Anchors utterance to window scope to avoid Chromium garbage collection bug.
- * - Executes onComplete callback strictly upon speech completion or error.
+ * Fuzzy Matcher Utility: Before checking commands, ALWAYS clean the transcript.
  */
-export function speakText(text: string, lang = 'en-US', onComplete?: () => void): void {
+export function cleanVoiceTranscript(transcript: string): string {
+  if (!transcript) return '';
+  return transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+}
+
+/**
+ * Speech Synthesis Safety Wrapper with Strict Half-Duplex (Walkie-Talkie) Audio Mutex.
+ * 1. Hard-stops the microphone and detaches restart loops (onend = null).
+ * 2. Anchors utterance to window scope to avoid Chromium garbage collection bug.
+ * 3. Restarts microphone only after speaking completes + 400ms room echo buffer.
+ */
+export function speakQuestion(text: string, lang = 'en-US', onComplete?: () => void): void {
   if (typeof window === 'undefined') {
     if (onComplete) onComplete();
     return;
   }
 
-  // Stop listening while speaking to avoid mic collision/abort
-  stopListening();
-
-  if (!('speechSynthesis' in window)) {
-    if (onComplete) onComplete();
-    return;
-  }
-
+  // 1. HARD STOP THE MIC AND DETACH RESTART LOOP
+  isSystemSpeakingRef.current = true;
   isSpeakingGlobal = true;
+  notifyState();
+
+  if (recognitionRef.current) {
+    recognitionRef.current.onend = null; // Prevent it from turning itself back on immediately
+    recognitionRef.current.onerror = null;
+    recognitionRef.current.onresult = null;
+    try {
+      recognitionRef.current.stop();
+    } catch (e) {}
+    try {
+      recognitionRef.current.abort();
+    } catch (e) {}
+    recognitionRef.current = null;
+  }
+  isListeningGlobal = false;
   notifyState();
 
   try {
     window.speechSynthesis.cancel();
   } catch (e) {}
+
+  if (!('speechSynthesis' in window)) {
+    isSystemSpeakingRef.current = false;
+    isSpeakingGlobal = false;
+    notifyState();
+    if (onComplete) onComplete();
+    return;
+  }
 
   const store = useAccessibilityStore.getState();
   const sanitizedText = sanitizeExamTextForSpeech(text, lang);
@@ -132,14 +169,23 @@ export function speakText(text: string, lang = 'en-US', onComplete?: () => void)
     utterance.voice = voice;
   }
 
+  // 2. ONLY RESTART MIC AFTER SPEAKING FINISHES (400ms buffer for room echo to die down)
   const handleFinish = () => {
-    isSpeakingGlobal = false;
-    currentUtteranceGlobal = null;
-    (window as any).__currentUtterance = null;
-    notifyState();
-    if (onComplete) {
-      onComplete();
-    }
+    setTimeout(() => {
+      isSystemSpeakingRef.current = false;
+      isSpeakingGlobal = false;
+      currentUtteranceGlobal = null;
+      (window as any).__currentUtterance = null;
+      notifyState();
+
+      if (onComplete) {
+        try {
+          onComplete();
+        } catch (err) {
+          console.warn('[VoiceEngine] onComplete error:', err);
+        }
+      }
+    }, 400); // 400ms buffer for room echo to die down
   };
 
   utterance.onend = handleFinish;
@@ -160,6 +206,10 @@ export function speakText(text: string, lang = 'en-US', onComplete?: () => void)
     console.warn('[VoiceEngine] speechSynthesis.speak failed:', e);
     handleFinish();
   }
+}
+
+export function speakText(text: string, lang = 'en-US', onComplete?: () => void): void {
+  speakQuestion(text, lang, onComplete);
 }
 
 /**
@@ -232,6 +282,12 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     };
 
     recognition.onresult = (e: any) => {
+      // 3. Guard Clause in the Recognition Listener:
+      if (isSystemSpeakingRef.current || isSpeakingGlobal) {
+        console.log("Ignored transcript: System is currently speaking.");
+        return;
+      }
+
       const candidates = extractTranscriptsFromEvent(e);
       let raw = candidates[0] || e?.results?.[0]?.[0]?.transcript || '';
 
@@ -244,13 +300,14 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
         }
       }
 
-      console.log('[VoiceEngine Result Captured]:', raw);
-      if (raw) {
-        globalTranscript = raw;
+      const transcript = (raw || '').toLowerCase().trim();
+      console.log('[VoiceEngine Result Captured]:', transcript);
+      if (transcript) {
+        globalTranscript = transcript;
         notifyState();
         transcriptSubscribers.forEach((sub) => {
           try {
-            sub(raw);
+            sub(transcript);
           } catch (err) {
             console.warn('[VoiceEngine] Error in transcript subscriber:', err);
           }
@@ -259,16 +316,18 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     };
 
     recognition.onend = () => {
-      // Re-cycle recognition cleanly if listening is still intended and we are not speaking
-      setTimeout(() => {
-        if (isListeningGlobal && !isSpeakingGlobal && globalRecognition === recognition) {
-          try {
-            recognition.start();
-          } catch (e) {
-            // Safe ignore if busy
+      // 4. Handle the onend Auto-Restart Safely:
+      if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal) {
+        setTimeout(() => {
+          if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal && globalRecognition === recognition) {
+            try {
+              recognition.start();
+            } catch (e) {
+              // Safe ignore if busy
+            }
           }
-        }
-      }, 150);
+        }, 150);
+      }
     };
 
     globalRecognition = recognition;
@@ -379,9 +438,13 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
     transcript,
     lastError,
     hasMicPermission,
+    isSystemSpeakingRef,
+    recognitionRef,
     startListening: handleStart,
     stopListening: handleStop,
     speakText,
+    speakQuestion,
+    cleanVoiceTranscript,
     requestMicAccess: handleRequestMic,
   };
 }

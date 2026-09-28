@@ -29,6 +29,7 @@ interface ExamSessionProps {
 
 export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   
@@ -37,9 +38,21 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const { speak, stop, status, isSupported } = useSpeech();
   const { audioAssistance, autoReadQuestions } = useAccessibilityStore();
   
-  const currentQuestion = exam.questions[currentIndex];
-  const totalQuestions = exam.questions.length;
-  const progress = ((currentIndex + 1) / totalQuestions) * 100;
+  // Purge Multi-Select Questions: Strictly filter single-response questions
+  const validQuestions = React.useMemo(() => {
+    return (exam.questions || []).filter(q =>
+      (q as any).type !== 'MULTIPLE_SELECT' &&
+      (q as any).type !== 'multiple-choice' &&
+      !Array.isArray((q as any).correctOption) &&
+      !Array.isArray((q as any).correctAnswer) &&
+      !Array.isArray((q as any).acceptableAnswers) &&
+      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q as any).type || 'MCQ')
+    );
+  }, [exam.questions]);
+
+  const currentQuestion = validQuestions[currentIndex] || exam.questions[currentIndex];
+  const totalQuestions = validQuestions.length || exam.questions.length;
+  const progress = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0;
 
   // Manage focus when switching questions so screen readers announce the new context
   useEffect(() => {
@@ -47,15 +60,16 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
       questionTitleRef.current.focus();
     }
 
-    if (audioAssistance && autoReadQuestions) {
+    if (audioAssistance && autoReadQuestions && currentQuestion) {
       // Small timeout to allow DOM update before speaking
       setTimeout(() => {
-        speak(`Question ${currentIndex + 1}: ${exam.questions[currentIndex].text}`, 'Reading question');
+        speak(`Question ${currentIndex + 1}: ${currentQuestion.text}`, 'Reading question');
       }, 300);
     }
-  }, [currentIndex, audioAssistance, autoReadQuestions, speak, exam.questions]);
+  }, [currentIndex, audioAssistance, autoReadQuestions, speak, currentQuestion]);
 
   const handleOptionChange = (value: string) => {
+    if (!currentQuestion) return;
     setAnswers(prev => ({
       ...prev,
       [currentQuestion.id]: value
@@ -65,7 +79,11 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const handleNext = () => {
     stop();
     if (currentIndex < totalQuestions - 1) {
+      setIsLoading(true);
       setCurrentIndex(prev => prev + 1);
+      setTimeout(() => setIsLoading(false), 300);
+    } else {
+      setIsSubmitDialogOpen(true);
     }
   };
 
@@ -111,6 +129,24 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   });
 
   const unansweredCount = totalQuestions - Object.keys(answers).length;
+
+  // Strict Render Guard: Prevent stranded infinite loading screens
+  if (!validQuestions || validQuestions.length === 0 || !validQuestions[currentIndex] || !currentQuestion || isLoading) {
+    if (isLoading) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+          <div className="animate-spin size-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+          <p className="text-sm font-semibold text-foreground font-mono">Loading next question...</p>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <p className="text-lg font-bold text-foreground">Question Not Found or Examination Complete</p>
+        <Button onClick={handleSubmit}>Submit Examination</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

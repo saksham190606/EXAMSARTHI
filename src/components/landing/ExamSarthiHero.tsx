@@ -9,23 +9,24 @@ import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import { speakText } from '@/lib/voice/useVoiceEngine';
+import { getHighFidelityVoice, sanitizeExamTextForSpeech } from '@/lib/voice/speech-synthesis';
 import { cn } from '@/lib/utils';
 
-export const DASHBOARD_KEYWORDS = ["dashboard", "home", "main screen", "profile", "डैशबोर्ड", "होम", "मुख्य पृष्ठ"];
-export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
-export const PRACTICE_KEYWORDS = ["practice", "learn", "study", "prepare", "प्रैक्टिस", "अभ्यास", "पढ़ाई"];
-export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "विकल्प"];
-export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
+import { 
+  matchNavigationIntent, 
+  handleVoiceNavigation, 
+  DASHBOARD_KEYWORDS, 
+  EXAMS_KEYWORDS, 
+  PRACTICE_KEYWORDS, 
+  SETTINGS_KEYWORDS, 
+  LOGIN_KEYWORDS 
+} from '@/components/layout/VoiceNavigation';
+
+export { DASHBOARD_KEYWORDS, EXAMS_KEYWORDS, PRACTICE_KEYWORDS, SETTINGS_KEYWORDS, LOGIN_KEYWORDS };
 
 export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
-  const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-  if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
-  if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
-  if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
-  if (SETTINGS_KEYWORDS.some(k => clean.includes(k))) return 'SETTINGS';
-  if (LOGIN_KEYWORDS.some(k => clean.includes(k))) return 'LOGIN';
-  return 'UNKNOWN';
+  const match = matchNavigationIntent(text);
+  return match ? match.target : 'UNKNOWN';
 };
 
 interface ExamBadge {
@@ -101,37 +102,92 @@ export default function ExamSarthiHero() {
   const [statusMessage, setStatusMessage] = useState<string>('');
   const recognitionRef = useRef<any>(null);
 
+  // 1. Global Speaking Guard (Strict Audio Mutex Ref)
+  const isSystemSpeakingRef = useRef(false);
+  const isVoiceModeActiveRef = useRef(false);
+
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
 
+  // 2. Hard-Stop Microphone Before Speech
+  const speakText = useCallback((text: string, lang?: string) => {
+    // 1. Lock the mutex
+    isSystemSpeakingRef.current = true;
+
+    // 2. Kill the microphone instantly
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+    }
+
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      isSystemSpeakingRef.current = false;
+      return;
+    }
+
+    // 3. Cancel any lingering speech
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+
+    // 4. Start speaking
+    const targetLang = lang || (isHindi ? 'hi-IN' : 'en-US');
+    const sanitized = sanitizeExamTextForSpeech(text, targetLang);
+    const utterance = new SpeechSynthesisUtterance(sanitized);
+    utterance.lang = targetLang;
+    const store = useAccessibilityStore.getState();
+    utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
+    const voice = getHighFidelityVoice(targetLang, store.selectedVoiceURI);
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    utterance.onend = () => {
+      // 5. Unlock the mutex and restart mic with a 300ms debounce to let room echo fade
+      setTimeout(() => {
+        isSystemSpeakingRef.current = false;
+        if (isVoiceModeActiveRef.current) {
+          try {
+            recognitionRef.current?.start();
+          } catch (e) {}
+        }
+      }, 300);
+    };
+
+    utterance.onerror = () => {
+      isSystemSpeakingRef.current = false;
+    };
+
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      isSystemSpeakingRef.current = false;
+    }
+  }, [isHindi]);
+
   const handleVoiceResult = useCallback((transcript: string) => {
     setStatusMessage(transcript);
-    const intent = matchIntent(transcript.toLowerCase());
-    const speechLang = isHindi ? 'hi-IN' : 'en-US';
+    const handled = handleVoiceNavigation(
+      transcript,
+      router,
+      (text, lang) => speakText(text, lang),
+      isHindi
+    );
 
-    if (intent === 'DASHBOARD') {
-      speakText("Navigating to your Dashboard", speechLang);
-      router.push('/dashboard');
-    } else if (intent === 'EXAMS') {
-      speakText("Opening the Exams Hub", speechLang);
-      router.push('/exam');
-    } else if (intent === 'PRACTICE') {
-      speakText("Opening Practice section", speechLang);
-      router.push('/practice');
-    } else if (intent === 'SETTINGS') {
-      speakText("Opening Settings", speechLang);
-      router.push('/settings');
-    } else if (intent === 'LOGIN') {
-      speakText("Opening Sign In page", speechLang);
-      router.push('/login');
-    } else {
-      // Only trigger fallback if absolutely no keyword was found
+    if (!handled) {
+      const speechLang = isHindi ? 'hi-IN' : 'en-US';
       speakText(
-        "I heard " + transcript + ", but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.",
+        isHindi
+          ? `मैंने सुना "${transcript}", लेकिन गंतव्य समझ नहीं आया। 'डैशबोर्ड', 'परीक्षा', या 'प्रैक्टिस' बोलें।`
+          : `I heard "${transcript}", but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.`,
         speechLang
       );
     }
-  }, [isHindi, router]);
+  }, [isHindi, router, speakText]);
 
   const startListening = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -158,7 +214,13 @@ export default function ExamSarthiHero() {
         setIsListening(true);
       };
 
+      // 3. Guard Clause in the Recognition Listener:
       recognition.onresult = (event: any) => {
+        if (isSystemSpeakingRef.current) {
+          console.log("Ignored transcript: System is currently speaking.");
+          return;
+        }
+
         if (!event.results || !event.results[0] || !event.results[0][0]) return;
         const rawTranscript = event.results[0][0].transcript.toLowerCase();
         const cleanTranscript = rawTranscript.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
@@ -172,19 +234,30 @@ export default function ExamSarthiHero() {
         console.warn('[Landing Voice Recognition Error]', event.error);
       };
 
+      // 4. Handle the onend Auto-Restart Safely:
       recognition.onend = () => {
-        setIsListening(false);
+        if (!isSystemSpeakingRef.current && isVoiceModeActiveRef.current) {
+          setTimeout(() => {
+            try {
+              recognitionRef.current?.start();
+            } catch (e) {}
+          }, 150);
+        } else if (!isVoiceModeActiveRef.current) {
+          setIsListening(false);
+        }
       };
 
+      isVoiceModeActiveRef.current = true;
       recognition.start();
       setIsListening(true);
     } catch (err) {
       console.warn('[Landing Voice Recognition Start Error]', err);
     }
-  }, [handleVoiceResult, isHindi]);
+  }, [handleVoiceResult, isHindi, speakText]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {
+      isVoiceModeActiveRef.current = false;
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch (_) {}
       }

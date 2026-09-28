@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
@@ -11,7 +11,7 @@ import { useVoiceMode } from '@/hooks/useVoiceMode';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { CandidateQuestion } from '@/types/question';
 import { ExamState } from '@/lib/useExamEngine';
-import { ArrowLeft, ArrowRight, Flag, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flag, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 
 export interface ExamInterfaceActions {
   selectAnswer: (qId: string, oId: string) => void;
@@ -27,7 +27,7 @@ export interface ExamInterfaceActions {
 
 export interface ExamInterfaceProps {
   questions: CandidateQuestion[];
-  currentQuestion: CandidateQuestion;
+  currentQuestion?: CandidateQuestion;
   state: ExamState;
   actions: ExamInterfaceActions;
   totalQuestions: number;
@@ -48,6 +48,37 @@ export function ExamInterface({
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
 
+  // 2. Purge Multi-Select Questions: Filter incoming questions strictly
+  const validQuestions = useMemo(() => {
+    return (questions || []).filter(q =>
+      // Exclude if it's explicitly typed as multiple select
+      (q.type as string) !== 'MULTIPLE_SELECT' &&
+      (q.type as string) !== 'multiple-choice' &&
+      // Exclude if correctOption/answer is an array (meaning multiple answers)
+      !Array.isArray((q as any).correctOption) &&
+      !Array.isArray((q as any).correctAnswer) &&
+      !Array.isArray((q as any).acceptableAnswers) &&
+      // Strictly allow only these 3 types
+      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+    );
+  }, [questions]);
+
+  // 1. Fix Infinite "Loading Next Question" State:
+  const [isLoading, setIsLoading] = useState(false);
+  const currentIndex = state.currentQuestionIndex;
+
+  const handleNextQuestion = () => {
+    if (currentIndex < validQuestions.length - 1) {
+      setIsLoading(true);
+      actions.goToNext();
+      // Ensure loading state always resolves after render
+      setTimeout(() => setIsLoading(false), 300);
+    } else {
+      // Reached the end
+      onOpenSubmitDialog();
+    }
+  };
+
   const {
     isActive,
     status,
@@ -65,16 +96,17 @@ export function ExamInterface({
   } = useVoiceMode({
     actions,
     state,
-    currentQuestion,
-    totalQuestions,
-    questions,
+    currentQuestion: currentQuestion || validQuestions[currentIndex],
+    totalQuestions: validQuestions.length || totalQuestions,
+    questions: validQuestions,
     activeSection: state.activeSection,
     sectionTimeRemaining: state.sectionTimeRemaining,
     onOpenSubmitDialog,
     onCloseSubmitDialog,
   });
 
-  const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
+  const activeQuestion = currentQuestion || validQuestions[currentIndex];
+  const isFlagged = activeQuestion ? state.flagged.has(activeQuestion.id) : false;
 
   // Synchronize Keyboard Shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Mic Toggle), 1-4 (Options)
   useEffect(() => {
@@ -94,7 +126,7 @@ export function ExamInterface({
       // Alt+N -> Next
       if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
         e.preventDefault();
-        actions.goToNext();
+        handleNextQuestion();
         return;
       }
 
@@ -108,13 +140,13 @@ export function ExamInterface({
       // 1-4 -> Select Option A-D
       if (!e.altKey && !e.ctrlKey && !e.metaKey && ['1', '2', '3', '4'].includes(e.key)) {
         const optionIndex = parseInt(e.key, 10) - 1;
-        if (currentQuestion && currentQuestion.options && optionIndex >= 0 && optionIndex < currentQuestion.options.length) {
+        if (activeQuestion && activeQuestion.options && optionIndex >= 0 && optionIndex < activeQuestion.options.length) {
           e.preventDefault();
-          const opt = currentQuestion.options[optionIndex];
+          const opt = activeQuestion.options[optionIndex];
           if (actions.setAnswer) {
-            actions.setAnswer(currentQuestion.id, opt.id);
+            actions.setAnswer(activeQuestion.id, opt.id);
           }
-          actions.selectAnswer(currentQuestion.id, opt.id);
+          actions.selectAnswer(activeQuestion.id, opt.id);
         }
       }
     };
@@ -123,10 +155,39 @@ export function ExamInterface({
     return () => {
       window.removeEventListener('keydown', handleExamKeyDown);
     };
-  }, [actions, currentQuestion, toggleVoiceMode]);
+  }, [actions, activeQuestion, toggleVoiceMode, currentIndex, validQuestions.length]);
 
-  if (!currentQuestion) {
-    return null;
+  // Strict Render Guard: Prevent stranded infinite loading screens
+  if (!validQuestions || validQuestions.length === 0 || !validQuestions[currentIndex] || !activeQuestion || isLoading) {
+    if (isLoading) {
+      return (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+          <Loader2 className="size-8 animate-spin text-primary" />
+          <p className="text-sm font-semibold text-foreground font-mono">Loading next question...</p>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+          <AlertTriangle className="size-6" />
+        </div>
+        <h2 className="text-lg font-bold text-foreground">
+          {isHindi ? 'प्रश्न उपलब्ध नहीं है या परीक्षा पूर्ण' : 'Question Not Found or Examination Complete'}
+        </h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          {isHindi ? 'आप अंतिम प्रश्न तक पहुँच चुके हैं या प्रश्न लोड नहीं हो सका।' : 'You have reached the end of the question cohort or the question could not be loaded.'}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={() => actions.goToQuestion(0)}>
+            {isHindi ? 'पहले प्रश्न पर जाएं' : 'Return to Question 1'}
+          </Button>
+          <Button variant="default" onClick={onOpenSubmitDialog}>
+            {isHindi ? 'परीक्षा सबमिट करें' : 'Submit Examination'}
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -161,20 +222,32 @@ export function ExamInterface({
         />
       </div>
 
-      {/* Active Glowing Sunlight Yellow Mic Indicator Floating Pulse */}
-      {isActive && status === 'Listening' && (
-        <div
-          aria-live="polite"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.6)] backdrop-blur-md animate-pulse"
-        >
-          <div className="relative flex items-center justify-center">
-            <span className="absolute -inset-1.5 rounded-full bg-[#ffed00]/60 animate-ping opacity-80" />
-            <span className="size-3 rounded-full bg-[#ffed00]" />
+      {/* Active Glowing Indicator Floating Pulse */}
+      {isActive && (
+        isSpeaking || status === 'Speaking' ? (
+          <div
+            aria-live="polite"
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-900/95 border-2 border-red-500/70 shadow-[0_0_24px_rgba(239,68,68,0.5)] backdrop-blur-md"
+          >
+            <span className="size-3 rounded-full bg-red-500" />
+            <span className="text-xs font-bold tracking-wider text-red-400 uppercase font-mono">
+              [ 🔇 Mic Paused (Speaking) ]
+            </span>
           </div>
-          <span className="text-xs font-bold tracking-wider text-[#ffed00] uppercase font-mono">
-            {isHindi ? 'सुन रहा है...' : 'Listening...'}
-          </span>
-        </div>
+        ) : status === 'Listening' ? (
+          <div
+            aria-live="polite"
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-950/95 border-2 border-[#ffed00] shadow-[0_0_24px_rgba(255,237,0,0.6)] backdrop-blur-md animate-pulse"
+          >
+            <div className="relative flex items-center justify-center">
+              <span className="absolute -inset-1.5 rounded-full bg-[#ffed00]/60 animate-ping opacity-80" />
+              <span className="size-3 rounded-full bg-[#ffed00]" />
+            </div>
+            <span className="text-xs font-bold tracking-wider text-[#ffed00] uppercase font-mono">
+              [ 🎙️ Listening ]
+            </span>
+          </div>
+        ) : null
       )}
 
       {/* Main Question Card with Voice Assistive Panel & Physical Unlock Banner */}
@@ -210,13 +283,13 @@ export function ExamInterface({
 
         <CardContent className="p-6 md:p-8">
           <QuestionDisplay
-            question={currentQuestion}
+            question={activeQuestion}
             currentIndex={state.currentQuestionIndex}
             totalQuestions={totalQuestions}
-            userAnswer={state.answers[currentQuestion.id]}
+            userAnswer={state.answers[activeQuestion.id]}
             selectedOptionId={
-              typeof state.answers[currentQuestion.id] === 'string'
-                ? (state.answers[currentQuestion.id] as string)
+              typeof state.answers[activeQuestion.id] === 'string'
+                ? (state.answers[activeQuestion.id] as string)
                 : undefined
             }
             onSelectOption={actions.selectAnswer}
@@ -247,8 +320,8 @@ export function ExamInterface({
           <Button
             variant="default"
             size="lg"
-            onClick={actions.goToNext}
-            disabled={state.currentQuestionIndex === totalQuestions - 1}
+            onClick={handleNextQuestion}
+            disabled={isLoading}
             className="h-11 px-6 font-semibold gap-2"
           >
             <span>{isHindi ? 'अगला (Alt+N)' : 'Next (Alt+N)'}</span>
@@ -261,8 +334,8 @@ export function ExamInterface({
             variant="outline"
             size="sm"
             onClick={() => {
-              if (actions.setAnswer) actions.setAnswer(currentQuestion.id, '');
-              actions.selectAnswer(currentQuestion.id, '');
+              if (actions.setAnswer) actions.setAnswer(activeQuestion.id, '');
+              actions.selectAnswer(activeQuestion.id, '');
             }}
             className="h-9 px-3 text-xs font-medium gap-1.5"
           >
@@ -273,7 +346,7 @@ export function ExamInterface({
           <Button
             variant={isFlagged ? 'secondary' : 'outline'}
             size="sm"
-            onClick={() => actions.toggleFlag?.(currentQuestion.id)}
+            onClick={() => actions.toggleFlag?.(activeQuestion.id)}
             className={`h-9 px-3 text-xs font-medium gap-1.5 transition-all ${
               isFlagged
                 ? 'border-amber-400 bg-amber-500 hover:bg-amber-400 text-black font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)]'

@@ -213,46 +213,46 @@ export function matchExamVoiceRoute(transcript: string): ExamVoiceRoute | null {
 
 /**
  * Clean token matching strictly aligning with user-specified keywords:
- * - SSC CGL: ["cgl", "ssc", "staff selection", "सीजीएल", "एसएससी"]
- * - UPSC: ["upsc", "cse", "prelims", "civil services", "यूपीएससी", "प्रीलिम्स"]
- * - IBPS / Banking: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ"]
- * - Railway: ["rrb", "ntpc", "railway", "railways", "रेलवे", "एनटीपीसी"]
- * - Vision AI: ["vision", "diagram", "visual", "विज़न", "डायग्राम"]
+ * - SSC CGL: ["cgl", "ssc", "tier 1", "staff selection", "सीजीएल", "एसएससी"]
+ * - UPSC CSE: ["upsc", "cse", "prelims", "civil services", "ias", "यूपीएससी", "प्रीलिम्स"]
+ * - IBPS PO: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ", "बैंक"]
+ * - RRB NTPC: ["rrb", "ntpc", "railway", "railways", "stage 1", "आरआरबी", "एनटीपीसी", "रेलवे"]
+ * - VISION AI (Assistive Test): ["vision", "diagram", "visual", "scribe", "multimodal", "डायग्राम", "विज़न"]
  */
 export function matchExamTokens(transcript: string): { route: ExamVoiceRoute; examName: string } | null {
   if (!transcript) return null;
-  const lower = transcript.toLowerCase().trim();
+  const lower = transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
-  // SSC CGL: ["cgl", "ssc", "staff selection", "सीजीएल", "एसएससी"]
-  const sscTokens = ["cgl", "ssc", "staff selection", "सीजीएल", "एसएससी"];
+  // SSC CGL: ["cgl", "ssc", "tier 1", "staff selection", "सीजीएल", "एसएससी"]
+  const sscTokens = ["cgl", "ssc", "tier 1", "staff selection", "सीजीएल", "एसएससी"];
   if (sscTokens.some((t) => lower.includes(t))) {
     const route = EXAM_VOICE_ROUTES.find((r) => r.id === 'ssc-cgl') || EXAM_VOICE_ROUTES[0];
     return { route, examName: "SSC CGL" };
   }
 
-  // UPSC: ["upsc", "cse", "prelims", "civil services", "यूपीएससी", "प्रीलिम्स"]
-  const upscTokens = ["upsc", "cse", "prelims", "civil services", "यूपीएससी", "प्रीलिम्स"];
+  // UPSC CSE: ["upsc", "cse", "prelims", "civil services", "ias", "यूपीएससी", "प्रीलिम्स"]
+  const upscTokens = ["upsc", "cse", "prelims", "civil services", "ias", "यूपीएससी", "प्रीलिम्स"];
   if (upscTokens.some((t) => lower.includes(t))) {
     const route = EXAM_VOICE_ROUTES.find((r) => r.id === 'upsc-prelims') || EXAM_VOICE_ROUTES[1];
     return { route, examName: "UPSC Prelims" };
   }
 
-  // IBPS / Banking: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ"]
-  const ibpsTokens = ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ"];
+  // IBPS PO: ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ", "बैंक"]
+  const ibpsTokens = ["ibps", "po", "banking", "bank", "आईबीपीएस", "पीओ", "बैंक"];
   if (ibpsTokens.some((t) => lower.includes(t))) {
     const route = EXAM_VOICE_ROUTES.find((r) => r.id === 'ibps-po') || EXAM_VOICE_ROUTES[2];
     return { route, examName: "IBPS PO" };
   }
 
-  // Railway: ["rrb", "ntpc", "railway", "railways", "रेलवे", "एनटीपीसी"]
-  const rrbTokens = ["rrb", "ntpc", "railway", "railways", "रेलवे", "एनटीपीसी"];
+  // RRB NTPC: ["rrb", "ntpc", "railway", "railways", "stage 1", "आरआरबी", "एनटीपीसी", "रेलवे"]
+  const rrbTokens = ["rrb", "ntpc", "railway", "railways", "stage 1", "आरआरबी", "एनटीपीसी", "रेलवे"];
   if (rrbTokens.some((t) => lower.includes(t))) {
     const route = EXAM_VOICE_ROUTES.find((r) => r.id === 'rrb-ntpc') || EXAM_VOICE_ROUTES[3];
     return { route, examName: "Railway RRB" };
   }
 
-  // Vision AI: ["vision", "diagram", "visual", "विज़न", "डायग्राम"]
-  const visionTokens = ["vision", "diagram", "visual", "विज़न", "डायग्राम"];
+  // VISION AI (Assistive Test): ["vision", "diagram", "visual", "scribe", "multimodal", "डायग्राम", "विज़न"]
+  const visionTokens = ["vision", "diagram", "visual", "scribe", "multimodal", "डायग्राम", "विज़न"];
   if (visionTokens.some((t) => lower.includes(t))) {
     const route = EXAM_VOICE_ROUTES.find((r) => r.id === 'vision-ai-diagram') || EXAM_VOICE_ROUTES[4];
     return { route, examName: "Vision AI" };

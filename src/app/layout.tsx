@@ -43,7 +43,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground relative">
+      <body 
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-background text-foreground relative"
+      >
         <DotPattern className="fixed inset-0 z-[1] h-full w-full fill-white/20 [mask-image:radial-gradient(ellipse_at_center,white_60%,transparent_100%)] pointer-events-none" />
 
         {/* Skip to Main Content Link for Keyboard and Screen-Reader Accessibility */}
@@ -54,7 +57,10 @@ export default function RootLayout({
           Skip to main content
         </a>
 
-        <div className="relative z-[2] flex min-h-full flex-1 flex-col bg-transparent">
+        <div 
+          suppressHydrationWarning
+          className="relative z-[2] flex min-h-full flex-1 flex-col bg-transparent"
+        >
           <ThemeProvider
             attribute="class"
             defaultTheme="light"

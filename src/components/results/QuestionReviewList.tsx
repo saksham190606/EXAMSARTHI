@@ -182,7 +182,7 @@ function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean, isWalk
       : `Official Correct Answer is: ${cleanCorrectText}.`;
 
     const promptTail = isWalkthrough
-      ? ` Review complete for Question ${qNum}. Say 'Next' to move to the next question, 'Previous' to go back, or 'Repeat' to listen again.`
+      ? ` Review complete for Question ${qNum}. Say Next, Previous, or Repeat.`
       : '';
 
     return `Question ${qNum}. ${cleanQText}. Status: ${statusText} ${correctAnsPhrase} Explanation: ${cleanExplanation}.${promptTail}`;
@@ -379,7 +379,15 @@ export function QuestionReviewList({
 
     clearAudioTimers();
 
-    // 1. Cancel prior utterance
+    // 1. Lock the mutex synchronously and kill microphone immediately
+    isSpeakingRef.current = true;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+    }
+
+    // Cancel prior utterance
     try {
       window.speechSynthesis.cancel();
     } catch (e) {}
@@ -419,6 +427,7 @@ export function QuestionReviewList({
       console.warn('[ReviewWalkthrough] Watchdog timeout for question index', questionIndex);
       if (isAudioReviewActiveRef.current) {
         setIsSpeaking(false);
+        isSpeakingRef.current = false;
         setIsWaitingForConsent(true);
         startListeningSafely();
       } else {
@@ -427,24 +436,29 @@ export function QuestionReviewList({
     }, watchdogDuration);
 
     utterance.onend = () => {
-      setIsSpeaking(false);
       clearAudioTimers();
       activeUtteranceRef.current = null;
       if (typeof window !== 'undefined') {
         (window as any).__reviewUtterance = null;
       }
 
-      if (isWalkthrough && isAudioReviewActiveRef.current) {
-        // STRICT SINGLE-QUESTION ISOLATION:
-        // No auto-advancing loops! Stop TTS completely and wait for candidate command.
-        setIsWaitingForConsent(true);
-        startListeningSafely();
-      } else {
-        setIndividualPlayingId(null);
-      }
+      // Unlock the mutex and restart mic with a 300ms debounce to let room echo fade
+      setTimeout(() => {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
+        if (isWalkthrough && isAudioReviewActiveRef.current) {
+          // STRICT SINGLE-QUESTION ISOLATION:
+          // No auto-advancing loops! Stop TTS completely and wait for candidate command.
+          setIsWaitingForConsent(true);
+          startListeningSafely();
+        } else {
+          setIndividualPlayingId(null);
+        }
+      }, 300);
     };
 
     utterance.onerror = (err) => {
+      isSpeakingRef.current = false;
       setIsSpeaking(false);
       console.warn('[ReviewWalkthrough] Utterance error:', err);
       clearAudioTimers();
@@ -545,9 +559,22 @@ export function QuestionReviewList({
       utterance.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
       utterance.rate = store.speechRate || 1.0;
       const naturalVoice = getHighFidelityVoice(isHindiRef.current ? 'hi-IN' : 'en-US', store.selectedVoiceURI) || getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
-      if (naturalVoice) utterance.voice = naturalVoice;
+      // Lock mutex and abort mic before final speech
+      isSpeakingRef.current = true;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+      try { window.speechSynthesis.cancel(); } catch (e) {}
 
       utterance.onend = () => {
+        setTimeout(() => {
+          isSpeakingRef.current = false;
+          setIsSpeaking(false);
+          stopAudioWalkthrough();
+        }, 300);
+      };
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
         setIsSpeaking(false);
         stopAudioWalkthrough();
       };
@@ -555,6 +582,8 @@ export function QuestionReviewList({
         setIsSpeaking(true);
         window.speechSynthesis.speak(utterance);
       } catch (e) {
+        isSpeakingRef.current = false;
+        setIsSpeaking(false);
         stopAudioWalkthrough();
       }
     }
@@ -670,11 +699,12 @@ export function QuestionReviewList({
     let recognition: any = null;
     let isDisposed = false;
 
-    const nextCommands = ["next", "agla", "आगे", "अगला", "yes"];
-    const prevCommands = ["previous", "back", "pichla", "पिछला"];
+    const pauseCommands = ["pause", "wait", "hold", "stop speaking", "रुको", "रुकिए", "पॉज़"];
+    const resumeCommands = ["resume", "play", "continue", "चालू", "आगे बोलो"];
+    const nextCommands = ["next", "proceed", "yes", "continue", "agla", "आगे", "अगला", "हाँ"];
+    const prevCommands = ["previous", "back", "pichla", "पिछला", "पीछे"];
     const repeatCommands = ["repeat", "again", "dobara", "दोबारा"];
-    const pauseCommands = ["pause", "wait", "रुको"];
-    const stopCommands = ["stop", "close", "बंद करो"];
+    const stopCommands = ["stop", "close review", "exit", "बंद करो", "close"];
 
     const matchesList = (phrase: string, keywords: string[]) => {
       if (!phrase) return false;
@@ -708,31 +738,46 @@ export function QuestionReviewList({
         };
 
         recognition.onresult = (event: any) => {
-          if (!isAudioReviewActiveRef.current && !isSpeakingRef.current && !isWaitingForConsentRef.current) return;
+          if (!isAudioReviewActiveRef.current && !isWaitingForConsentRef.current && !isSpeakingRef.current) return;
           if (!event.results || !event.results[0] || !event.results[0][0]) return;
 
-          const cmd = event.results[0][0].transcript.toLowerCase().trim();
-          const latestResult = event.results[event.results.length - 1];
-          const latestCmd = latestResult && latestResult[0] ? latestResult[0].transcript.toLowerCase().trim() : '';
+          const rawTranscript = event.results[event.results.length - 1]?.[0]?.transcript || event.results[0][0].transcript;
+          const cleanCmd = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+
+          const isPause = matchesList(cleanCmd, pauseCommands);
+          const isResume = matchesList(cleanCmd, resumeCommands);
+          const isNext = matchesList(cleanCmd, nextCommands);
+          const isPrev = matchesList(cleanCmd, prevCommands);
+          const isRepeat = matchesList(cleanCmd, repeatCommands);
+          const isStop = matchesList(cleanCmd, stopCommands);
+
+          // Barge-in: If the system is currently speaking, ONLY accept explicit review barge-in commands!
+          // Filter out room echo / TTS audio that does not match an explicit review control keyword.
+          if (isSpeakingRef.current && !isPause && !isResume && !isNext && !isPrev && !isRepeat && !isStop) {
+            return;
+          }
 
           const now = Date.now();
           if (now - lastActionTimestampRef.current < 500) {
             return;
           }
 
-          if (matchesList(cmd, nextCommands) || matchesList(latestCmd, nextCommands)) {
-            lastActionTimestampRef.current = now;
-            handleNext();
-          } else if (matchesList(cmd, prevCommands) || matchesList(latestCmd, prevCommands)) {
-            lastActionTimestampRef.current = now;
-            handlePrev();
-          } else if (matchesList(cmd, repeatCommands) || matchesList(latestCmd, repeatCommands)) {
-            lastActionTimestampRef.current = now;
-            handleRepeat();
-          } else if (matchesList(cmd, pauseCommands) || matchesList(latestCmd, pauseCommands)) {
+          if (isPause) {
             lastActionTimestampRef.current = now;
             handleTogglePause();
-          } else if (matchesList(cmd, stopCommands) || matchesList(latestCmd, stopCommands)) {
+          } else if (isResume) {
+            lastActionTimestampRef.current = now;
+            handleResume();
+          } else if (isNext) {
+            lastActionTimestampRef.current = now;
+            handleNext();
+          } else if (isPrev) {
+            lastActionTimestampRef.current = now;
+            handlePrev();
+          } else if (isRepeat) {
+            lastActionTimestampRef.current = now;
+            handleRepeat();
+          } else if (isStop) {
             lastActionTimestampRef.current = now;
             handleStop();
           }

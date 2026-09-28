@@ -93,19 +93,19 @@ export function ExamMicStatusBar({
     >
       {/* Left side: Real-time Debug Visualizer Status Pill */}
       <div className="flex items-center gap-3 min-w-0 flex-1 flex-wrap">
-        {/* State 1: 🔊 READING QUESTION */}
+        {/* State 1: [ 🔇 Mic Paused (Speaking) ] */}
         {speakingActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
-              <Volume2 className="size-4 text-sky-400 animate-pulse" />
+              <span className="size-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]" />
             </span>
-            <span className="text-sm font-bold text-sky-300 font-mono tracking-wide">
-              {isHindi ? "🔊 प्रश्न पढ़ रहा है..." : "🔊 Reading question..."}
+            <span className="text-sm font-bold text-red-400 font-mono tracking-wide">
+              [ 🔇 Mic Paused (Speaking) ]
             </span>
           </div>
         )}
 
-        {/* State 2: 🎙️ LISTENING / MIC IS HOT */}
+        {/* State 2: [ 🎙️ Listening ] */}
         {listeningActive && (
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="relative flex size-3.5 shrink-0 items-center justify-center">
@@ -114,7 +114,7 @@ export function ExamMicStatusBar({
             </span>
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
               <span className="text-sm font-black text-[#ffed00] tracking-wide font-mono">
-                {voiceStatus || (isHindi ? "🎙️ सुन रहा है... (बोलें 'A', 'B', 'Next')" : "🎙️ Listening... (Say 'A', 'B', 'Next')")}
+                [ 🎙️ Listening ]
               </span>
             </div>
           </div>

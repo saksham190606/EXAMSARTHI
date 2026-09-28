@@ -76,9 +76,9 @@ export function VoiceExamPanel({
     switch (status) {
       case 'Listening':
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[46px] text-xs font-semibold bg-[#ffed00]/20 text-yellow-300 dark:text-[#ffed00] border border-[#ffed00]/60 shadow-[0_0_14px_rgba(255,237,0,0.4)] animate-pulse">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[46px] text-xs font-bold font-mono bg-[#ffed00]/20 text-[#ffed00] border-2 border-[#ffed00]/80 shadow-[0_0_14px_rgba(255,237,0,0.4)] animate-pulse">
             <Radio className="size-3 text-[#ffed00]" aria-hidden="true" />
-            <span>{t('statusListening')}</span>
+            <span>[ 🎙️ Listening ]</span>
           </span>
         );
       case 'Processing':
@@ -90,9 +90,9 @@ export function VoiceExamPanel({
         );
       case 'Speaking':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[46px] text-xs font-semibold bg-primary/15 text-primary border border-primary/30">
-            <Volume2 className="size-3" aria-hidden="true" />
-            <span>{t('statusSpeaking')}</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[46px] text-xs font-bold font-mono bg-neutral-900/90 text-red-400 border-2 border-red-500/70 shadow-[0_0_14px_rgba(239,68,68,0.3)]">
+            <span aria-hidden="true">🔇</span>
+            <span>[ 🔇 Mic Paused (Speaking) ]</span>
           </span>
         );
       case 'Error':
