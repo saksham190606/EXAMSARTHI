@@ -104,7 +104,6 @@ SELECT
   q.topic,
   q.difficulty,
   q.options,
-  q.explanation,
   q.created_at
 FROM public.questions q;
 
@@ -140,7 +139,6 @@ SELECT
   q.topic,
   q.difficulty,
   q.options,
-  q.explanation,
   q.created_at
 FROM public.exam_questions eq
 JOIN public.questions q ON eq.question_id = q.id;
@@ -279,7 +277,7 @@ CREATE POLICY "attempts_update_in_progress"
   ON public.exam_attempts FOR UPDATE
   TO authenticated, anon
   USING (auth.uid() = user_id AND status = 'in_progress')
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid() = user_id AND status = 'in_progress');
 
 -- ------------------------------------------------------------------------------
 -- 9.6 Attempt Answers Policies
@@ -329,7 +327,7 @@ GRANT SELECT ON public.exam_questions_safe TO anon, authenticated;
 GRANT SELECT ON public.exam_active_questions TO anon, authenticated;
 
 -- Table permissions subject to RLS
-GRANT SELECT, INSERT, UPDATE ON public.profiles TO anon, authenticated;
+GRANT SELECT ON public.profiles TO anon, authenticated;
 GRANT SELECT ON public.exams TO anon, authenticated;
 GRANT SELECT ON public.exam_questions TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.exam_attempts TO anon, authenticated;

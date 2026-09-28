@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2, ShieldCheck, WifiOff, AlertTriangle, ArrowRight, Layers } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { useExamEngine } from '@/lib/useExamEngine';
+import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
 
 import { Button } from '@/components/ui/button';
 import { LoaderOne } from '@/components/ui/loader-one';
@@ -103,7 +104,7 @@ function ActiveExamSession({
     questions,
     examDuration,
     async (finalState) => {
-      if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+      stopSpeaking();
       setIsSubmitting(true);
       setSubmitError(null);
 
@@ -258,23 +259,11 @@ function ActiveExamSession({
     };
   }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
 
-  // 1. Fix Infinite "Loading Next Question" State & Implement Global Navigation Padlock:
+  // Keep a brief loading state while the engine changes the active question.
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
 
   const handleNextQuestion = () => {
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
-      return;
-    }
-
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT +1 INCREMENT
     if (currentIndex < questions.length - 1) {
       setIsLoading(true);
       actions.goToNext();
@@ -284,36 +273,10 @@ function ActiveExamSession({
       // Reached the end
       setIsSubmitDialogOpen(true);
     }
-
-    // 4. RELEASE LOCK AFTER 2 SECONDS (Ensures completely single-step sequence)
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   const handlePrevQuestion = () => {
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
-      return;
-    }
-
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT -1 DECREMENT
     actions.goToPrevious();
-
-    // 4. RELEASE LOCK
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   // Synchronize global voice companion actions with active exam state
@@ -567,7 +530,7 @@ function ActiveExamSession({
         totalQuestions={totalQuestions}
         answeredCount={answeredCount}
         onConfirmSubmit={() => {
-          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+          stopSpeaking();
           actions.submitExam();
         }}
       />
@@ -1128,5 +1091,3 @@ export default function ExamPage() {
     </React.Suspense>
   );
 }
-
-

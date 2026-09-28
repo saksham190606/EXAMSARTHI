@@ -34,6 +34,7 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   
   const questionTitleRef = useRef<HTMLHeadingElement>(null);
+  const navigationLockRef = useRef(false);
 
   const { speak, stop, status, isSupported } = useSpeech();
   const { audioAssistance, autoReadQuestions } = useAccessibilityStore();
@@ -78,18 +79,12 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
 
   const handleNextQuestion = () => {
     stop();
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
-      return;
-    }
+    if (navigationLockRef.current) return;
+    navigationLockRef.current = true;
+    setTimeout(() => {
+      navigationLockRef.current = false;
+    }, 250);
 
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT +1 INCREMENT
     if (currentIndex < totalQuestions - 1) {
       setIsLoading(true);
       setCurrentIndex((prev) => {
@@ -103,29 +98,16 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
     } else {
       setIsSubmitDialogOpen(true);
     }
-
-    // 4. RELEASE LOCK AFTER 2 SECONDS (Ensures completely single-step sequence)
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   const handlePrevQuestion = () => {
     stop();
-    // 1. STRICT LOCK CHECK
-    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
-      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
-      return;
-    }
+    if (navigationLockRef.current) return;
+    navigationLockRef.current = true;
+    setTimeout(() => {
+      navigationLockRef.current = false;
+    }, 250);
 
-    // 2. ENGAGE LOCK
-    if (typeof window !== 'undefined') {
-      (window as any).isNavigatingRightNow = true;
-    }
-
-    // 3. STRICT -1 DECREMENT
     setCurrentIndex((prev) => {
       const prevTarget = prev - 1;
       if (prevTarget >= 0) {
@@ -133,13 +115,6 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
       }
       return prev;
     });
-
-    // 4. RELEASE LOCK
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        (window as any).isNavigatingRightNow = false;
-      }
-    }, 2000);
   };
 
   const handleNext = handleNextQuestion;

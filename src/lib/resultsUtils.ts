@@ -1,4 +1,4 @@
-import { Question, isQuestionAnswered, evaluateAnswer } from './examData';
+import { Question, isQuestionAnswered, evaluateAnswer } from '@/lib/questionEvaluation';
 import { ExamState } from './useExamEngine';
 
 export interface SubjectMetrics {

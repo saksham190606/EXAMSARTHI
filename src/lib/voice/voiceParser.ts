@@ -1,4 +1,5 @@
-import { Question, QuestionType, getQuestionType } from '@/lib/examData';
+import { QuestionType, getQuestionType } from '@/types/question';
+import { Question } from '@/lib/questionEvaluation';
 
 export type CommandLanguage = 'en' | 'hi' | 'mixed';
 

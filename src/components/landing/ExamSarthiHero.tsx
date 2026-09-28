@@ -9,7 +9,12 @@ import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import { getHighFidelityVoice, sanitizeExamTextForSpeech } from '@/lib/voice/speech-synthesis';
+import {
+  isVoiceRecognitionSupported,
+  speak as speakWithVoiceEngine,
+  startListening as startVoiceRecognition,
+  stopListening as stopVoiceRecognition,
+} from '@/lib/voice/useVoiceEngine';
 import { routeVoiceCommand } from '@/lib/voice/commandRouter';
 import { cn } from '@/lib/utils';
 
@@ -100,12 +105,11 @@ export default function ExamSarthiHero() {
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const recognitionRef = useRef<any>(null);
 
-  // 1. Global Speaking Guard (Strict Audio Mutex Ref)
-  const isSystemSpeakingRef = useRef(false);
   const isVoiceModeActiveRef = useRef(false);
+  const isPermissionRequestPendingRef = useRef(false);
   const lastCommandTimeRef = useRef(0);
+  const transcriptHandlerRef = useRef<(transcript: string) => void>(() => {});
 
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
@@ -124,251 +128,154 @@ export default function ExamSarthiHero() {
       router.push('/exam?exam=e1');
     } else if (t.includes('vision')) {
       router.push('/exam?exam=e4');
-    } else if (t) {
-      router.push(`/exam?exam=${t}`);
+    } else if (/^(e[1-4]|p[1-6])$/.test(t)) {
+      router.push(`/exam?${t.startsWith('p') ? 'set' : 'exam'}=${encodeURIComponent(t)}`);
     } else {
       router.push('/exam');
     }
   }, [router]);
 
-  // 2. Hard-Stop Microphone Before Speech with Global Window Mutex
+  // Use the shared speech engine so all voice surfaces share one audio lifecycle.
   const speakText = useCallback((text: string, lang?: string, onComplete?: () => void) => {
     if (typeof window === 'undefined') return;
-
-    // 1. ENGAGE GLOBAL LOCK
-    (window as any).isSystemSpeaking = true;
-    isSystemSpeakingRef.current = true;
-
-    // 2. HARD KILL MIC
-    if ((window as any).globalRecognitionInstance) {
-      try {
-        (window as any).globalRecognitionInstance.onend = null;
-        (window as any).globalRecognitionInstance.abort();
-      } catch (e) {}
-    }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.abort();
-      } catch (e) {}
-    }
-
-    window.speechSynthesis.cancel();
     const targetLang = lang || (isHindi ? 'hi-IN' : 'en-US');
-    const sanitized = sanitizeExamTextForSpeech(text, targetLang);
-    const utterance = new SpeechSynthesisUtterance(sanitized);
-    utterance.lang = targetLang;
     const store = useAccessibilityStore.getState();
-    utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
-    const voice = getHighFidelityVoice(targetLang, store.selectedVoiceURI);
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    const handleRecognitionEnd = () => {
-      if ((window as any).isSystemSpeaking === true) return;
-      if (isVoiceModeActiveRef.current) {
+    stopVoiceRecognition(false);
+    speakWithVoiceEngine(text, {
+      lang: targetLang,
+      rate: store.speechRate || 1,
+      priority: 'response',
+      interrupt: true,
+      onEnd: () => {
         setTimeout(() => {
-          if ((window as any).isSystemSpeaking === true) return;
-          try {
-            (window as any).globalRecognitionInstance?.start();
-          } catch (e) {}
-        }, 150);
-      } else {
-        setIsListening(false);
-      }
-    };
-
-    utterance.onend = () => {
-      // 3. WAIT 500MS FOR ROOM ECHO TO FADE, THEN UNLOCK
-      setTimeout(() => {
-        (window as any).isSystemSpeaking = false;
-        isSystemSpeakingRef.current = false;
-        if ((window as any).globalRecognitionInstance && isVoiceModeActiveRef.current) {
-          // Reattach auto-restart and boot mic
-          (window as any).globalRecognitionInstance.onend = handleRecognitionEnd;
-          try {
-            (window as any).globalRecognitionInstance.start();
-          } catch (e) {}
-        }
-        if (onComplete) onComplete();
-      }, 500);
-    };
-
-    utterance.onerror = utterance.onend;
-    (window as any).__currentUtterance = utterance; // GC fix
-
-    try {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      (window as any).isSystemSpeaking = false;
-      isSystemSpeakingRef.current = false;
-    }
+          if (isVoiceModeActiveRef.current) {
+            startVoiceRecognition(targetLang, transcriptHandlerRef.current, { resolveAlternatives: false });
+            setIsListening(true);
+          } else {
+            setIsListening(false);
+          }
+          onComplete?.();
+        }, 500);
+      },
+    });
   }, [isHindi]);
 
   const startListening = useCallback(() => {
     if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    if (!isVoiceRecognitionSupported()) {
+      isVoiceModeActiveRef.current = false;
+      setIsListening(false);
       speakText(isHindi ? "वॉइस पहचान समर्थित नहीं है।" : "Speech recognition is not supported in this browser.");
       return;
     }
 
-    try {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    } catch (_) {}
+    isVoiceModeActiveRef.current = true;
+    startVoiceRecognition(isHindi ? 'hi-IN' : 'en-US', transcriptHandlerRef.current, {
+      resolveAlternatives: false,
+    });
+    setIsListening(true);
+  }, [isHindi, speakText]);
 
-    try {
-      const recognition = new SpeechRecognition();
-      recognitionRef.current = recognition;
-      // Store the instance globally so speakText can reach it
-      (window as any).globalRecognitionInstance = recognition;
-      recognition.continuous = true;
-      recognition.interimResults = false;
-      recognition.lang = isHindi ? 'hi-IN' : 'en-US';
+  useEffect(() => {
+    transcriptHandlerRef.current = async (rawTranscript) => {
+      const transcript = rawTranscript.toLowerCase().trim();
+      if (!transcript || !isVoiceModeActiveRef.current) return;
+      const now = Date.now();
+      if (now - lastCommandTimeRef.current < 1500) return;
+      lastCommandTimeRef.current = now;
+      setStatusMessage(transcript);
+      stopVoiceRecognition(false);
+      setIsListening(false);
 
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
+      try {
+        const res = await fetch('/api/intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript }),
+        });
+        if (!res.ok) throw new Error(`Intent service returned ${res.status}`);
+        const data = await res.json();
 
-      // 3. AI-Driven Intent Router Listener (with Mutex & Debounce Guard)
-      recognition.onresult = async (event: any) => {
-        if (!event.results || !event.results[0] || !event.results[0][0]) return;
-        const transcript = event.results[0][0].transcript.toLowerCase().trim();
-        if (!transcript) return;
-
-        // 1. Mutex Guard
-        if ((window as any).isSystemSpeaking === true) return;
-
-        // 2. Debounce Guard
-        const now = Date.now();
-        if (now - lastCommandTimeRef.current < 1500) return;
-        lastCommandTimeRef.current = now;
-
-        setStatusMessage(transcript);
-
-        // 3. Pause listening while AI thinks
-        if ((window as any).globalRecognitionInstance) {
-          try {
-            (window as any).globalRecognitionInstance.stop();
-          } catch (_) {}
-        }
-
-        // 4. Fetch AI Intent
-        try {
-          const res = await fetch('/api/intent', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcript }),
-          });
-          const data = await res.json();
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-              detail: { intent: data.intent, target: data.target } 
-            }));
+        if (data.intent === 'NAVIGATE') {
+          const target = (data.target || 'dashboard').toLowerCase();
+          const routed = routeVoiceCommand(target === 'home' ? 'dashboard' : target, 'global-nav');
+          if (!routed.handled || !routed.path) {
+            speakText(isHindi ? "क्षमा करें, मैं उस पृष्ठ पर नहीं जा सकती।" : "Sorry, I can't navigate to that page.");
+            return;
           }
-
-          // 5. Execute Action based on AI's structured response
-          if (data.intent === 'NAVIGATE') {
-            const target = (data.target || 'dashboard').toLowerCase();
-            const routed = routeVoiceCommand(target === 'home' ? 'dashboard' : target, 'global-nav');
-            if (routed.handled && routed.path) {
-              const pageName = routed.path === '/dashboard' ? 'dashboard' : routed.path === '/exam' ? 'exam' : routed.path === '/practice' ? 'practice' : routed.path === '/settings' ? 'settings' : 'login';
-              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
-              router.push(routed.path);
-            } else {
-              const dest = data.target || '/dashboard';
-              const pageName = dest.replace('/', '');
-              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
-              router.push(dest);
-            }
-          } else if (data.intent === 'EXAM_LAUNCH') {
-            speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : `Launching exam`);
-            launchExam(data.target);
-          } else if (data.intent === 'CONTROL') {
-            if (data.target === 'NEXT') {
-              speakText(isHindi ? 'अगला' : 'Next');
-            } else if (data.target === 'PREVIOUS') {
-              speakText(isHindi ? 'पिछला' : 'Previous');
-            } else if (data.target === 'SUBMIT') {
-              speakText(isHindi ? 'सबमिट किया जा रहा है' : 'Submitting');
-            }
-          } else if (data.intent === 'ANSWER') {
-            speakText(isHindi ? `विकल्प ${data.target} चुना गया` : `Option ${data.target} selected`);
+          const pageName = routed.path === '/dashboard' ? 'dashboard' : routed.path.slice(1);
+          isVoiceModeActiveRef.current = false;
+          setIsListening(false);
+          speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
+          router.push(routed.path);
+        } else if (data.intent === 'EXAM_LAUNCH') {
+          isVoiceModeActiveRef.current = false;
+          setIsListening(false);
+          speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : 'Launching exam');
+          launchExam(data.target);
+        } else if (data.intent === 'CONTROL') {
+          const confirmation = data.target === 'NEXT'
+            ? (isHindi ? 'अगला' : 'Next')
+            : data.target === 'PREVIOUS'
+              ? (isHindi ? 'पिछला' : 'Previous')
+              : data.target === 'SUBMIT'
+                ? (isHindi ? 'सबमिट किया जा रहा है' : 'Submitting')
+                : '';
+          speakText(confirmation || (isHindi ? "क्षमा करें, मुझे समझ नहीं आया।" : "Sorry, I didn't understand."));
+        } else if (data.intent === 'ANSWER') {
+          speakText(isHindi ? `विकल्प ${data.target} चुना गया` : `Option ${data.target} selected`);
+        } else {
+          const fallback = matchIntent(transcript);
+          const pathMap: Record<string, string> = {
+            DASHBOARD: '/dashboard',
+            EXAMS: '/exam',
+            PRACTICE: '/practice',
+            SETTINGS: '/settings',
+            LOGIN: '/login',
+          };
+          const fallbackPath = pathMap[fallback];
+          if (fallbackPath) {
+            isVoiceModeActiveRef.current = false;
+            setIsListening(false);
+            speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
+            router.push(fallbackPath);
           } else {
-            // UNKNOWN or unrecognized: check local navigation fallback
-            const fallback = matchIntent(transcript);
-            if (fallback !== 'UNKNOWN') {
-              const pathMap: Record<string, string> = {
-                DASHBOARD: '/dashboard',
-                EXAMS: '/exam',
-                PRACTICE: '/practice',
-                SETTINGS: '/settings',
-                LOGIN: '/login',
-              };
-              const fallbackPath = pathMap[fallback];
-              if (fallbackPath) {
-                speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
-                router.push(fallbackPath);
-                return;
-              }
-            }
             speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
           }
-        } catch (err) {
-          console.error("AI Routing failed", err);
-          speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
         }
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error === 'aborted' || event.error === 'no-speech') return;
-        console.warn('[Landing Voice Recognition Error]', event.error);
-      };
-
-      const handleRecognitionEnd = () => {
-        if ((window as any).isSystemSpeaking === true) return;
-        if (isVoiceModeActiveRef.current) {
-          setTimeout(() => {
-            if ((window as any).isSystemSpeaking === true) return;
-            try {
-              (window as any).globalRecognitionInstance?.start();
-            } catch (e) {}
-          }, 150);
-        } else if (!isVoiceModeActiveRef.current) {
-          setIsListening(false);
-        }
-      };
-
-      // 4. Handle the onend Auto-Restart Safely:
-      recognition.onend = handleRecognitionEnd;
-
-      isVoiceModeActiveRef.current = true;
-      recognition.start();
-      setIsListening(true);
-    } catch (err) {
-      console.warn('[Landing Voice Recognition Start Error]', err);
-    }
+      } catch (error) {
+        console.error('[Landing Voice] Intent routing failed:', error);
+        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+      }
+    };
   }, [isHindi, launchExam, router, speakText]);
 
-  const toggleListening = useCallback(() => {
-    if (isListening) {
+  const toggleListening = useCallback(async () => {
+    if (isListening || isPermissionRequestPendingRef.current) {
+      isPermissionRequestPendingRef.current = false;
       isVoiceModeActiveRef.current = false;
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (_) {}
-      }
+      stopVoiceRecognition();
       setIsListening(false);
     } else {
-      requestMicPermission();
-      startListening();
+      isPermissionRequestPendingRef.current = true;
+      isVoiceModeActiveRef.current = true;
+      setStatusMessage(isHindi ? 'माइक्रोफ़ोन की अनुमति मांगी जा रही है' : 'Requesting microphone access');
+      let micGranted = false;
+      try {
+        micGranted = await requestMicPermission();
+      } finally {
+        isPermissionRequestPendingRef.current = false;
+      }
+      if (!isVoiceModeActiveRef.current) return;
+      if (micGranted) {
+        startListening();
+      } else {
+        isVoiceModeActiveRef.current = false;
+        setIsListening(false);
+        speakText(isHindi ? 'कृपया माइक्रोफ़ोन की अनुमति दें।' : 'Please allow microphone access to use voice navigation.');
+      }
     }
-  }, [isListening, startListening]);
+  }, [isHindi, isListening, speakText, startListening]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -383,9 +290,9 @@ export default function ExamSarthiHero() {
 
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (_) {}
-      }
+      isPermissionRequestPendingRef.current = false;
+      isVoiceModeActiveRef.current = false;
+      stopVoiceRecognition();
     };
   }, []);
 

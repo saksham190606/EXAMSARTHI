@@ -16,6 +16,9 @@ export type SarthiActionType =
   | 'GET_PERFORMANCE_TREND'
   | 'DIAGNOSE_SCORE'
   | 'WHAT_ARE_MY_WEAK_TOPICS'
+  | 'SET_GOAL_GUIDANCE'
+  | 'GET_WEEKLY_FOCUS'
+  | 'GENERATE_STUDY_PLAN'
   | 'GET_EXAM_TIME_REMAINING'
   | 'GET_CURRENT_EXAM_PERFORMANCE'
   | 'CLOSE_SARTHI'
@@ -364,7 +367,6 @@ export async function executeSarthiAction(
             : `Your weakest ${reqSubject ? reqSubject + ' ' : ''}topics are ${joined}.`;
         }
 
-        // If no topic-level data exists for the requested subject
         if (reqSubject) {
           const subj = analytics.subjectMetrics?.find(s =>
             s.subject.toLowerCase() === reqSubject.toLowerCase() ||
@@ -380,7 +382,6 @@ export async function executeSarthiAction(
             : `I don't have enough performance data for ${reqSubject} yet.`;
         }
 
-        // Fallback to weakest subject
         const weakestSubj = analytics.subjectMetrics?.[0];
         if (weakestSubj) {
           const getSafeName = (val: any) => typeof val === 'string' ? val : (val?.title || val?.name || 'Unknown Subject');
@@ -395,6 +396,82 @@ export async function executeSarthiAction(
       } catch (e) {
         return isHindi ? 'मैं अभी आपके आंकड़े प्राप्त नहीं कर सकती।' : 'I cannot fetch your analytics right now.';
       }
+
+    case 'SET_GOAL_GUIDANCE': {
+      try {
+        const analytics = await getCandidateDashboardAnalytics();
+        const subjects = analytics.subjectMetrics?.filter(s => s.attempted > 0) || [];
+        if (subjects.length === 0) {
+          return isHindi
+            ? 'अभी के लिए पर्याप्त प्रदर्शन डेटा नहीं है, इसलिए मैं लक्ष्य-आधारित सुधार योजना नहीं बना सकता।'
+            : "I don't have enough performance data yet to build a goal-based improvement plan.";
+        }
+
+        const targetSubject = payload?.subject
+          ? subjects.find(s => s.subject.toLowerCase().includes(String(payload.subject).toLowerCase())) || subjects[0]
+          : subjects[0];
+
+        const targetName = targetSubject.subject;
+        const currentAccuracy = Math.round(targetSubject.accuracy);
+        const targetAccuracy = Math.min(95, Math.max(currentAccuracy + 15, 75));
+        const gap = Math.max(0, targetAccuracy - currentAccuracy);
+
+        return isHindi
+          ? `आपका लक्ष्य ${targetName} में ${currentAccuracy}% से ${targetAccuracy}% तक सुधार करना है। इसके लिए आपको ${gap} प्रतिशत अंकों के अंतर को पाटने के लिए ${targetName} पर लगातार अभ्यास, गलत उत्तरों की समीक्षा और छोटे परीक्षणों का उपयोग करना चाहिए।`
+          : `Your goal is to improve ${targetName} from ${currentAccuracy}% to ${targetAccuracy}% accuracy. To do that, focus on targeted practice in ${targetName}, review incorrect answers, and take short timed drills until you close the ${gap}-point gap.`;
+      } catch {
+        return isHindi ? 'मैं अपने लक्ष्य विश्लेषण को अभी अपडेट नहीं कर सकता।' : 'I cannot compute a goal plan right now.';
+      }
+    }
+
+    case 'GET_WEEKLY_FOCUS': {
+      try {
+        const analytics = await getCandidateDashboardAnalytics();
+        const subjects = analytics.subjectMetrics?.filter(s => s.attempted > 0) || [];
+        if (subjects.length === 0) {
+          return isHindi
+            ? 'इस सप्ताह के लिए कोई व्यक्तिगत फोकस नहीं बनाया जा सकता क्योंकि अभी पर्याप्त डेटा उपलब्ध नहीं है।'
+            : "I don't have enough data to build this week's specific focus yet.";
+        }
+
+        subjects.sort((a, b) => a.accuracy - b.accuracy);
+        const weakest = subjects[0];
+        const next = subjects[1] || weakest;
+        const focusParts = [
+          isHindi ? `${weakest.subject} पर अधिक समय` : `${weakest.subject} deserves the most attention`,
+          isHindi ? `${next.subject} पर छोटे, उच्च-आवृत्ति अभ्यास` : `short timed drills for ${next.subject}`
+        ];
+
+        return isHindi
+          ? `इस सप्ताह आपका मुख्य फोकस ${focusParts[0]} होगा, और उसके बाद ${focusParts[1]} करना चाहिए।`
+          : `This week's focus is ${focusParts[0]}, followed by ${focusParts[1]}.`;
+      } catch {
+        return isHindi ? 'मैं इस सप्ताह का फोकस अभी नहीं बना सकता।' : 'I cannot set this week\'s focus right now.';
+      }
+    }
+
+    case 'GENERATE_STUDY_PLAN': {
+      try {
+        const analytics = await getCandidateDashboardAnalytics();
+        const subjects = analytics.subjectMetrics?.filter(s => s.attempted > 0) || [];
+        if (subjects.length === 0) {
+          return isHindi
+            ? 'अभी पर्याप्त प्रदर्शन डेटा नहीं है, इसलिए मैं व्यक्तिगत अध्ययन योजना नहीं बना सकता।'
+            : "I don't have enough performance data yet to build a personalized study plan.";
+        }
+
+        subjects.sort((a, b) => a.accuracy - b.accuracy);
+        const weakest = subjects[0];
+        const second = subjects[1] || weakest;
+        const totalMinutes = 90;
+
+        return isHindi
+          ? `आपकी अध्ययन योजना: पहले ${totalMinutes / 2} मिनट ${weakest.subject} पर, फिर ${totalMinutes / 3} मिनट ${second.subject} पर, और最後 ${totalMinutes / 6} मिनट सामान्य रीविजन पर।`
+          : `Your study plan: spend ${Math.round(totalMinutes / 2)} minutes on ${weakest.subject}, ${Math.round(totalMinutes / 3)} minutes on ${second.subject}, then ${Math.round(totalMinutes / 6)} minutes on quick revision.`;
+      } catch {
+        return isHindi ? 'मैं आपकी अध्ययन योजना अभी नहीं बना सकता।' : 'I cannot generate a study plan right now.';
+      }
+    }
 
     case 'GET_EXAM_TIME_REMAINING':
       if (typeof window !== 'undefined') {

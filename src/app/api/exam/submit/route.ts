@@ -42,10 +42,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Parse and validate request body
-    const body: SubmitRequestBody = await req.json().catch(() => null);
-    if (!body || !body.attemptId || typeof body.attemptId !== 'string') {
+    const body: SubmitRequestBody | null = await req.json().catch(() => null);
+    if (
+      !body ||
+      typeof body.attemptId !== 'string' ||
+      !body.attemptId.trim() ||
+      (body.answers !== undefined &&
+        (!body.answers || typeof body.answers !== 'object' || Array.isArray(body.answers)))
+    ) {
       return NextResponse.json(
-        { error: 'Bad Request: Missing or invalid attemptId' },
+        { error: 'Bad Request: Missing or invalid attemptId or answers' },
         { status: 400 }
       );
     }
@@ -215,12 +221,25 @@ export async function POST(req: NextRequest) {
     }> = [];
 
     // Fetch answers persisted prior to final submission to protect locked/expired sections
-    const { data: savedAttemptAnswers } = await adminSupabase
+    const { data: savedAttemptAnswers, error: savedAnswersError } = await adminSupabase
       .from('attempt_answers')
       .select('question_id, user_answer')
       .eq('attempt_id', attempt.id);
 
+    if (savedAnswersError) {
+      console.error('[Submit API] Failed to retrieve saved answers:', savedAnswersError);
+      return NextResponse.json(
+        { error: 'Failed to retrieve saved answers for grading' },
+        { status: 500 }
+      );
+    }
+
     const savedAnswersMap = new Map((savedAttemptAnswers || []).map(a => [a.question_id, a.user_answer]));
+    // Answer saves are asynchronous; retain persisted answers omitted by a partial submit payload.
+    const submittedAnswers: Record<string, unknown> = {
+      ...Object.fromEntries(savedAnswersMap),
+      ...answers,
+    };
 
     // Sectional anti-tamper rule: reject submissions attempting to alter answers for closed/expired sections
     const currentProgress = attempt.section_progress as any;
@@ -270,7 +289,7 @@ export async function POST(req: NextRequest) {
       }
       subjectMetricsMap[q.subject].totalQuestions++;
 
-      const candidateAns = answers[q.id];
+      const candidateAns = submittedAnswers[q.id];
       const isAnswerProvided = candidateAns !== undefined && candidateAns !== null && candidateAns !== '';
 
       let isCorrect = false;

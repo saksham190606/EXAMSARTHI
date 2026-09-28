@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
@@ -20,19 +20,20 @@ let isSpeakingGlobal = false;
 let globalTranscript = '';
 let globalLastError: string | null = null;
 let currentUtteranceGlobal: SpeechSynthesisUtterance | null = null;
+let activeRecognitionHandler: ((text: string) => void) | null = null;
+let resolveRecognitionAlternatives = true;
 let activeLang = 'en-IN';
 let currentSpeechPriority: VoicePriority | null = null;
 let recognitionRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let recognitionRetryDelay = 200;
+let speechGeneration = 0;
+let speechKeepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
 export const isSystemSpeakingRef: { current: boolean } = { current: false };
-export const recognitionRef: { current: any } = {
-  get current() { return globalRecognition; },
-  set current(val: any) { globalRecognition = val; },
-};
 
 const transcriptSubscribers = new Set<(text: string) => void>();
 const stateSubscribers = new Set<() => void>();
+const subscribeToSupportChanges = () => () => {};
 
 function notifyState(): void {
   stateSubscribers.forEach((callback) => {
@@ -82,8 +83,35 @@ export function isListening(): boolean {
   return isListeningGlobal;
 }
 
-export function stopListening(): void {
+export function isVoiceRecognitionSupported(): boolean {
+  return typeof window !== 'undefined' &&
+    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+}
+
+function hasStoredMicPermission(): boolean {
+  if (typeof window === 'undefined') return false;
+  if ((window as any).__examsarthi_mic_granted) return true;
+  try {
+    return window.sessionStorage.getItem('examAudioUnlocked') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function useVoiceRecognitionSupport(): boolean {
+  return useSyncExternalStore(
+    subscribeToSupportChanges,
+    isVoiceRecognitionSupported,
+    () => false
+  );
+}
+
+export function stopListening(clearTranscriptHandler = true): void {
   clearRetryTimer();
+  if (clearTranscriptHandler) {
+    activeRecognitionHandler = null;
+    resolveRecognitionAlternatives = true;
+  }
   if (globalRecognition) {
     try {
       globalRecognition.onend = null;
@@ -107,10 +135,12 @@ export async function requestMicAccess(): Promise<boolean> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
     if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_mic_granted = true;
       try {
         sessionStorage.setItem('examAudioUnlocked', 'true');
-        (window as any).__examsarthi_mic_granted = true;
-      } catch (_) {}
+      } catch (error) {
+        console.warn('[VoiceEngine] Could not persist microphone permission:', error);
+      }
     }
     globalLastError = null;
     notifyState();
@@ -128,10 +158,21 @@ export function cleanVoiceTranscript(transcript: string): string {
   return transcript.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '').trim();
 }
 
-export function stopSpeaking(): void {
+export function stopSpeaking(expectedGeneration?: number): void {
+  if (expectedGeneration !== undefined && expectedGeneration !== speechGeneration) return;
+  speechGeneration++;
+  if (speechKeepaliveTimer) {
+    clearInterval(speechKeepaliveTimer);
+    speechKeepaliveTimer = null;
+  }
   if (typeof window !== 'undefined') {
-    try { window.speechSynthesis.cancel(); } catch (_) {}
+    try {
+      window.speechSynthesis.cancel();
+    } catch (error) {
+      console.warn('[VoiceEngine] Unable to cancel speech:', error);
+    }
     (window as any).isSystemSpeaking = false;
+    (window as any).__currentUtterance = null;
   }
   isSystemSpeakingRef.current = false;
   isSpeakingGlobal = false;
@@ -140,7 +181,7 @@ export function stopSpeaking(): void {
   notifyState();
 }
 
-function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; rate?: number } = {}) {
+function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; pitch?: number; voiceURI?: string | null; rate?: number } = {}): number | null {
   const priority = opts.priority ?? 'content';
   const wasListeningBefore = isListeningGlobal;
   const currentPriority = currentSpeechPriority ?? 'talkback';
@@ -148,19 +189,28 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
   if (isSpeakingGlobal) {
     const incoming = PRIORITY_RANK[priority] ?? 0;
     const current = PRIORITY_RANK[currentPriority] ?? 0;
-    if (incoming < current) {
+    if (!opts.interrupt && incoming < current) {
       if (opts.onEnd) setTimeout(opts.onEnd, 0);
-      return;
+      return null;
     }
   }
 
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
     if (opts.onEnd) opts.onEnd();
-    return;
+    return null;
   }
 
+  const generation = ++speechGeneration;
+  if (speechKeepaliveTimer) {
+    clearInterval(speechKeepaliveTimer);
+    speechKeepaliveTimer = null;
+  }
+  try {
+    window.speechSynthesis.cancel();
+  } catch (_) {}
+
   if (wasListeningBefore) {
-    stopListening();
+    stopListening(false);
   }
 
   if (typeof window !== 'undefined') {
@@ -199,27 +249,24 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
 
   const safeChunks = chunks.length > 0 ? chunks : [text.trim()].filter(Boolean);
   let chunkIndex = 0;
+  let finished = false;
+
+  const finish = () => {
+    if (generation !== speechGeneration || finished) return;
+    finished = true;
+    currentSpeechPriority = null;
+    isSpeakingGlobal = false;
+    isSystemSpeakingRef.current = false;
+    (window as any).isSystemSpeaking = false;
+    currentUtteranceGlobal = null;
+    (window as any).__currentUtterance = null;
+    notifyState();
+    opts.onEnd?.();
+  };
 
   const speakNextChunk = () => {
+    if (generation !== speechGeneration) return;
     if (chunkIndex >= safeChunks.length) {
-      const finish = () => {
-        currentSpeechPriority = null;
-        isSpeakingGlobal = false;
-        isSystemSpeakingRef.current = false;
-        if (typeof window !== 'undefined') {
-          (window as any).isSystemSpeaking = false;
-        }
-        currentUtteranceGlobal = null;
-        notifyState();
-        if (wasListeningBefore) {
-          setTimeout(() => {
-            if (!isSpeakingGlobal && typeof window !== 'undefined') {
-              startListening(activeLang);
-            }
-          }, 350);
-        }
-        if (opts.onEnd) opts.onEnd();
-      };
       setTimeout(finish, 350);
       return;
     }
@@ -229,72 +276,46 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
     const utterance = new SpeechSynthesisUtterance(sanitizeExamTextForSpeech(chunk, lang));
     utterance.lang = normalizeLanguage(lang);
     utterance.rate = Math.min(1.5, Math.max(0.7, opts.rate ?? store.speechRate ?? 1));
+    utterance.pitch = Math.min(1.3, Math.max(0.8, opts.pitch ?? 1));
     utterance.onstart = () => {
+      if (generation !== speechGeneration) return;
       currentUtteranceGlobal = utterance;
       if (typeof window !== 'undefined') {
         (window as any).__currentUtterance = utterance;
       }
       if (opts.onStart) opts.onStart();
+      if (speechKeepaliveTimer) clearInterval(speechKeepaliveTimer);
+      speechKeepaliveTimer = setInterval(() => {
+        if (generation !== speechGeneration || currentUtteranceGlobal !== utterance) return;
+        try {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+            window.speechSynthesis.pause();
+            setTimeout(() => {
+              if (generation === speechGeneration) window.speechSynthesis.resume();
+            }, 60);
+          }
+        } catch (_) {}
+      }, 10000);
     };
     utterance.onend = () => {
-      if (typeof window !== 'undefined') {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
+      if (generation !== speechGeneration) return;
+      if (speechKeepaliveTimer) {
+        clearInterval(speechKeepaliveTimer);
+        speechKeepaliveTimer = null;
       }
       speakNextChunk();
     };
-    utterance.onerror = () => {
-      speakNextChunk();
+    utterance.onerror = (event) => {
+      if (generation !== speechGeneration) return;
+      if (speechKeepaliveTimer) {
+        clearInterval(speechKeepaliveTimer);
+        speechKeepaliveTimer = null;
+      }
+      opts.onError?.(event);
+      finish();
     };
 
-    const keepalive = setInterval(() => {
-      if (!isSpeakingGlobal || !currentUtteranceGlobal || currentUtteranceGlobal !== utterance) return;
-      try {
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.pause();
-          setTimeout(() => {
-            try { window.speechSynthesis.resume(); } catch (_) {}
-          }, 50);
-        }
-      } catch (_) {}
-    }, 10000);
-
-    const cleanupKeepalive = () => {
-      clearInterval(keepalive);
-    };
-    utterance.onstart = () => {
-      currentUtteranceGlobal = utterance;
-      if (typeof window !== 'undefined') {
-        (window as any).__currentUtterance = utterance;
-      }
-      if (opts.onStart) opts.onStart();
-      if (typeof window !== 'undefined') {
-        const keepaliveRef = setInterval(() => {
-          if (!isSpeakingGlobal || !currentUtteranceGlobal || currentUtteranceGlobal !== utterance) return;
-          try {
-            if (window.speechSynthesis.speaking) {
-              window.speechSynthesis.pause();
-              setTimeout(() => {
-                try { window.speechSynthesis.resume(); } catch (_) {}
-              }, 60);
-            }
-          } catch (_) {}
-        }, 10000);
-        (utterance as any).__keepalive = keepaliveRef;
-      }
-    };
-    utterance.onend = () => {
-      cleanupKeepalive();
-      if (typeof window !== 'undefined') {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
-      speakNextChunk();
-    };
-    utterance.onerror = () => {
-      cleanupKeepalive();
-      speakNextChunk();
-    };
-
-    const voice = getBestVoice(lang, store.selectedVoiceURI);
+    const voice = getBestVoice(lang, opts.voiceURI ?? store.selectedVoiceURI);
     if (voice) utterance.voice = voice;
     try {
       if (window.speechSynthesis.paused) {
@@ -302,11 +323,12 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
       }
       window.speechSynthesis.speak(utterance);
     } catch (_) {
-      speakNextChunk();
+      finish();
     }
   };
 
   speakNextChunk();
+  return generation;
 }
 
 export function speak(
@@ -318,21 +340,24 @@ export function speak(
     interrupt?: boolean;
     onStart?: () => void;
     onEnd?: () => void;
+    onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void;
+    pitch?: number;
+    voiceURI?: string | null;
   } = {}
-): void {
+): number | null {
   if (!text || !text.trim()) {
     if (options.onEnd) options.onEnd();
-    return;
+    return null;
   }
 
   if (typeof window === 'undefined') {
     if (options.onEnd) options.onEnd();
-    return;
+    return null;
   }
 
   const lang = normalizeLanguage(options.lang);
   activeLang = lang;
-  queueSpeechChunk(text, lang, options);
+  return queueSpeechChunk(text, lang, options);
 }
 
 export const speakText = (text: string, langOrCb?: string | (() => void), onComplete?: () => void): void => {
@@ -380,22 +405,27 @@ function handleRecognitionError(error: any): void {
   }
 }
 
-export function startListening(lang = 'en-IN', onTranscript?: (text: string) => void): void {
+export function startListening(
+  lang = 'en-IN',
+  onTranscript?: (text: string) => void,
+  options: { resolveAlternatives?: boolean } = {}
+): void {
   if (typeof window === 'undefined') return;
   const normalized = normalizeLanguage(lang);
   activeLang = normalized;
-  if (onTranscript) {
-    subscribe(onTranscript);
-  }
   if (isSpeakingGlobal) {
+    activeRecognitionHandler = onTranscript ?? activeRecognitionHandler;
     return;
   }
 
-  stopListening();
+  stopListening(false);
+  activeRecognitionHandler = onTranscript ?? null;
+  resolveRecognitionAlternatives = options.resolveAlternatives ?? true;
 
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   if (!SpeechRecognition) {
     globalLastError = 'SpeechRecognition is not supported in this browser';
+    stopListening();
     notifyState();
     return;
   }
@@ -423,7 +453,7 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
 
       const candidates = extractTranscriptsFromEvent(event);
       let raw = candidates[0] || transcript;
-      if (candidates.length > 0) {
+      if (resolveRecognitionAlternatives && candidates.length > 0) {
         const resolved = resolveMultiAlternativeCommand(candidates);
         if (resolved) raw = resolved.matchedToken;
       }
@@ -432,7 +462,9 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
       if (!finalTranscript) return;
       globalTranscript = finalTranscript;
       globalLastError = null;
+      recognitionRetryDelay = 200;
       notifyState();
+      activeRecognitionHandler?.(finalTranscript);
       transcriptSubscribers.forEach((cb) => {
         try { cb(finalTranscript); } catch (_) {}
       });
@@ -495,7 +527,7 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
   } catch (err: any) {
     console.warn('[VoiceEngine] Recognition start error:', err);
     globalLastError = err?.message || 'Failed to start microphone';
-    isListeningGlobal = false;
+    stopListening();
     notifyState();
   }
 }
@@ -507,15 +539,13 @@ export interface UseVoiceEngineOptions {
 }
 
 export function useVoiceEngine(options?: UseVoiceEngineOptions) {
+  const isSupported = useVoiceRecognitionSupport();
   const [isListening, setIsListening] = useState<boolean>(isListeningGlobal);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(isSpeakingGlobal);
   const [transcript, setTranscript] = useState<string>(globalTranscript);
   const [lastError, setLastError] = useState<string | null>(globalLastError);
   const [hasMicPermission, setHasMicPermission] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return Boolean((window as any).__examsarthi_mic_granted) || sessionStorage.getItem('examAudioUnlocked') === 'true';
-    }
-    return false;
+    return hasStoredMicPermission();
   });
 
   const onTranscriptRef = useRef(options?.onTranscript);
@@ -531,8 +561,7 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
       setTranscript(globalTranscript);
       setLastError(globalLastError);
       if (typeof window !== 'undefined') {
-        const granted = Boolean((window as any).__examsarthi_mic_granted) || sessionStorage.getItem('examAudioUnlocked') === 'true';
-        if (granted) setHasMicPermission(true);
+        if (hasStoredMicPermission()) setHasMicPermission(true);
       }
     };
 
@@ -546,7 +575,7 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
     handleStateUpdate();
 
     if (options?.autoStart && !isListeningGlobal && !isSpeakingGlobal) {
-      startListening(langRef.current, handleTranscriptReceived);
+      startListening(langRef.current);
     }
 
     return () => {
@@ -569,11 +598,11 @@ export function useVoiceEngine(options?: UseVoiceEngineOptions) {
   return {
     isListening,
     isSpeaking,
+    isSupported,
     transcript,
     lastError,
     hasMicPermission,
     isSystemSpeakingRef,
-    recognitionRef,
     startListening: handleStart,
     stopListening: handleStop,
     speakText,

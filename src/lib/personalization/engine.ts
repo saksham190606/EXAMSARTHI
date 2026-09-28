@@ -1,5 +1,5 @@
 import { ExamResults } from '@/lib/resultsUtils';
-import { Question, ExamAnswers, isQuestionAnswered, evaluateAnswer } from '@/lib/examData';
+import { Question, ExamAnswers, isQuestionAnswered, evaluateAnswer } from '@/lib/questionEvaluation';
 import { PerformanceProfile, Recommendation, SubjectPerformanceProfile, TopicMetrics } from './types';
 
 export const WEAK_THRESHOLD = 70;

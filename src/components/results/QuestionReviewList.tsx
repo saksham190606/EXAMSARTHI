@@ -116,6 +116,7 @@ function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean, isWalk
   let correctOptionText = '';
 
   const isChoices = (q.type === 'single-choice' || q.type === 'multiple-choice') && Array.isArray(q.options);
+  const hasOfficialAnswerMetadata = q.correctAnswer !== null && q.correctAnswer !== undefined;
 
   if (isChoices && q.options) {
     // User answer calculation
@@ -129,34 +130,40 @@ function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean, isWalk
       userSelectedOption = idx >= 0 ? String.fromCharCode(65 + idx) : String(q.userAnswer);
     }
 
-    // Correct answer calculation
-    if (Array.isArray(q.correctAnswer)) {
-      const cOpts = q.options
-        .map((opt, i) => q.correctAnswer.includes(opt.id) ? { letter: String.fromCharCode(65 + i), text: opt.text } : null)
-        .filter(Boolean) as { letter: string; text: string }[];
-      correctOptionLetter = cOpts.map(o => o.letter).join(', ');
-      correctOptionText = cOpts.map(o => o.text).join('; ');
-    } else {
-      const idx = q.options.findIndex(opt => opt.id === q.correctAnswer);
-      correctOptionLetter = idx >= 0 ? String.fromCharCode(65 + idx) : 'A';
-      correctOptionText = idx >= 0 ? q.options[idx].text : String(q.correctAnswer || '');
+    if (hasOfficialAnswerMetadata) {
+      // Correct answer calculation
+      if (Array.isArray(q.correctAnswer)) {
+        const cOpts = q.options
+          .map((opt, i) => q.correctAnswer.includes(opt.id) ? { letter: String.fromCharCode(65 + i), text: opt.text } : null)
+          .filter(Boolean) as { letter: string; text: string }[];
+        correctOptionLetter = cOpts.map(o => o.letter).join(', ');
+        correctOptionText = cOpts.map(o => o.text).join('; ');
+      } else {
+        const idx = q.options.findIndex(opt => opt.id === q.correctAnswer);
+        correctOptionLetter = idx >= 0 ? String.fromCharCode(65 + idx) : 'A';
+        correctOptionText = idx >= 0 ? q.options[idx].text : String(q.correctAnswer || '');
+      }
     }
   } else if (q.type === 'true-false') {
     const uTrue = String(q.userAnswer).toLowerCase() === 'true';
     userSelectedOption = uTrue ? (isHindi ? 'सत्य' : 'True') : (isHindi ? 'असत्य' : 'False');
 
-    const cTrue = String(q.correctAnswer).toLowerCase() === 'true';
-    correctOptionLetter = cTrue ? (isHindi ? 'सत्य' : 'True') : (isHindi ? 'असत्य' : 'False');
-    correctOptionText = correctOptionLetter;
+    if (hasOfficialAnswerMetadata) {
+      const cTrue = String(q.correctAnswer).toLowerCase() === 'true';
+      correctOptionLetter = cTrue ? (isHindi ? 'सत्य' : 'True') : (isHindi ? 'असत्य' : 'False');
+      correctOptionText = correctOptionLetter;
+    }
   } else {
     userSelectedOption = String(q.userAnswer || '');
-    correctOptionLetter = String(q.correctAnswer || '');
-    correctOptionText = String(q.correctAnswer || '');
+    if (hasOfficialAnswerMetadata) {
+      correctOptionLetter = String(q.correctAnswer || '');
+      correctOptionText = String(q.correctAnswer || '');
+    }
   }
 
-  const cleanCorrectText = cleanMathAndTextForSpeech(correctOptionText, isHindi);
-  const rawExplanation = q.explanation || (isHindi ? 'कोई अतिरिक्त व्याख्या उपलब्ध नहीं है।' : 'No additional explanation provided.');
-  const cleanExplanation = cleanMathAndTextForSpeech(rawExplanation, isHindi);
+  const cleanCorrectText = hasOfficialAnswerMetadata ? cleanMathAndTextForSpeech(correctOptionText, isHindi) : '';
+  const rawExplanation = q.explanation;
+  const cleanExplanation = rawExplanation ? cleanMathAndTextForSpeech(rawExplanation, isHindi) : '';
 
   if (isHindi) {
     const statusText = q.isCorrect
@@ -165,15 +172,18 @@ function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean, isWalk
       ? 'अनुत्तरित।'
       : `गलत उत्तर। आपने विकल्प ${userSelectedOption} चुना था।`;
 
-    const correctAnsPhrase = isChoices
-      ? `आधिकारिक सही उत्तर है विकल्प ${correctOptionLetter}: ${cleanCorrectText}।`
-      : `आधिकारिक सही उत्तर है: ${cleanCorrectText}।`;
+    const correctAnsPhrase = hasOfficialAnswerMetadata
+      ? (isChoices
+          ? `आधिकारिक सही उत्तर है विकल्प ${correctOptionLetter}: ${cleanCorrectText}।`
+          : `आधिकारिक सही उत्तर है: ${cleanCorrectText}।`)
+      : 'अधिकारीक उत्तर विवरण इस उपलब्ध परिणाम में उपलब्ध नहीं है।';
 
+    const explanationPart = cleanExplanation ? ` हल और व्याख्या: ${cleanExplanation}.` : ' अतिरिक्त समझ नहीं दी गई।';
     const promptTail = isWalkthrough
       ? ` प्रश्न ${qNum} की समीक्षा पूरी हुई। अगले प्रश्न के लिए 'अगला' बोलें, पिछले के लिए 'पिछला', या दोबारा सुनने के लिए 'दोबारा' बोलें।`
       : '';
 
-    return `प्रश्न ${qNum}. ${cleanQText}. स्थिति: ${statusText} ${correctAnsPhrase} हल और व्याख्या: ${cleanExplanation}.${promptTail}`;
+    return `प्रश्न ${qNum}. ${cleanQText}. स्थिति: ${statusText} ${correctAnsPhrase}${explanationPart}${promptTail}`;
   } else {
     const statusText = q.isCorrect
       ? 'Correct. You scored 1 mark.'
@@ -181,15 +191,18 @@ function buildReviewSpeechScript(q: QuestionReviewItem, isHindi: boolean, isWalk
       ? 'Unanswered.'
       : `Incorrect. You selected Option ${userSelectedOption}.`;
 
-    const correctAnsPhrase = isChoices
-      ? `Official Correct Answer is Option ${correctOptionLetter}: ${cleanCorrectText}.`
-      : `Official Correct Answer is: ${cleanCorrectText}.`;
+    const correctAnsPhrase = hasOfficialAnswerMetadata
+      ? (isChoices
+          ? `Official Correct Answer is Option ${correctOptionLetter}: ${cleanCorrectText}.`
+          : `Official Correct Answer is: ${cleanCorrectText}.`)
+      : 'Official answer details are not available in this candidate-safe result.';
 
+    const explanationPart = cleanExplanation ? ` Explanation: ${cleanExplanation}.` : ' No additional explanation is provided.';
     const promptTail = isWalkthrough
       ? ` Review complete for Question ${qNum}. Say Next, Previous, or Repeat.`
       : '';
 
-    return `Question ${qNum}. ${cleanQText}. Status: ${statusText} ${correctAnsPhrase} Explanation: ${cleanExplanation}.${promptTail}`;
+    return `Question ${qNum}. ${cleanQText}. Status: ${statusText} ${correctAnsPhrase}${explanationPart}${promptTail}`;
   }
 }
 
@@ -1535,8 +1548,8 @@ function QuestionReviewCard({
         {q.type === 'true-false' && (
           <div className="grid grid-cols-2 gap-3">
             {['true', 'false'].map((val) => {
-              const isUserAnswer = String(q.userAnswer).toLowerCase() === val;
-              const isCorrectOption = String(q.correctAnswer).toLowerCase() === val;
+              const isUserAnswer = String(q.userAnswer ?? '').toLowerCase() === val;
+              const isCorrectOption = q.correctAnswer !== null && q.correctAnswer !== undefined && String(q.correctAnswer).toLowerCase() === val;
 
               let borderBg = "border-border bg-muted/10";
               if (isCorrectOption && isUserAnswer) {
@@ -1580,12 +1593,14 @@ function QuestionReviewCard({
                 {q.userAnswer ? String(q.userAnswer) : '(No response provided)'}
               </span>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-2 border-t border-border/40">
-              <span className="text-xs font-semibold text-muted-foreground">Official Accepted Answer(s):</span>
-              <span className="font-mono text-xs text-foreground font-semibold">
-                {[q.correctAnswer, ...(q.acceptableAnswers || [])].filter(Boolean).join(', ')}
-              </span>
-            </div>
+            {q.correctAnswer !== null && q.correctAnswer !== undefined && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-2 border-t border-border/40">
+                <span className="text-xs font-semibold text-muted-foreground">Official Accepted Answer(s):</span>
+                <span className="font-mono text-xs text-foreground font-semibold">
+                  {[q.correctAnswer, ...(q.acceptableAnswers || [])].filter(Boolean).join(', ')}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

@@ -29,7 +29,8 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
 import { useSearchParams } from 'next/navigation';
-import { getQuestionsForContext, getQuestionsByIds, MockExamQuestions, evaluateAnswer } from '@/lib/examData';
+import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
+import { evaluateAnswer } from '@/lib/questionEvaluation';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
@@ -149,24 +150,34 @@ function ResultsContent() {
           const incorrect = attempt.incorrect_count ?? (attempted - correct);
           const unanswered = Math.max(0, totalQ - attempted);
 
-          const rawBreakdown = attempt.summary_metrics?.subjectBreakdown || {};
-          const subjectMetrics = Object.keys(rawBreakdown).length > 0
-            ? Object.entries(rawBreakdown).map(([subject, m]: [string, any]) => ({
-                subject,
-                totalQuestions: m.total || 0,
-                attempted: (m.correct || 0) + (m.incorrect || 0),
-                correct: m.correct || 0,
-                incorrect: m.incorrect || 0,
-                accuracy: (m.total || 0) > 0 ? Math.round(((m.correct || 0) / (m.total || 1)) * 100) : 0
+          const summaryMetrics = attempt.summary_metrics || {};
+          const rawBreakdown = summaryMetrics.subjectBreakdown || summaryMetrics.subjectMetrics || {};
+          const subjectMetrics = Array.isArray(summaryMetrics.subjectMetrics)
+            ? summaryMetrics.subjectMetrics.map((m: any) => ({
+                subject: m.subject || 'General Assessment',
+                totalQuestions: Number(m.totalQuestions ?? m.total ?? 0),
+                attempted: Number(m.attempted ?? ((m.correct ?? 0) + (m.incorrect ?? 0))),
+                correct: Number(m.correct ?? 0),
+                incorrect: Number(m.incorrect ?? 0),
+                accuracy: Number(m.accuracy ?? ((m.totalQuestions ?? m.total ?? 0) > 0 ? Math.round(((m.correct ?? 0) / (m.totalQuestions ?? m.total ?? 1)) * 100) : 0))
               }))
-            : [{
-                subject: 'General Assessment',
-                totalQuestions: totalQ,
-                attempted,
-                correct,
-                incorrect,
-                accuracy
-              }];
+            : Object.keys(rawBreakdown).length > 0
+              ? Object.entries(rawBreakdown).map(([subject, m]: [string, any]) => ({
+                  subject,
+                  totalQuestions: Number(m.totalQuestions ?? m.total ?? 0),
+                  attempted: Number(m.attempted ?? ((m.correct ?? 0) + (m.incorrect ?? 0))),
+                  correct: Number(m.correct ?? 0),
+                  incorrect: Number(m.incorrect ?? 0),
+                  accuracy: Number(m.accuracy ?? ((m.totalQuestions ?? m.total ?? 0) > 0 ? Math.round(((m.correct ?? 0) / (m.totalQuestions ?? m.total ?? 1)) * 100) : 0))
+                }))
+              : [{
+                  subject: 'General Assessment',
+                  totalQuestions: totalQ,
+                  attempted,
+                  correct,
+                  incorrect,
+                  accuracy
+                }];
 
           const officialResults: ExamResults = {
             totalQuestions: totalQ,
@@ -179,13 +190,13 @@ function ResultsContent() {
             percentage: accuracy,
             timeUsed,
             subjectMetrics,
-            weakAreas: attempt.summary_metrics?.weakAreas || []
+            weakAreas: summaryMetrics.weakAreas || summaryMetrics.weakSubjects || []
           };
 
           setResults(officialResults);
 
           // Build candidate profile for personalization from official metrics
-          const remoteSubjectPerformances = subjectMetrics.map(sm => ({
+          const remoteSubjectPerformances = subjectMetrics.map((sm: any) => ({
             subject: sm.subject,
             score: sm.correct,
             totalQuestions: sm.totalQuestions,
@@ -229,34 +240,10 @@ function ResultsContent() {
     };
   }, [attemptId, fetchQuestionReview]);
 
-  // 2. Local fallback if no remote attemptId or for local demo sessions
+  // 2. No synthetic local results state: results are only shown for an authenticated, persisted attempt.
   useEffect(() => {
     if (attemptId) return; // remote attempt flow active
-
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem('examResultState');
-      if (stored) {
-        try {
-          setFinalState(JSON.parse(stored) as ExamState);
-        } catch (e) {
-          console.error("Failed to parse exam state", e);
-        }
-      } else {
-        // Safe fallback for direct navigation
-        setFinalState({
-          currentQuestionIndex: 11,
-          answers: { "quant-1": "qo-1", "reason-1": "ro-2", "eng-1": "eo-2" },
-          flagged: new Set(),
-          timeRemaining: 900,
-          isSubmitted: true,
-          activeSectionIndex: 0,
-          sectionTimeRemaining: 900,
-          activeSection: null,
-          sections: null,
-          currentSectionIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-        });
-      }
-    }
+    setFinalState(null);
   }, [attemptId]);
 
   useEffect(() => {
@@ -267,14 +254,11 @@ function ResultsContent() {
       flagged: new Set(finalState.flagged || [])
     };
     
-    // Resolve questions specifically matching this submitted exam
-    let examQuestions = MockExamQuestions;
-    if ((finalState as any).questionIds && Array.isArray((finalState as any).questionIds)) {
-      const fromIds = getQuestionsByIds((finalState as any).questionIds);
-      if (fromIds.length > 0) examQuestions = fromIds;
-    } else if (finalState.setId || (finalState as any).examId) {
-      examQuestions = getQuestionsForContext({ setId: finalState.setId, examId: (finalState as any).examId });
-    }
+    // Resolve questions specifically matching this submitted exam without importing the answer-key master bank.
+    let examQuestions = getSafeQuestionsForContext({
+      setId: finalState.setId,
+      examId: (finalState as any).examId,
+    });
 
     const calculated = calculateResults(examQuestions, stateToProcess, 900);
     setResults(calculated);
@@ -468,8 +452,23 @@ function ResultsContent() {
 
   if (!results) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-[#ffed00] text-xl font-bold">
-        Processing your results...
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="max-w-md w-full border-border/80" role="status" aria-live="polite">
+          <CardHeader>
+            <div className="size-10 rounded-[46px] bg-primary/10 text-primary flex items-center justify-center mb-2">
+              <History className="size-5" aria-hidden="true" />
+            </div>
+            <CardTitle>No result available</CardTitle>
+            <CardDescription>
+              There is no completed attempt to display yet. Finish an exam and return here to view the official results.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button render={<Link href="/dashboard" />} nativeButton={false} className="w-full">
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -1086,5 +1085,3 @@ function ResultsContent() {
     </div>
   );
 }
-
-
