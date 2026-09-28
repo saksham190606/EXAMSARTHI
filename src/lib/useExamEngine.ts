@@ -172,6 +172,17 @@ export function useExamEngine(
   }, []);
 
   const goToNext = useCallback(() => {
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
+      return;
+    }
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
     if (hasSections) {
       const pos = currentSectionIndices.indexOf(currentQuestionIndex);
       if (pos >= 0 && pos < currentSectionIndices.length - 1) {
@@ -181,18 +192,35 @@ export function useExamEngine(
       } else {
         announceToScreenReader(`End of ${activeSection?.name || 'current'} section reached.`);
       }
-      return;
+    } else {
+      if (currentQuestionIndex < questions.length - 1) {
+        setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1));
+        announceToScreenReader(`Question ${currentQuestionIndex + 2} of ${questions.length}.`);
+      } else {
+        announceToScreenReader(`End of examination reached.`);
+      }
     }
 
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(prev => Math.min(questions.length - 1, prev + 1));
-      announceToScreenReader(`Question ${currentQuestionIndex + 2} of ${questions.length}.`);
-    } else {
-      announceToScreenReader(`End of examination reached.`);
-    }
+    // RELEASE LOCK AFTER 2 SECONDS
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
 
   const goToPrevious = useCallback(() => {
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
+      return;
+    }
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
     if (hasSections) {
       const pos = currentSectionIndices.indexOf(currentQuestionIndex);
       if (pos > 0) {
@@ -202,13 +230,19 @@ export function useExamEngine(
       } else {
         announceToScreenReader(`Start of ${activeSection?.name || 'current'} section reached.`);
       }
-      return;
+    } else {
+      if (currentQuestionIndex > 0) {
+        setCurrentQuestionIndex(prev => prev - 1);
+        announceToScreenReader(`Question ${currentQuestionIndex} of ${questions.length}.`);
+      }
     }
 
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1);
-      announceToScreenReader(`Question ${currentQuestionIndex} of ${questions.length}.`);
-    }
+    // RELEASE LOCK AFTER 2 SECONDS
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   }, [currentQuestionIndex, currentSectionIndices, hasSections, activeSection?.name, questions.length]);
 
   const goToQuestion = useCallback((index: number) => {

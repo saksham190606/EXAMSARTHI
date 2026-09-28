@@ -257,18 +257,23 @@ function ActiveExamSession({
     };
   }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
 
-  // 1. Fix Infinite "Loading Next Question" State:
+  // 1. Fix Infinite "Loading Next Question" State & Implement Global Navigation Padlock:
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
-  const lastNavTimeRef = useRef(0);
 
   const handleNextQuestion = () => {
-    const now = Date.now();
-    if (now - lastNavTimeRef.current < 1500) {
-      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
       return;
     }
-    lastNavTimeRef.current = now;
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
+    // 3. STRICT +1 INCREMENT
     if (currentIndex < questions.length - 1) {
       setIsLoading(true);
       actions.goToNext();
@@ -278,16 +283,36 @@ function ActiveExamSession({
       // Reached the end
       setIsSubmitDialogOpen(true);
     }
+
+    // 4. RELEASE LOCK AFTER 2 SECONDS (Ensures completely single-step sequence)
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   };
 
   const handlePrevQuestion = () => {
-    const now = Date.now();
-    if (now - lastNavTimeRef.current < 1500) {
-      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
       return;
     }
-    lastNavTimeRef.current = now;
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
+    // 3. STRICT -1 DECREMENT
     actions.goToPrevious();
+
+    // 4. RELEASE LOCK
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   };
 
   // Synchronize global voice companion actions with active exam state
@@ -752,7 +777,7 @@ function ActiveExamSession({
               <Button 
                 variant="outline" 
                 size="lg"
-                onClick={actions.goToPrevious}
+                onClick={handlePrevQuestion}
                 disabled={
                   hasSections 
                     ? state.currentSectionIndices.indexOf(state.currentQuestionIndex) <= 0

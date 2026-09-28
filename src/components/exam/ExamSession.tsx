@@ -76,23 +76,74 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
     }));
   };
 
-  const handleNext = () => {
+  const handleNextQuestion = () => {
     stop();
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to the next question.");
+      return;
+    }
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
+    // 3. STRICT +1 INCREMENT
     if (currentIndex < totalQuestions - 1) {
       setIsLoading(true);
-      setCurrentIndex(prev => prev + 1);
+      setCurrentIndex((prev) => {
+        const nextTarget = prev + 1;
+        if (nextTarget < totalQuestions) {
+          return nextTarget;
+        }
+        return prev; // Don't go out of bounds
+      });
       setTimeout(() => setIsLoading(false), 300);
     } else {
       setIsSubmitDialogOpen(true);
     }
+
+    // 4. RELEASE LOCK AFTER 2 SECONDS (Ensures completely single-step sequence)
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   };
 
-  const handlePrev = () => {
+  const handlePrevQuestion = () => {
     stop();
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
+    // 1. STRICT LOCK CHECK
+    if (typeof window !== 'undefined' && (window as any).isNavigatingRightNow) {
+      console.warn("DOUBLE FIRE BLOCKED: Already moving to previous question.");
+      return;
     }
+
+    // 2. ENGAGE LOCK
+    if (typeof window !== 'undefined') {
+      (window as any).isNavigatingRightNow = true;
+    }
+
+    // 3. STRICT -1 DECREMENT
+    setCurrentIndex((prev) => {
+      const prevTarget = prev - 1;
+      if (prevTarget >= 0) {
+        return prevTarget;
+      }
+      return prev;
+    });
+
+    // 4. RELEASE LOCK
+    setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        (window as any).isNavigatingRightNow = false;
+      }
+    }, 2000);
   };
+
+  const handleNext = handleNextQuestion;
+  const handlePrev = handlePrevQuestion;
 
   const handleSubmit = () => {
     stop();
