@@ -10,6 +10,7 @@ export type Exam = {
   id: string;
   title: string;
   subject: string;
+  topic?: string;
   questions: number;
   duration: number; // minutes
   difficulty: "Beginner" | "Intermediate" | "Advanced";
@@ -51,6 +52,7 @@ export const PracticeSets: Exam[] = [
     id: "p1",
     title: "Percentages, Ratios & Arithmetic",
     subject: "Quantitative Aptitude",
+    topic: "Percentages & Arithmetic",
     questions: 8,
     duration: 10,
     difficulty: "Beginner",
@@ -60,6 +62,7 @@ export const PracticeSets: Exam[] = [
     id: "p2",
     title: "General Knowledge & Geography",
     subject: "General Knowledge",
+    topic: "Geography & Constitution",
     questions: 8,
     duration: 10,
     difficulty: "Intermediate",
@@ -69,6 +72,7 @@ export const PracticeSets: Exam[] = [
     id: "p3",
     title: "Logical Reasoning & Coding",
     subject: "Reasoning",
+    topic: "Logic & Deduction",
     questions: 8,
     duration: 10,
     difficulty: "Advanced",
@@ -78,6 +82,7 @@ export const PracticeSets: Exam[] = [
     id: "p4",
     title: "English Grammar & Comprehension",
     subject: "English",
+    topic: "Grammar & Vocabulary",
     questions: 8,
     duration: 10,
     difficulty: "Intermediate",
@@ -87,6 +92,7 @@ export const PracticeSets: Exam[] = [
     id: "p5",
     title: "Accessible Multi-Format Showcase",
     subject: "Multi-Format Showcase",
+    topic: "Multi-Format Questions",
     questions: 5,
     duration: 8,
     difficulty: "Beginner",
@@ -96,6 +102,7 @@ export const PracticeSets: Exam[] = [
     id: "p6",
     title: "Diagram & Visual Interpretation (Vision AI)",
     subject: "Multi-Format Showcase",
+    topic: "Visual Interpretation",
     questions: 4,
     duration: 10,
     difficulty: "Intermediate",

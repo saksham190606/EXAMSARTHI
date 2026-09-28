@@ -64,6 +64,7 @@ function PracticeContent() {
   const urlDifficulty = searchParams?.get("difficulty") || "all"
 
   const [searchQuery, setSearchQuery] = React.useState(urlTopic.replace(/-/g, " "))
+  const [topicFilter, setTopicFilter] = React.useState(urlTopic.replace(/-/g, " "))
   const [subjectFilter, setSubjectFilter] = React.useState(urlSubject)
   const [difficultyFilter, setDifficultyFilter] = React.useState(urlDifficulty)
 
@@ -72,6 +73,14 @@ function PracticeContent() {
   const [loadingAnalytics, setLoadingAnalytics] = React.useState(true)
   const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
 
+  // 1. Reset Child Filters on Subject Change
+  const handleSubjectSelect = (newSubject: string) => {
+    setSubjectFilter(newSubject);
+    // Force clear incompatible child filters
+    setTopicFilter(""); 
+    setSearchQuery("");
+  };
+
   // Keep state synchronized with URL search params (e.g. from recommendation clicks)
   React.useEffect(() => {
     const s = searchParams?.get("subject") || "all"
@@ -79,6 +88,7 @@ function PracticeContent() {
     const d = searchParams?.get("difficulty") || "all"
 
     setSubjectFilter(s)
+    setTopicFilter(t ? t.replace(/-/g, " ") : "")
     if (t) {
       setSearchQuery(t.replace(/-/g, " "))
     }
@@ -126,38 +136,59 @@ function PracticeContent() {
     return fetchAnalytics()
   }, [fetchAnalytics])
 
-  // Filter practice sets based on search, subject, and difficulty
+  // 2. Safe Fallback in the Filtering Logic:
+  // Ensure the data filtering function is safely checking for exact matches and handles case insensitivity
   const filteredSets = PracticeSets.filter((set) => {
+    const subjectMap: Record<string, string> = {
+      quant: "Quantitative Aptitude",
+      gk: "General Knowledge",
+      reasoning: "Reasoning",
+      english: "English",
+      showcase: "Multi-Format Showcase",
+    }
+    const resolvedSubject = subjectMap[subjectFilter] || subjectFilter
+
+    const matchSubject =
+      subjectFilter === "all" ||
+      subjectFilter === "All Subjects" ||
+      set.subject === subjectFilter ||
+      set.subject.toLowerCase() === subjectFilter.toLowerCase() ||
+      set.subject.toLowerCase() === resolvedSubject.toLowerCase() ||
+      set.subject.toLowerCase().includes(subjectFilter.toLowerCase())
+
+    const currentTopic = topicFilter.toLowerCase().trim()
+    const setTopic = ((set as any).topic || set.title || "").toLowerCase()
+    const matchTopic =
+      !topicFilter ||
+      !currentTopic ||
+      setTopic === currentTopic ||
+      setTopic.includes(currentTopic) ||
+      (Boolean((set as any).topic) && (set as any).topic.toLowerCase() === currentTopic)
+
     const query = searchQuery.toLowerCase().trim()
     const matchesSearch =
       !query ||
       set.title.toLowerCase().includes(query) ||
       set.subject.toLowerCase().includes(query) ||
-      set.description.toLowerCase().includes(query)
-
-    const subjectMap: Record<string, string> = {
-      quant: "quant",
-      gk: "general",
-      reasoning: "reason",
-      english: "english",
-      showcase: "multi",
-    }
-    const target = subjectMap[subjectFilter] || subjectFilter
-    const matchesSubject =
-      subjectFilter === "all" || set.subject.toLowerCase().includes(target.toLowerCase())
+      set.description.toLowerCase().includes(query) ||
+      setTopic.includes(query)
 
     const matchesDifficulty =
       difficultyFilter === "all" ||
       set.difficulty.toLowerCase() === difficultyFilter.toLowerCase()
 
-    return matchesSearch && matchesSubject && matchesDifficulty
+    return matchSubject && matchTopic && matchesSearch && matchesDifficulty
   })
 
   const hasActiveFilters =
-    searchQuery.trim() !== "" || subjectFilter !== "all" || difficultyFilter !== "all"
+    Boolean(searchQuery && searchQuery.trim() !== "") ||
+    Boolean(topicFilter && topicFilter.trim() !== "") ||
+    (subjectFilter !== "all" && subjectFilter !== "All Subjects") ||
+    difficultyFilter !== "all"
 
   const handleClearAllFilters = () => {
     setSearchQuery("")
+    setTopicFilter("")
     setSubjectFilter("all")
     setDifficultyFilter("all")
   }
@@ -316,15 +347,21 @@ function PracticeContent() {
                 placeholder={t('searchPlaceholder')}
                 className="pl-10 h-10 text-base border-border bg-background"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setTopicFilter(e.target.value)
+                }}
                 data-voice-prompt="Search practice topics by keyword? Say Yes to focus search, or say No to skip."
                 data-voice-confirm="Search field focused."
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
+                  onClick={() => {
+                    setSearchQuery("")
+                    setTopicFilter("")
+                  }}
+                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground focus-visible:ring-1 focus-visible:outline-none rounded cursor-pointer"
                   aria-label="Clear search input"
                   data-voice-prompt="Clear search keyword? Say Yes, or say No to skip."
                   data-voice-confirm="Search keyword cleared."
@@ -342,7 +379,7 @@ function PracticeContent() {
             </Label>
             <Select
               value={subjectFilter}
-              onValueChange={(val) => setSubjectFilter(val || "all")}
+              onValueChange={(val) => handleSubjectSelect(val || "all")}
             >
               <SelectTrigger
                 id="filter-subject"
@@ -405,12 +442,12 @@ function PracticeContent() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setSubjectFilter(cat.id)}
+                  onClick={() => handleSubjectSelect(cat.id)}
                   aria-pressed={isSelected}
                   data-voice-prompt={`Filter by ${cat.label}? Say Yes, or say No for next subject.`}
                   data-voice-confirm={`Filtering by ${cat.label}...`}
                   className={cn(
-                    "inline-flex items-center px-4 py-2 rounded-[46px] text-xs md:text-sm font-bold tracking-[0.13px] transition-all duration-150 ease-[cubic-bezier(0.2,0,0,1)] motion-safe:active:scale-[0.98] border outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    "inline-flex items-center px-4 py-2 rounded-[46px] text-xs md:text-sm font-bold tracking-[0.13px] transition-all duration-150 ease-[cubic-bezier(0.2,0,0,1)] motion-safe:active:scale-[0.98] border outline-none focus-visible:ring-2 focus-visible:ring-black dark:focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer select-none",
                     isSelected
                       ? "bg-primary text-black border-primary shadow-[0_2px_8px_rgba(255,237,0,0.3)]"
                       : "bg-white text-black border-black hover:bg-black hover:text-white dark:bg-black dark:text-white dark:border-white dark:hover:bg-white dark:hover:text-black"
@@ -434,7 +471,7 @@ function PracticeContent() {
               Active Filters:
             </span>
 
-            {subjectFilter !== "all" && (
+            {subjectFilter !== "all" && subjectFilter !== "All Subjects" && (
               <Badge
                 variant="secondary"
                 className="gap-1.5 py-1 px-2.5 text-xs font-medium border border-border"
@@ -442,30 +479,34 @@ function PracticeContent() {
                 <span>Subject: {getSubjectDisplayName(subjectFilter)}</span>
                 <button
                   type="button"
-                  onClick={() => setSubjectFilter("all")}
+                  onClick={() => handleSubjectSelect("all")}
                   aria-label={`Remove ${getSubjectDisplayName(subjectFilter)} filter`}
                   data-voice-prompt={`Remove ${getSubjectDisplayName(subjectFilter)} filter? Say Yes, or say No to skip.`}
                   data-voice-confirm={`Removed ${getSubjectDisplayName(subjectFilter)} filter.`}
-                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
+                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded cursor-pointer"
                 >
                   <X className="size-3" aria-hidden="true" />
                 </button>
               </Badge>
             )}
 
-            {searchQuery.trim() !== "" && (
+            {/* 3. Remove Orphaned Active Filter Pills: Only render for Topic if topicFilter is truthy and non-empty */}
+            {Boolean(topicFilter && topicFilter.trim() !== "") && (
               <Badge
                 variant="secondary"
                 className="gap-1.5 py-1 px-2.5 text-xs font-medium border border-border"
               >
-                <span>Topic: &quot;{searchQuery}&quot;</span>
+                <span>Topic: {topicFilter}</span>
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Remove topic search filter"
-                  data-voice-prompt="Remove topic search filter? Say Yes, or say No to skip."
-                  data-voice-confirm="Removed topic search filter."
-                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
+                  onClick={() => {
+                    setTopicFilter("")
+                    setSearchQuery("")
+                  }}
+                  aria-label="Remove topic filter"
+                  data-voice-prompt="Remove topic filter? Say Yes, or say No to skip."
+                  data-voice-confirm="Removed topic filter."
+                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded cursor-pointer"
                 >
                   <X className="size-3" aria-hidden="true" />
                 </button>
@@ -484,7 +525,7 @@ function PracticeContent() {
                   aria-label={`Remove ${difficultyFilter} difficulty filter`}
                   data-voice-prompt={`Remove ${difficultyFilter} difficulty filter? Say Yes, or say No to skip.`}
                   data-voice-confirm={`Removed ${difficultyFilter} filter.`}
-                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded"
+                  className="hover:text-foreground text-muted-foreground focus-visible:ring-1 focus-visible:outline-none rounded cursor-pointer"
                 >
                   <X className="size-3" aria-hidden="true" />
                 </button>
