@@ -120,25 +120,44 @@ export function cleanVoiceTranscript(transcript: string): string {
  * 2. Anchors utterance to window scope to avoid Chromium garbage collection bug.
  * 3. Restarts microphone only after speaking completes + 400ms room echo buffer.
  */
-export function speakQuestion(text: string, lang = 'en-US', onComplete?: () => void): void {
+export const speakText = (
+  text: string,
+  arg2?: string | (() => void),
+  arg3?: () => void
+): void => {
   if (typeof window === 'undefined') {
-    if (onComplete) onComplete();
+    if (typeof arg2 === 'function') arg2();
+    if (typeof arg3 === 'function') arg3();
     return;
   }
 
-  // 1. HARD STOP THE MIC AND DETACH RESTART LOOP
+  let lang = 'en-US';
+  let onComplete: (() => void) | undefined;
+  if (typeof arg2 === 'function') {
+    onComplete = arg2;
+  } else if (typeof arg2 === 'string') {
+    lang = arg2;
+    onComplete = arg3;
+  } else if (typeof arg3 === 'function') {
+    onComplete = arg3;
+  }
+
+  // 1. ENGAGE GLOBAL LOCK
+  (window as any).isSystemSpeaking = true;
   isSystemSpeakingRef.current = true;
   isSpeakingGlobal = true;
   notifyState();
 
-  if (recognitionRef.current) {
-    recognitionRef.current.onend = null; // Prevent it from turning itself back on immediately
-    recognitionRef.current.onerror = null;
-    recognitionRef.current.onresult = null;
+  // 2. HARD KILL MIC
+  if ((window as any).globalRecognitionInstance) {
     try {
-      recognitionRef.current.stop();
+      (window as any).globalRecognitionInstance.onend = null;
+      (window as any).globalRecognitionInstance.abort();
     } catch (e) {}
+  }
+  if (recognitionRef.current) {
     try {
+      recognitionRef.current.onend = null;
       recognitionRef.current.abort();
     } catch (e) {}
     recognitionRef.current = null;
@@ -146,56 +165,54 @@ export function speakQuestion(text: string, lang = 'en-US', onComplete?: () => v
   isListeningGlobal = false;
   notifyState();
 
-  try {
-    window.speechSynthesis.cancel();
-  } catch (e) {}
-
-  if (!('speechSynthesis' in window)) {
-    isSystemSpeakingRef.current = false;
-    isSpeakingGlobal = false;
-    notifyState();
-    if (onComplete) onComplete();
-    return;
-  }
-
+  window.speechSynthesis.cancel();
   const store = useAccessibilityStore.getState();
   const sanitizedText = sanitizeExamTextForSpeech(text, lang);
   const utterance = new SpeechSynthesisUtterance(sanitizedText);
   utterance.lang = lang;
   utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
-
   const voice = getHighFidelityVoice(lang, store.selectedVoiceURI);
   if (voice) {
     utterance.voice = voice;
   }
 
-  // 2. ONLY RESTART MIC AFTER SPEAKING FINISHES (400ms buffer for room echo to die down)
-  const handleFinish = () => {
+  const handleRecognitionEnd = () => {
+    if ((window as any).isSystemSpeaking === true) return;
+    if (isListeningGlobal && !isSpeakingGlobal) {
+      setTimeout(() => {
+        if ((window as any).isSystemSpeaking === true) return;
+        try {
+          (window as any).globalRecognitionInstance?.start();
+        } catch (e) {}
+      }, 150);
+    }
+  };
+
+  utterance.onend = () => {
+    // 3. WAIT 500MS FOR ROOM ECHO TO FADE, THEN UNLOCK
     setTimeout(() => {
+      (window as any).isSystemSpeaking = false;
       isSystemSpeakingRef.current = false;
       isSpeakingGlobal = false;
       currentUtteranceGlobal = null;
       (window as any).__currentUtterance = null;
       notifyState();
 
-      if (onComplete) {
+      if ((window as any).globalRecognitionInstance) {
+        // Reattach auto-restart and boot mic
+        (window as any).globalRecognitionInstance.onend = handleRecognitionEnd;
         try {
-          onComplete();
-        } catch (err) {
-          console.warn('[VoiceEngine] onComplete error:', err);
-        }
+          (window as any).globalRecognitionInstance.start();
+        } catch (e) {}
       }
-    }, 400); // 400ms buffer for room echo to die down
+
+      if (onComplete) onComplete();
+    }, 500);
   };
 
-  utterance.onend = handleFinish;
-  utterance.onerror = (e) => {
-    console.warn('[VoiceEngine] Utterance finished or errored:', e);
-    handleFinish();
-  };
-
+  utterance.onerror = utterance.onend;
   currentUtteranceGlobal = utterance;
-  (window as any).__currentUtterance = utterance; // prevent GC bug
+  (window as any).__currentUtterance = utterance; // GC fix
 
   try {
     if (window.speechSynthesis.paused) {
@@ -203,14 +220,21 @@ export function speakQuestion(text: string, lang = 'en-US', onComplete?: () => v
     }
     window.speechSynthesis.speak(utterance);
   } catch (e) {
-    console.warn('[VoiceEngine] speechSynthesis.speak failed:', e);
-    handleFinish();
+    (window as any).isSystemSpeaking = false;
+    isSystemSpeakingRef.current = false;
+    isSpeakingGlobal = false;
+    notifyState();
+    if (onComplete) onComplete();
   }
-}
+};
 
-export function speakText(text: string, lang = 'en-US', onComplete?: () => void): void {
-  speakQuestion(text, lang, onComplete);
-}
+export const speakQuestion = (
+  text: string,
+  arg2?: string | (() => void),
+  arg3?: () => void
+): void => {
+  speakText(text, arg2, arg3);
+};
 
 /**
  * Start Listening with Singleton SpeechRecognition.
@@ -242,6 +266,8 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
 
   try {
     const recognition = new SpeechRecognition();
+    // Store the instance globally so speakText can reach it
+    (window as any).globalRecognitionInstance = recognition;
     recognition.continuous = false; // Discrete cycles prevent Chromium audio buffer lock
     recognition.interimResults = false;
     recognition.maxAlternatives = 5;
@@ -282,9 +308,13 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
     };
 
     recognition.onresult = (e: any) => {
-      // 3. Guard Clause in the Recognition Listener:
+      // IF SYSTEM IS SPEAKING, DROP EVERYTHING IMMEDIATELY
+      if ((window as any).isSystemSpeaking === true) {
+        console.warn("BLOCKED ECHO: System is currently speaking.");
+        return;
+      }
       if (isSystemSpeakingRef.current || isSpeakingGlobal) {
-        console.log("Ignored transcript: System is currently speaking.");
+        console.warn("BLOCKED ECHO: System is currently speaking.");
         return;
       }
 
@@ -315,10 +345,11 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
       }
     };
 
-    recognition.onend = () => {
-      // 4. Handle the onend Auto-Restart Safely:
+    const handleRecognitionEnd = () => {
+      if ((window as any).isSystemSpeaking === true) return;
       if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal) {
         setTimeout(() => {
+          if ((window as any).isSystemSpeaking === true) return;
           if (!isSystemSpeakingRef.current && isListeningGlobal && !isSpeakingGlobal && globalRecognition === recognition) {
             try {
               recognition.start();
@@ -329,6 +360,8 @@ export function startListening(lang = 'en-US', onTranscript?: (text: string) => 
         }, 150);
       }
     };
+
+    recognition.onend = handleRecognitionEnd;
 
     globalRecognition = recognition;
     isListeningGlobal = true;

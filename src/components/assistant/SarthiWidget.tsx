@@ -156,8 +156,11 @@ export function SarthiWidget() {
           console.log('[Sarthi] recognition onspeechstart');
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onresult = async (event: any) => {
+          if (typeof window !== 'undefined' && (window as any).isSystemSpeaking === true) {
+            console.warn("BLOCKED ECHO: System is currently speaking.");
+            return;
+          }
           if (isExamActiveRef.current || isExamActiveNow()) return;
 
           const transcript = event.results[0][0].transcript.toLowerCase().trim();

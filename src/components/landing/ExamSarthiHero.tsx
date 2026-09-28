@@ -109,29 +109,29 @@ export default function ExamSarthiHero() {
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
 
-  // 2. Hard-Stop Microphone Before Speech
-  const speakText = useCallback((text: string, lang?: string) => {
-    // 1. Lock the mutex
+  // 2. Hard-Stop Microphone Before Speech with Global Window Mutex
+  const speakText = useCallback((text: string, lang?: string, onComplete?: () => void) => {
+    if (typeof window === 'undefined') return;
+
+    // 1. ENGAGE GLOBAL LOCK
+    (window as any).isSystemSpeaking = true;
     isSystemSpeakingRef.current = true;
 
-    // 2. Kill the microphone instantly
+    // 2. HARD KILL MIC
+    if ((window as any).globalRecognitionInstance) {
+      try {
+        (window as any).globalRecognitionInstance.onend = null;
+        (window as any).globalRecognitionInstance.abort();
+      } catch (e) {}
+    }
     if (recognitionRef.current) {
       try {
+        recognitionRef.current.onend = null;
         recognitionRef.current.abort();
       } catch (e) {}
     }
 
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      isSystemSpeakingRef.current = false;
-      return;
-    }
-
-    // 3. Cancel any lingering speech
-    try {
-      window.speechSynthesis.cancel();
-    } catch (e) {}
-
-    // 4. Start speaking
+    window.speechSynthesis.cancel();
     const targetLang = lang || (isHindi ? 'hi-IN' : 'en-US');
     const sanitized = sanitizeExamTextForSpeech(text, targetLang);
     const utterance = new SpeechSynthesisUtterance(sanitized);
@@ -143,21 +143,38 @@ export default function ExamSarthiHero() {
       utterance.voice = voice;
     }
 
-    utterance.onend = () => {
-      // 5. Unlock the mutex and restart mic with a 300ms debounce to let room echo fade
-      setTimeout(() => {
-        isSystemSpeakingRef.current = false;
-        if (isVoiceModeActiveRef.current) {
+    const handleRecognitionEnd = () => {
+      if ((window as any).isSystemSpeaking === true) return;
+      if (isVoiceModeActiveRef.current) {
+        setTimeout(() => {
+          if ((window as any).isSystemSpeaking === true) return;
           try {
-            recognitionRef.current?.start();
+            (window as any).globalRecognitionInstance?.start();
           } catch (e) {}
-        }
-      }, 300);
+        }, 150);
+      } else {
+        setIsListening(false);
+      }
     };
 
-    utterance.onerror = () => {
-      isSystemSpeakingRef.current = false;
+    utterance.onend = () => {
+      // 3. WAIT 500MS FOR ROOM ECHO TO FADE, THEN UNLOCK
+      setTimeout(() => {
+        (window as any).isSystemSpeaking = false;
+        isSystemSpeakingRef.current = false;
+        if ((window as any).globalRecognitionInstance && isVoiceModeActiveRef.current) {
+          // Reattach auto-restart and boot mic
+          (window as any).globalRecognitionInstance.onend = handleRecognitionEnd;
+          try {
+            (window as any).globalRecognitionInstance.start();
+          } catch (e) {}
+        }
+        if (onComplete) onComplete();
+      }, 500);
     };
+
+    utterance.onerror = utterance.onend;
+    (window as any).__currentUtterance = utterance; // GC fix
 
     try {
       if (window.speechSynthesis.paused) {
@@ -165,6 +182,7 @@ export default function ExamSarthiHero() {
       }
       window.speechSynthesis.speak(utterance);
     } catch (e) {
+      (window as any).isSystemSpeaking = false;
       isSystemSpeakingRef.current = false;
     }
   }, [isHindi]);
@@ -206,6 +224,8 @@ export default function ExamSarthiHero() {
     try {
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
+      // Store the instance globally so speakText can reach it
+      (window as any).globalRecognitionInstance = recognition;
       recognition.continuous = true;
       recognition.interimResults = false;
       recognition.lang = isHindi ? 'hi-IN' : 'en-US';
@@ -214,10 +234,11 @@ export default function ExamSarthiHero() {
         setIsListening(true);
       };
 
-      // 3. Guard Clause in the Recognition Listener:
+      // 3. Hard Guard in the Recognition Listener:
       recognition.onresult = (event: any) => {
-        if (isSystemSpeakingRef.current) {
-          console.log("Ignored transcript: System is currently speaking.");
+        // IF SYSTEM IS SPEAKING, DROP EVERYTHING IMMEDIATELY
+        if ((window as any).isSystemSpeaking === true) {
+          console.warn("BLOCKED ECHO: System is currently speaking.");
           return;
         }
 
@@ -234,18 +255,22 @@ export default function ExamSarthiHero() {
         console.warn('[Landing Voice Recognition Error]', event.error);
       };
 
-      // 4. Handle the onend Auto-Restart Safely:
-      recognition.onend = () => {
-        if (!isSystemSpeakingRef.current && isVoiceModeActiveRef.current) {
+      const handleRecognitionEnd = () => {
+        if ((window as any).isSystemSpeaking === true) return;
+        if (isVoiceModeActiveRef.current) {
           setTimeout(() => {
+            if ((window as any).isSystemSpeaking === true) return;
             try {
-              recognitionRef.current?.start();
+              (window as any).globalRecognitionInstance?.start();
             } catch (e) {}
           }, 150);
         } else if (!isVoiceModeActiveRef.current) {
           setIsListening(false);
         }
       };
+
+      // 4. Handle the onend Auto-Restart Safely:
+      recognition.onend = handleRecognitionEnd;
 
       isVoiceModeActiveRef.current = true;
       recognition.start();

@@ -753,7 +753,7 @@ export function QuestionReviewList({
 
           // Barge-in: If the system is currently speaking, ONLY accept explicit review barge-in commands!
           // Filter out room echo / TTS audio that does not match an explicit review control keyword.
-          if (isSpeakingRef.current && !isPause && !isResume && !isNext && !isPrev && !isRepeat && !isStop) {
+          if (((window as any).isSystemSpeaking === true || isSpeakingRef.current) && !isPause && !isResume && !isNext && !isPrev && !isRepeat && !isStop) {
             return;
           }
 

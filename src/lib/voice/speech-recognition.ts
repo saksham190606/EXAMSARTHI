@@ -279,6 +279,10 @@ export function createResilientRecognition(options: ResilientRecognitionOptions 
     };
 
     recognition.onresult = (event: any) => {
+      if (typeof window !== 'undefined' && (window as any).isSystemSpeaking === true) {
+        console.warn("BLOCKED ECHO: System is currently speaking.");
+        return;
+      }
       const candidates = extractTranscriptsFromEvent(event);
       const primaryTranscript = candidates[0] || '';
       const isFinal = Boolean(event.results?.[event.resultIndex]?.isFinal);
