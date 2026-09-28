@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Flag, Send, CheckCircle2, ShieldCheck, WifiOff, AlertTriangle, ArrowRight, Layers } from 'lucide-react';
@@ -260,8 +260,15 @@ function ActiveExamSession({
   // 1. Fix Infinite "Loading Next Question" State:
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
+  const lastNavTimeRef = useRef(0);
 
   const handleNextQuestion = () => {
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 1500) {
+      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+      return;
+    }
+    lastNavTimeRef.current = now;
     if (currentIndex < questions.length - 1) {
       setIsLoading(true);
       actions.goToNext();
@@ -273,6 +280,16 @@ function ActiveExamSession({
     }
   };
 
+  const handlePrevQuestion = () => {
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 1500) {
+      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+      return;
+    }
+    lastNavTimeRef.current = now;
+    actions.goToPrevious();
+  };
+
   // Synchronize global voice companion actions with active exam state
   useEffect(() => {
     const handleVoiceAction = (event: Event) => {
@@ -282,7 +299,7 @@ function ActiveExamSession({
       if (action === 'next') {
         handleNextQuestion();
       } else if (action === 'prev') {
-        actions.goToPrevious();
+        handlePrevQuestion();
       } else if (action === 'select-option' && currentQuestion) {
         const optionIndex = typeof index === 'number' ? index : (letter ? letter.charCodeAt(0) - 65 : -1);
         if (currentQuestion.options && optionIndex >= 0 && optionIndex < currentQuestion.options.length) {
@@ -366,7 +383,7 @@ function ActiveExamSession({
       // Alt+P -> Previous question
       if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
         e.preventDefault();
-        actions.goToPrevious();
+        handlePrevQuestion();
         return;
       }
 

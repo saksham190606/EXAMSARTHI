@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { QuestionDisplay } from '@/components/exam/QuestionDisplay';
@@ -66,8 +66,15 @@ export function ExamInterface({
   // 1. Fix Infinite "Loading Next Question" State:
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
+  const lastNavTimeRef = useRef(0);
 
   const handleNextQuestion = () => {
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 1500) {
+      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+      return;
+    }
+    lastNavTimeRef.current = now;
     if (currentIndex < validQuestions.length - 1) {
       setIsLoading(true);
       actions.goToNext();
@@ -77,6 +84,16 @@ export function ExamInterface({
       // Reached the end
       onOpenSubmitDialog();
     }
+  };
+
+  const handlePrevQuestion = () => {
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 1500) {
+      console.warn("BLOCKED MULTI-FIRE: Navigation ignored due to 1.5s cooldown lock.");
+      return;
+    }
+    lastNavTimeRef.current = now;
+    actions.goToPrevious();
   };
 
   const {
@@ -133,7 +150,7 @@ export function ExamInterface({
       // Alt+P -> Prev
       if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
         e.preventDefault();
-        actions.goToPrevious();
+        handlePrevQuestion();
         return;
       }
 

@@ -94,6 +94,7 @@ export function useVoiceMode({
   const hasInitializedMountRef = useRef(false);
   const pendingActionRef = useRef<string | null>(null);
   const onCloseSubmitDialogRef = useRef(onCloseSubmitDialog);
+  const lastCommandTimeRef = useRef<number>(0);
 
   useEffect(() => { actionsRef.current = actions; }, [actions]);
   useEffect(() => { stateRef.current = state; }, [state]);
@@ -297,6 +298,18 @@ export function useVoiceMode({
   const handleCapturedSpeech = useCallback((raw: string) => {
     if (!isActiveRef.current || userManuallyMutedRef.current) return;
 
+    // Inside your recognition.onresult handler, place this immediately after checking if the system is speaking:
+    if (typeof window !== 'undefined' && (window as any).isSystemSpeaking === true) {
+      console.warn("BLOCKED ECHO: System is currently speaking.");
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < 1500) {
+      console.warn("BLOCKED MULTI-FIRE: Command ignored due to 1.5s cooldown lock.");
+      return; 
+    }
+
     setLastHeardTranscript(raw);
     setLastCommand(raw);
     setLastTranscript(raw);
@@ -309,6 +322,7 @@ export function useVoiceMode({
     // Two-step confirmation active (e.g. submit exam)
     if (pendingActionRef.current) {
       if (/^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि)/i.test(transcript)) {
+        lastCommandTimeRef.current = now;
         playVoiceFeedbackChime();
         setPendingAction(null);
         pendingActionRef.current = null;
@@ -322,6 +336,7 @@ export function useVoiceMode({
         });
         return;
       } else if (/^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो)/i.test(transcript)) {
+        lastCommandTimeRef.current = now;
         playVoiceFeedbackChime();
         setPendingAction(null);
         pendingActionRef.current = null;
@@ -348,6 +363,7 @@ export function useVoiceMode({
       "repeat", "again", "dobara", "फिर से", "दोबारा", "repeat question", "read again", "read question", "dobara padho", "फिर से पढ़ो", "दोबारा बोलो"
     ];
     if (phoneticMatch?.action === 'REPEAT_QUESTION' || repeatKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         try {
@@ -364,6 +380,7 @@ export function useVoiceMode({
       "flag", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग", "flag for review", "mark for review", "बाद में देखेंगे", "bookmark", "चिह्नित"
     ];
     if (phoneticMatch?.action === 'FLAG_REVIEW' || flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleToggleFlag();
       return;
@@ -375,15 +392,17 @@ export function useVoiceMode({
       "clear", "remove", "erase", "साफ करो", "हटाओ", "clear response", "clear answer", "unselect", "remove answer"
     ];
     if (phoneticMatch?.action === 'CLEAR_RESPONSE' || clearKeywords.some((k) => transcript === k || transcript.includes(k))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleClearAnswer();
       return;
     }
 
     // NEXT QUESTION:
-    // Keywords: ["next", "agla", "अगला", "आगे"]
+    // Keywords: ["next", "agla", "आगे", "अगला"]
     const nextKeywords = ["next", "agla", "अगला", "आगे", "next question"];
-    if (phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    if (["next", "agla", "आगे", "अगला"].some((k) => transcript.includes(k)) || phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleNextQuestion();
       return;
@@ -392,7 +411,8 @@ export function useVoiceMode({
     // PREVIOUS QUESTION:
     // Keywords: ["previous", "back", "pichla", "पिछला", "पीछे"]
     const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
-    if (phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    if (["previous", "back", "pichla", "पिछला"].some((k) => transcript.includes(k)) || phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handlePrevQuestion();
       return;
@@ -536,6 +556,7 @@ export function useVoiceMode({
     const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "dee", "4", "डी", "चार"];
 
     if (phoneticMatch?.action === 'SELECT_A' || optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(0);
       speakText(isHi ? "विकल्प ए चुना गया" : "Selected A", speechLang, () => {
@@ -545,6 +566,7 @@ export function useVoiceMode({
     }
 
     if (phoneticMatch?.action === 'SELECT_B' || optBTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(1);
       speakText(isHi ? "विकल्प बी चुना गया" : "Selected B", speechLang, () => {
@@ -554,6 +576,7 @@ export function useVoiceMode({
     }
 
     if (phoneticMatch?.action === 'SELECT_C' || optCTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(2);
       speakText(isHi ? "विकल्प सी चुना गया" : "Selected C", speechLang, () => {
@@ -563,6 +586,7 @@ export function useVoiceMode({
     }
 
     if (phoneticMatch?.action === 'SELECT_D' || optDTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+      lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(3);
       speakText(isHi ? "विकल्प डी चुना गया" : "Selected D", speechLang, () => {

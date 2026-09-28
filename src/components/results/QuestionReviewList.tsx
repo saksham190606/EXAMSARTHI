@@ -758,7 +758,8 @@ export function QuestionReviewList({
           }
 
           const now = Date.now();
-          if (now - lastActionTimestampRef.current < 500) {
+          if (now - lastActionTimestampRef.current < 1500) {
+            console.warn("BLOCKED MULTI-FIRE: Command ignored due to 1.5s cooldown lock.");
             return;
           }
 
@@ -991,86 +992,47 @@ export function QuestionReviewList({
   const currentIndex = activeReviewIndex;
   const totalQuestions = filteredQuestions.length;
 
+  const isWalkthroughActive = isAudioReviewActive;
+  const setIsWalkthroughActive = (val: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof val === 'function' ? val(isAudioReviewActive) : val;
+    if (nextVal) {
+      if (filteredQuestions.length > 0) {
+        readQuestionReview(activeReviewIndex >= 0 ? activeReviewIndex : 0, true);
+      }
+    } else {
+      stopAudioWalkthrough();
+    }
+  };
+
   return (
-    <section 
-      aria-labelledby="question-review-heading" 
-      className="space-y-6 pt-4 border-t border-border/60 relative pb-28"
-    >
-      {/* 3. Floating / Sticky Playback Controls Bar */}
-      {isAudioReviewActive && activeReviewIndex >= 0 && (
-        <div
-          role="toolbar"
-          aria-label="Audio review walkthrough controls"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-2.5 rounded-full bg-neutral-950/90 backdrop-blur-md border border-[#ffed00]/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(255,237,0,0.2)] text-white max-w-[96vw] overflow-x-auto"
-        >
-          {/* Left Segment: Question counter badge */}
-          <span className="text-xs font-mono font-bold text-[#ffed00] bg-[#ffed00]/10 border border-[#ffed00]/30 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
-            Q{currentIndex + 1} of {totalQuestions}
-          </span>
-
-          {/* Center Status Pill */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/40 text-xs font-medium text-emerald-300 whitespace-nowrap shrink-0">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{isSpeaking ? "Explaining..." : "Listening (Say 'Next', 'Previous', 'Repeat')"}</span>
+    <>
+      <section 
+        aria-labelledby="question-review-heading" 
+        className="space-y-6 pt-4 border-t border-border/60 relative pb-28"
+      >
+        {/* Header and Filter Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border/60">
+          <div className="space-y-1">
+            <h2 id="question-review-heading" className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
+              <span>Question-by-Question Review</span>
+              {hasSections && (
+                <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
+                  <Layers className="size-3 mr-1" aria-hidden="true" />
+                  Sectional Breakdown
+                </Badge>
+              )}
+              {/* Add this explicitly next to your "Sectional Breakdown" header */}
+              <button 
+                onClick={() => setIsWalkthroughActive(!isWalkthroughActive)} 
+                className="ml-4 px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors z-10"
+              >
+                {isWalkthroughActive ? "⏹ Stop Audio Review" : "🔊 Start Audio Walkthrough"}
+              </button>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Official evaluation comparing your responses against verified answer keys.
+            </p>
           </div>
-
-          {/* Right Controls (Grouped neatly) */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
-            >
-              ‹ Prev
-            </button>
-            <button
-              type="button"
-              onClick={handleRepeat}
-              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
-            >
-              ↻ Repeat
-            </button>
-            <button
-              type="button"
-              onClick={handleTogglePause}
-              className="px-4 py-1.5 text-xs font-bold bg-[#ffed00] text-black hover:bg-[#ffe100] rounded-lg cursor-pointer"
-            >
-              {isPaused ? "▶ Resume" : "⏸ Pause"}
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer"
-            >
-              Next ›
-            </button>
-            <button
-              type="button"
-              onClick={handleStop}
-              className="px-3 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-900/40 bg-rose-950/20 rounded-lg cursor-pointer"
-            >
-              ✕ Stop
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Header and Filter Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border/60">
-        <div className="space-y-1">
-          <h2 id="question-review-heading" className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
-            <span>Question-by-Question Review</span>
-            {hasSections && (
-              <Badge variant="outline" className="text-2xs font-semibold text-primary border-primary/30 bg-primary/10">
-                <Layers className="size-3 mr-1" aria-hidden="true" />
-                Sectional Breakdown
-              </Badge>
-            )}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Official evaluation comparing your responses against verified answer keys.
-          </p>
-        </div>
 
         {/* Right side controls: Audio Walkthrough Toggle Button & Filter Badges */}
         <div className="flex flex-wrap items-center gap-2.5">
@@ -1234,6 +1196,66 @@ export function QuestionReviewList({
         )}
       </div>
     </section>
+
+    {/* Floating dock placed at the very bottom of the component return statement, outside of any scrolling containers */}
+    {isWalkthroughActive && (
+      <div 
+        role="toolbar"
+        aria-label="Audio review walkthrough controls"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-2.5 rounded-full bg-neutral-950/95 border border-[#ffed00]/50 shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-white max-w-[96vw] overflow-x-auto"
+      >
+        {/* Left Segment: Question counter badge */}
+        <span className="text-xs font-mono font-bold text-[#ffed00] bg-[#ffed00]/10 border border-[#ffed00]/30 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
+          Q{Math.max(1, activeReviewIndex + 1)} of {filteredQuestions.length}
+        </span>
+
+        {/* Center Status Pill */}
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/40 text-xs font-medium text-emerald-300 whitespace-nowrap shrink-0">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>{isSpeaking ? "Explaining..." : "Listening (Say 'Next', 'Previous', 'Repeat')"}</span>
+        </div>
+
+        {/* Right Controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handlePrev}
+            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+          >
+            ‹ Prev
+          </button>
+          <button
+            type="button"
+            onClick={handleRepeat}
+            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+          >
+            ↻ Repeat
+          </button>
+          <button
+            type="button"
+            onClick={handleTogglePause}
+            className="px-4 py-1.5 text-xs font-bold bg-[#ffed00] text-black hover:bg-[#ffe100] rounded-lg cursor-pointer"
+          >
+            {isPaused ? "▶ Resume" : "⏸ Pause"}
+          </button>
+          <button
+            type="button"
+            onClick={handleNext}
+            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+          >
+            Next ›
+          </button>
+          <button
+            type="button"
+            onClick={handleStop}
+            className="px-3 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-900/40 bg-rose-950/20 rounded-lg cursor-pointer"
+          >
+            ✕ Stop
+          </button>
+        </div>
+      </div>
+    )}
+  </>
   );
 }
 
