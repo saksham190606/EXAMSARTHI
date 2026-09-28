@@ -117,9 +117,14 @@ export function QuestionReview({
         setCurrentWalkthroughIndex(prev => Math.min(prev + 1, (results?.questions?.length || 1) - 1));
       } else if (target === 'PREVIOUS' || upper === 'PREVIOUS' || upper === 'PREV') {
         setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0));
-      } else if (target === 'STOP' || target === 'PAUSE' || upper === 'STOP' || upper === 'PAUSE') {
-        setIsWalkthroughActive(false);
+      } else if (target === 'STOP' || target === 'PAUSE' || upper === 'STOP' || upper === 'PAUSE' || upper === 'EXIT') {
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        
+        // If this component takes a prop to close itself (e.g., onClose={() => setIsWalkthroughActive(false)}), call it:
+        if (typeof onClose === 'function') onClose();
+        
+        // OR if the state is local:
+        if (typeof setIsWalkthroughActive === 'function') setIsWalkthroughActive(false);
       } else if (upper === 'REPEAT') {
         if (results?.questions && results.questions[currentWalkthroughIndex]) {
           const q = results.questions[currentWalkthroughIndex];

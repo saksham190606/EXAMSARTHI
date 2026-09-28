@@ -369,7 +369,7 @@ function ResultsContent() {
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('examsarthi_review_prev'));
           }
-        } else if (upperTarget === 'STOP' || upperTarget === 'PAUSE') {
+        } else if (upperTarget === 'STOP' || upperTarget === 'PAUSE' || upperTarget === 'EXIT') {
           setIsWalkthroughActive(false);
           if (typeof window !== 'undefined') {
             if ('speechSynthesis' in window) window.speechSynthesis.cancel();

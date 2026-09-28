@@ -449,6 +449,17 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
         return; // CRITICAL: Stop execution here so it does NOT go to Groq
       }
 
+      // SLEDGEHAMMER BYPASS: If the user says "stop" or "exit", instantly close panel and kill TTS.
+      if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit') || finalTranscript.toLowerCase().includes('stop') || finalTranscript.toLowerCase().includes('exit')) {
+        if (typeof window !== 'undefined') {
+          window.speechSynthesis.cancel(); // Instantly kill any ongoing TTS narration
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'STOP' } 
+          }));
+        }
+        return; // CRITICAL: Stop execution so it does not ping Groq
+      }
+
       // Broadcast recognized speech through AI Intent router
       fetchAIIntent(finalTranscript).catch(() => {});
     };
@@ -585,6 +596,17 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
       }));
     }
     return { intent: 'CONTROL', target: 'REVIEW' }; // CRITICAL: Stop execution here so it does NOT go to Groq
+  }
+
+  // SLEDGEHAMMER BYPASS: If the user says "stop" or "exit", instantly close panel and kill TTS.
+  if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit')) {
+    if (typeof window !== 'undefined') {
+      window.speechSynthesis.cancel(); // Instantly kill any ongoing TTS narration
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'STOP' } 
+      }));
+    }
+    return { intent: 'CONTROL', target: 'STOP' }; // CRITICAL: Stop execution so it does not ping Groq
   }
 
   try {
