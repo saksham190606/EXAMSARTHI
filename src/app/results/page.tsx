@@ -347,10 +347,13 @@ function ResultsContent() {
     const handleVoiceCommand = (e: any) => {
       const { intent, target } = e.detail || {};
       
-      if (intent === 'CONTROL') {
+      if (intent === 'CONTROL' || !intent) {
         if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
-          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-          // THIS MUST REVERT TO THE DASHBOARD. Find the exact boolean setter and set it to false.
+          if (typeof window !== 'undefined') {
+            window.speechSynthesis?.cancel();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          // Revert to the dashboard results view
           setIsWalkthroughActive(false); 
         } else if (target === 'PREVIOUS') {
           setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
@@ -363,8 +366,20 @@ function ResultsContent() {
       }
     };
 
+    const handleExplicitStop = () => {
+      if (typeof window !== 'undefined') {
+        window.speechSynthesis?.cancel();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      setIsWalkthroughActive(false);
+    };
+
     window.addEventListener('ai_voice_command', handleVoiceCommand);
-    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
+    window.addEventListener('examsarthi_review_stop', handleExplicitStop);
+    return () => {
+      window.removeEventListener('ai_voice_command', handleVoiceCommand);
+      window.removeEventListener('examsarthi_review_stop', handleExplicitStop);
+    };
   }, [results, walkthroughResults]);
 
   // Extract weak topics directly from profile
@@ -766,6 +781,20 @@ function ResultsContent() {
           isLoading={loadingReview}
           error={reviewError}
           isWalkthroughActive={isWalkthroughActive}
+          onStop={() => {
+            setIsWalkthroughActive(false);
+            if (typeof window !== 'undefined') {
+              window.speechSynthesis?.cancel();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+          onStopWalkthrough={() => {
+            setIsWalkthroughActive(false);
+            if (typeof window !== 'undefined') {
+              window.speechSynthesis?.cancel();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
           onRetry={() => {
             if (remoteAttempt?.id) {
               fetchQuestionReview(remoteAttempt.id);
