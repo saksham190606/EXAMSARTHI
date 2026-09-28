@@ -299,6 +299,26 @@ function ResultsContent() {
 
   }, [finalState]);
 
+  // Synchronize Walkthrough State with Global AI Voice Commands
+  useEffect(() => {
+    const handleVoiceCommand = (e: any) => {
+      const { intent, target } = e.detail || {};
+      const upperTarget = (target || '').toUpperCase();
+
+      if (intent === 'CONTROL') {
+        if (upperTarget === 'STOP' || upperTarget === 'PAUSE') {
+          setIsWalkthroughActive(false);
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('ai_voice_command', handleVoiceCommand);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
+  }, []);
+
   // Extract weak topics directly from profile
   const weakTopics = useMemo<WeakTopicItem[]>(() => {
     if (!profile) return [];

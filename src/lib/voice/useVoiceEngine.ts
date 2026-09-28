@@ -436,6 +436,9 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
       transcriptSubscribers.forEach((cb) => {
         try { cb(finalTranscript); } catch (_) {}
       });
+
+      // Broadcast recognized speech through AI Intent router
+      fetchAIIntent(finalTranscript).catch(() => {});
     };
 
     recognition.onerror = (event: any) => {
@@ -566,8 +569,15 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript }),
     });
-    if (!res.ok) return { intent: 'UNKNOWN', target: '' };
     const data = await res.json();
+
+    // Dispatches the exact intent and target globally
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: data.intent, target: data.target } 
+      }));
+    }
+
     return { intent: data.intent || 'UNKNOWN', target: data.target || '' };
   } catch (err) {
     console.error('[VoiceEngine] AI Intent Routing failed:', err);

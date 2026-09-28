@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 import { getHighFidelityVoice } from '@/lib/voice/speech-synthesis';
+import { fetchAIIntent } from '@/lib/voice/useVoiceEngine';
 
 export interface QuestionReviewItem {
   questionId: string;
@@ -676,6 +677,38 @@ export function QuestionReviewList({
 
   const goToPreviousQuestion = handlePrevQuestionReview;
   const goToNextQuestion = handleNextQuestionReview;
+  const handleNextQuestion = handleNextQuestionReview;
+  const handlePrevQuestion = handlePrevQuestionReview;
+  const readCurrentQuestion = handleRepeatQuestionReview;
+
+  // Global AI Voice Command Listener for Results Walkthrough
+  useEffect(() => {
+    const handleVoiceCommand = (e: any) => {
+      const { intent, target } = e.detail || {};
+      const normalizedTarget = (target || '').toUpperCase();
+
+      if (intent === 'CONTROL') {
+        if (normalizedTarget === 'NEXT') {
+          handleNextQuestion();
+        } else if (normalizedTarget === 'PREVIOUS' || normalizedTarget === 'PREV') {
+          handlePrevQuestion();
+        } else if (normalizedTarget === 'STOP' || normalizedTarget === 'PAUSE') {
+          setIsWalkthroughActive(false);
+          stopAudioWalkthrough();
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
+        } else if (normalizedTarget === 'REPEAT' || normalizedTarget === 'AGAIN') {
+          readCurrentQuestion();
+        } else if (normalizedTarget === 'RESUME') {
+          handleResume();
+        }
+      }
+    };
+
+    window.addEventListener('ai_voice_command', handleVoiceCommand);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
+  }, [handleNextQuestionReview, handlePrevQuestionReview, stopAudioWalkthrough, handleRepeatQuestionReview, handleResume]);
 
   // 4. Individual Question Explanation Handler
   const handlePlayIndividualQuestion = useCallback((q: QuestionReviewItem) => {
@@ -804,6 +837,11 @@ export function QuestionReviewList({
           } else if (isStop) {
             lastActionTimestampRef.current = now;
             handleStop();
+          } else if (cleanCmd && cleanCmd.length > 1) {
+            // Asynchronously query AI Intent router for complex natural language commands
+            fetchAIIntent(cleanCmd).catch((err) => {
+              console.warn('[ReviewIntent] Failed to resolve AI intent:', err);
+            });
           }
         };
 

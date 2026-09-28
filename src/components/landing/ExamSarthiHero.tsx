@@ -268,6 +268,12 @@ export default function ExamSarthiHero() {
           });
           const data = await res.json();
 
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+              detail: { intent: data.intent, target: data.target } 
+            }));
+          }
+
           // 5. Execute Action based on AI's structured response
           if (data.intent === 'NAVIGATE') {
             const target = (data.target || 'dashboard').toLowerCase();
