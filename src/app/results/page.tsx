@@ -36,7 +36,12 @@ import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
 import { getRemoteAttemptResult } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
-import AITutorCard from '@/components/results/AITutorCard';
+import dynamic from 'next/dynamic';
+
+const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), { 
+  ssr: false,
+  loading: () => <div className="text-[#ffed00] p-4 text-center">Loading AI Tutor...</div>
+});
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
 import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
@@ -439,15 +444,17 @@ function ResultsContent() {
       </nav>
 
       {/* AI Tutor Performance Overview */}
-      <AITutorCard
-        results={examData}
-        startReviewWalkthrough={() => {
-          setIsWalkthroughActive(true);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
-          }
-        }}
-      />
+      {examData && (
+        <AITutorCard
+          results={examData}
+          startReviewWalkthrough={() => {
+            setIsWalkthroughActive(true);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
+            }
+          }}
+        />
+      )}
 
       {/* SECTION A — RESULT HEADER */}
       <header className="space-y-3 border-b border-border/80 pb-6">
