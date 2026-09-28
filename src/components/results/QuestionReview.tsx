@@ -114,32 +114,33 @@ export function QuestionReview({
   // NAVIGATION: Handle NEXT, PREVIOUS, STOP, PAUSE voice commands
   useEffect(() => {
     const handleNavigation = (e: any) => {
-      const { target } = e.detail || {};
-      const upper = (target || '').toUpperCase();
-
-      if (upper === 'NEXT') {
-        setCurrentWalkthroughIndex(prev => Math.min(prev + 1, (results?.questions?.length || 1) - 1));
-      } else if (upper === 'PREVIOUS' || upper === 'PREV' || upper === 'BACK') {
-        setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0));
-      } else if (upper === 'STOP' || upper === 'PAUSE' || upper === 'EXIT') {
-        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        if (typeof onClose === 'function') onClose();
-        if (typeof setIsWalkthroughActive === 'function') setIsWalkthroughActive(false);
-      } else if (upper === 'REPEAT') {
-        if (results?.questions && results.questions[currentWalkthroughIndex]) {
-          const q = results.questions[currentWalkthroughIndex];
-          const isCorrect = q.userAnswer === q.correctAnswer || Boolean(q.isCorrect);
-          const narrationText = `Question ${currentWalkthroughIndex + 1}. ${q.questionText}. You answered ${q.userAnswer}. ${isCorrect ? "That is correct!" : `That is incorrect. The correct answer is ${q.correctAnswer}.`} ${q.explanation ? `Explanation: ${q.explanation}` : ""}`;
-          speakText(narrationText, () => {
-            if (typeof window !== 'undefined') startListening();
-          });
+      const { intent, target } = e.detail || {};
+      
+      if (!intent || intent === 'CONTROL') {
+        if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
+          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+          if (typeof onClose === 'function') onClose();
+          if (typeof setIsWalkthroughActive === 'function') setIsWalkthroughActive(false);
+        } else if (target === 'PREVIOUS') {
+          setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
+        } else if (target === 'NEXT') {
+          setCurrentWalkthroughIndex((prev) => Math.min(prev + 1, (results?.questions?.length || 1) - 1));
+        } else if (target === 'REPEAT') {
+          if (results?.questions && results.questions[currentWalkthroughIndex]) {
+            const q = results.questions[currentWalkthroughIndex];
+            const isCorrect = q.userAnswer === q.correctAnswer || Boolean(q.isCorrect);
+            const narrationText = `Question ${currentWalkthroughIndex + 1}. ${q.questionText}. You answered ${q.userAnswer}. ${isCorrect ? "That is correct!" : `That is incorrect. The correct answer is ${q.correctAnswer}.`} ${q.explanation ? `Explanation: ${q.explanation}` : ""}`;
+            speakText(narrationText, () => {
+              if (typeof window !== 'undefined') startListening();
+            });
+          }
         }
       }
     };
 
     window.addEventListener('ai_voice_command', handleNavigation);
     return () => window.removeEventListener('ai_voice_command', handleNavigation);
-  }, [results, currentWalkthroughIndex]);
+  }, [results, currentWalkthroughIndex, setCurrentWalkthroughIndex, setIsWalkthroughActive, onClose]);
 
   // If walkthrough is not active, fallback to standard review list
   if (!isWalkthroughActive) {

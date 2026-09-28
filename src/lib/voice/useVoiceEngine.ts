@@ -437,23 +437,34 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
         try { cb(finalTranscript); } catch (_) {}
       });
 
-      const lower = (raw || transcript || '').toLowerCase().trim();
-      
-      if (lower.includes('stop') || lower.includes('exit')) {
+      const lower = transcript.toLowerCase().trim();
+      const rawLower = (raw || '').toLowerCase().trim();
+      const finalLower = (finalTranscript || '').toLowerCase().trim();
+      const matches = (w: string) => lower.includes(w) || rawLower.includes(w) || finalLower.includes(w);
+
+      if (matches('stop') || matches('exit')) {
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'STOP', intent: 'CONTROL' } }));
-        return; // Skips AI completely
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'STOP' } 
+        }));
+        return; 
       }
-      if (lower.includes('previous') || lower.includes('back')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PREVIOUS', intent: 'CONTROL' } }));
+      if (matches('previous') || matches('back')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+        }));
         return;
       }
-      if (lower.includes('next')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'NEXT', intent: 'CONTROL' } }));
+      if (matches('next')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'NEXT' } 
+        }));
         return;
       }
-      if (lower.includes('review') || lower.includes('start')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'REVIEW', intent: 'CONTROL' } }));
+      if (matches('review') || matches('start')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: 'CONTROL', target: 'REVIEW' } 
+        }));
         return;
       }
 
@@ -587,19 +598,27 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   
   if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit')) {
     if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'STOP', intent: 'CONTROL' } }));
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'STOP' } 
+    }));
     return { intent: 'CONTROL', target: 'STOP' };
   }
   if (lowerTranscript.includes('previous') || lowerTranscript.includes('back')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PREVIOUS', intent: 'CONTROL' } }));
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+    }));
     return { intent: 'CONTROL', target: 'PREVIOUS' };
   }
   if (lowerTranscript.includes('next')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'NEXT', intent: 'CONTROL' } }));
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'NEXT' } 
+    }));
     return { intent: 'CONTROL', target: 'NEXT' };
   }
   if (lowerTranscript.includes('review') || lowerTranscript.includes('start')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'REVIEW', intent: 'CONTROL' } }));
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'REVIEW' } 
+    }));
     return { intent: 'CONTROL', target: 'REVIEW' };
   }
 

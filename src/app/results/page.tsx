@@ -328,6 +328,7 @@ function ResultsContent() {
   // Walkthrough Results data mapping for AI Voice Review Walkthrough
   const walkthroughResults = useMemo(() => {
     return {
+      ...(results || {}),
       questions: reviewQuestions.map((q, idx) => ({
         id: q.questionId || String(idx),
         questionText: (q as any).questionText || q.text || `Question ${idx + 1}`,
@@ -339,33 +340,32 @@ function ResultsContent() {
         options: q.options || []
       }))
     };
-  }, [reviewQuestions]);
+  }, [results, reviewQuestions]);
 
   // Fail-proof voice navigation listener for Walkthrough
   useEffect(() => {
-    const handleNav = (e: any) => {
-      const { target } = e.detail || {};
-      const upper = (target || '').toUpperCase();
+    const handleVoiceCommand = (e: any) => {
+      const { intent, target } = e.detail || {};
       
-      if (upper === 'STOP' || upper === 'EXIT' || upper === 'PAUSE') {
-        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        // CRITICAL: This unmounts the review panel and returns to the Results page
-        setIsWalkthroughActive(false); 
-      } else if (upper === 'PREVIOUS' || upper === 'PREV' || upper === 'BACK') {
-        // Decrements question, stops at 0 (Question 1)
-        setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0));
-      } else if (upper === 'NEXT') {
-        // Increments question, stops at max length
-        const total = walkthroughResults?.questions?.length || 1;
-        setCurrentWalkthroughIndex(prev => Math.min(prev + 1, total - 1));
-      } else if (upper === 'REVIEW' || upper === 'START') {
-        setIsWalkthroughActive(true);
+      if (intent === 'CONTROL') {
+        if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
+          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+          // THIS MUST REVERT TO THE DASHBOARD. Find the exact boolean setter and set it to false.
+          setIsWalkthroughActive(false); 
+        } else if (target === 'PREVIOUS') {
+          setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
+        } else if (target === 'NEXT') {
+          const totalQuestions = walkthroughResults?.questions?.length || (results as any)?.questions?.length || 1;
+          setCurrentWalkthroughIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
+        } else if (target === 'REVIEW' || target === 'START') {
+          setIsWalkthroughActive(true);
+        }
       }
     };
 
-    window.addEventListener('ai_voice_command', handleNav);
-    return () => window.removeEventListener('ai_voice_command', handleNav);
-  }, [walkthroughResults]);
+    window.addEventListener('ai_voice_command', handleVoiceCommand);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
+  }, [results, walkthroughResults]);
 
   // Extract weak topics directly from profile
   const weakTopics = useMemo<WeakTopicItem[]>(() => {
