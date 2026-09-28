@@ -260,6 +260,7 @@ export function useExamEngine(
   }, [currentSectionIndices, hasSections, questions.length]);
 
   const submitExam = useCallback(() => {
+    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
     if (isSubmittedRef.current) return;
     isSubmittedRef.current = true;
     setIsSubmitted(true);

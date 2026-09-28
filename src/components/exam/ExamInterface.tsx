@@ -121,6 +121,20 @@ export function ExamInterface({
     }, 2000);
   };
 
+  const handleSubmitExam = () => {
+    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+    actions.submitExam();
+  };
+
+  // Clean up audio on exam teardown to prevent memory leak crashes during routing
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const {
     isActive,
     status,
