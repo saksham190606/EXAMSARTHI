@@ -328,6 +328,14 @@ function ResultsContent() {
     return items.sort((a, b) => a.accuracy - b.accuracy);
   }, [profile]);
 
+  const examData = useMemo(() => {
+    if (!results) return null;
+    return {
+      score: results.score,
+      totalQuestions: results.totalQuestions,
+    };
+  }, [results?.score, results?.totalQuestions]);
+
   if (attemptError) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -417,13 +425,6 @@ function ResultsContent() {
       ) 
     : null;
   const activeTitle = activePracticeSet?.title || activeExam?.title || t('examName');
-
-  const examData = useMemo(() => {
-    return {
-      score: results?.score ?? 0,
-      totalQuestions: results?.totalQuestions ?? 0,
-    };
-  }, [results?.score, results?.totalQuestions]);
 
   return (
     <div className="min-h-screen bg-background text-foreground py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8">
