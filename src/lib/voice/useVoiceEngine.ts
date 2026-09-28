@@ -437,6 +437,18 @@ export function startListening(lang = 'en-IN', onTranscript?: (text: string) => 
         try { cb(finalTranscript); } catch (_) {}
       });
 
+      const lowerTranscript = transcript.toLowerCase().trim();
+      
+      // SLEDGEHAMMER BYPASS: If the user says "review", instantly trigger the panel and skip the AI.
+      if (lowerTranscript.includes('review') || finalTranscript.toLowerCase().includes('review')) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'REVIEW' } 
+          }));
+        }
+        return; // CRITICAL: Stop execution here so it does NOT go to Groq
+      }
+
       // Broadcast recognized speech through AI Intent router
       fetchAIIntent(finalTranscript).catch(() => {});
     };
@@ -561,6 +573,18 @@ export interface AIIntentResult {
 export async function fetchAIIntent(transcript: string): Promise<AIIntentResult> {
   if (!transcript || !transcript.trim()) {
     return { intent: 'UNKNOWN', target: '' };
+  }
+
+  const lowerTranscript = transcript.toLowerCase().trim();
+  
+  // SLEDGEHAMMER BYPASS: If the user says "review", instantly trigger the panel and skip the AI.
+  if (lowerTranscript.includes('review')) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'REVIEW' } 
+      }));
+    }
+    return { intent: 'CONTROL', target: 'REVIEW' }; // CRITICAL: Stop execution here so it does NOT go to Groq
   }
 
   try {

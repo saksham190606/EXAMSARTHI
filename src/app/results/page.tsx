@@ -532,27 +532,23 @@ function ResultsContent() {
         </Badge>
       </nav>
 
-      {/* AI Tutor Performance Overview */}
-      {examData && (
-        <AITutorCard
-          results={examData}
-          startReviewWalkthrough={() => {
-            setIsWalkthroughActive(true);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('examsarthi-start-walkthrough'));
-            }
-          }}
-        />
-      )}
-
-      {/* Fully Narrated Question Walkthrough UI */}
-      {isWalkthroughActive && (
-        <QuestionReview
-          results={walkthroughResults}
-          isWalkthroughActive={isWalkthroughActive}
+      {/* AI Tutor Summary Card OR Question Review Walkthrough Panel */}
+      {isWalkthroughActive ? (
+        // THE PANEL MUST BE MOUNTED HERE
+        <QuestionReview 
+          results={walkthroughResults} 
+          questions={reviewQuestions}
           setIsWalkthroughActive={setIsWalkthroughActive}
           onClose={() => setIsWalkthroughActive(false)}
-        />
+        /> 
+      ) : (
+        // THE SUMMARY CARD
+        examData && (
+          <AITutorCard 
+            results={examData} 
+            startReviewWalkthrough={() => setIsWalkthroughActive(true)} 
+          />
+        )
       )}
 
       {/* SECTION A — RESULT HEADER */}

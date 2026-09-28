@@ -167,12 +167,10 @@ export function QuestionReview({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
+      className="relative w-full bg-neutral-950 border-2 border-[#ffed00]/50 rounded-2xl p-6 sm:p-8 shadow-[0_0_35px_rgba(255,237,0,0.15)] flex flex-col gap-6 text-foreground overflow-hidden mb-8 animate-in fade-in zoom-in-95 duration-200"
+      role="region"
       aria-label="AI Voice Question Walkthrough"
     >
-      <div className="relative w-full max-w-3xl bg-neutral-950 border-2 border-[#ffed00]/50 rounded-2xl p-6 sm:p-8 shadow-[0_0_50px_rgba(255,237,0,0.15)] flex flex-col gap-6 text-foreground overflow-hidden max-h-[90vh] overflow-y-auto">
         
         {/* TOP HEADER */}
         <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -326,7 +324,6 @@ export function QuestionReview({
         </div>
 
       </div>
-    </div>
   );
 }
 
