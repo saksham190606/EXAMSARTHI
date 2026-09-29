@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { speakText, startListening } from '@/lib/voice/useVoiceEngine';
 import ReviewWalkthrough from './ReviewWalkthrough';
 
 interface AITutorCardProps {
@@ -13,8 +12,7 @@ interface AITutorCardProps {
 }
 
 export default function AITutorCard({ results, correctTopics, weakTopics, startReviewWalkthrough, reviewQuestions }: AITutorCardProps) {
-  const [summary, setSummary] = useState("Analyzing your performance...");
-  const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
+  const [summary, setSummary] = useState("Exam complete. Review your answers.");
   const [isWalkthroughActive, setIsWalkthroughActive] = useState(false);
 
   useEffect(() => {
@@ -49,27 +47,28 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
         console.log("[FRONTEND DIAGNOSTIC] Received response from backend. Status:", res.status);
         const data = await res.json();
         console.log("[FRONTEND DIAGNOSTIC] Final summary data received by UI:", data.summary);
-        setSummary(data?.summary || "Analysis complete. You may now review your answers.");
+        
+        let text = data?.summary || "Exam complete. Review your answers.";
+        if (text === "Unauthorized") {
+          text = "Exam complete. Review your answers.";
+        }
+        text = text
+          .replace(/say\s+['"]?review['"]?\s+to\s+review\s+your\s+answers\.?/gi, 'Review your answers.')
+          .replace(/say\s+['"]?review['"]?\s+to\s+begin\s+reviewing\s+your\s+questions(\s+one\s+by\s+one)?\.?/gi, 'Review your answers.')
+          .replace(/when\s+you\s+are\s+ready,\s+say\s+['"]?review['"]?\s+to\s+begin\s+reviewing/gi, 'Review')
+          .replace(/say\s+['"]?review['"]?/gi, 'Review your answers');
+        setSummary(text.trim());
       } catch (err) {
-        setSummary("Analysis complete. You may now review your answers.");
+        setSummary("Exam complete. Review your answers.");
       }
     };
     if (results) fetchSummary();
   }, [results, correctTopics, weakTopics]);
 
-  const handlePlaySummary = () => {
-    setIsSpeakingSummary(true);
-    speakText(summary, () => {
-      setIsSpeakingSummary(false);
-      startListening(); // Automatically open mic here
-    });
-  };
-
   const handleStartWalkthrough = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    setIsSpeakingSummary(false);
     setIsWalkthroughActive(true);
     if (typeof startReviewWalkthrough === 'function') {
       startReviewWalkthrough();
@@ -112,16 +111,9 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <button 
-          onClick={handlePlaySummary}
-          disabled={isSpeakingSummary}
-          className="px-6 py-3 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors disabled:opacity-50"
-        >
-          {isSpeakingSummary ? "🔊 Speaking..." : "▶ Listen to Performance Overview"}
-        </button>
-        <button 
           id="btn-start-review-walkthrough"
           onClick={handleStartWalkthrough}
-          className="px-6 py-3 bg-neutral-800 text-[#ffed00] border-2 border-[#ffed00] font-bold rounded-lg shadow-md hover:bg-[#ffed00] hover:text-black transition-all flex items-center gap-2 cursor-pointer"
+          className="px-6 py-3 bg-[#ffed00] hover:bg-[#ffe100] text-black font-extrabold rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
         >
           📖 Start Review Walkthrough
         </button>

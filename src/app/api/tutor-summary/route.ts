@@ -11,11 +11,11 @@ export async function POST(req: Request) {
   try {
     const supabase = await createSupabaseServerClient();
     if (!supabase) {
-      return NextResponse.json({ summary: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ summary: "Exam complete. Review your answers." });
     }
     const { data: userData, error: authError } = await supabase.auth.getUser();
     if (authError || !userData?.user) {
-      return NextResponse.json({ summary: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ summary: "Exam complete. Review your answers." });
     }
 
     const { score, total, correctTopics, weakTopics } = await req.json();
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     Their strong areas: ${correctTopics}. Their weak areas: ${weakTopics}.
     
     Write a very short, conversational, encouraging summary (maximum 3 sentences). 
-    End with exactly this sentence: "When you are ready, say 'Review' to begin reviewing your questions one by one."
+    End with exactly this sentence: "Exam complete. Review your answers."
     Do not use emojis, asterisks, or markdown. Use plain spoken text.`;
 
     const { data, response } = await groq.chat.completions.create({
@@ -40,6 +40,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ summary: data.choices[0]?.message?.content });
   } catch (error) {
     console.error("[BACKEND DIAGNOSTIC] Fatal API Error:", error);
-    return NextResponse.json({ summary: "Exam complete. Say 'Review' to review your answers." });
+    return NextResponse.json({ summary: "Exam complete. Review your answers." });
   }
 }
