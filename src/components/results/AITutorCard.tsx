@@ -77,10 +77,27 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
   };
 
   if (isWalkthroughActive) {
+    const rawList = (reviewQuestions && reviewQuestions.length > 0) ? reviewQuestions : [];
+    const formattedQuestions = rawList.map((q: any, idx: number) => {
+      const qText = q.questionText || q.text || `Question ${idx + 1}`;
+      const qUser = q.userAnswer || 'Not Answered';
+      const qCorrect = q.correctAnswer || 'Verified standard answer';
+      const qExp = q.explanation || 'No explanation provided.';
+
+      return {
+        ...q,
+        questionText: qText,
+        text: qText,
+        userAnswer: qUser,
+        correctAnswer: qCorrect,
+        explanation: qExp,
+      };
+    });
+
     return (
       <ReviewWalkthrough 
         onClose={() => setIsWalkthroughActive(false)}
-        results={{ questions: reviewQuestions }} 
+        results={{ questions: formattedQuestions }} 
       />
     );
   }

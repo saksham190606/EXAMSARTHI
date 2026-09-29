@@ -12,7 +12,44 @@ interface ReviewWalkthroughProps {
 export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroughProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [speechTrigger, setSpeechTrigger] = useState(0);
+  const lastSpokenRef = useRef({ index: -1, trigger: 0 });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !results?.questions) return;
+
+    // 1. The Anti-Loop Lock: Only proceed if the index or the repeat trigger actually changed
+    if (lastSpokenRef.current.index === currentIndex && lastSpokenRef.current.trigger === speechTrigger) {
+      return;
+    }
+    
+    // 2. Lock it in
+    lastSpokenRef.current = { index: currentIndex, trigger: speechTrigger };
+
+    const q = results.questions[currentIndex];
+    if (!q) return;
+
+    // 3. Kill any currently playing audio instantly
+    window.speechSynthesis.cancel();
+
+    // 4. Speak exactly once
+    const text = `Question ${currentIndex + 1}. ${q.questionText}. You answered ${q.userAnswer}. ${q.userAnswer === q.correctAnswer ? "Correct!" : `Incorrect. The correct answer is ${q.correctAnswer}.`} Explanation: ${q.explanation || "No explanation provided."}`;
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+
+    // 5. Cleanup on unmount
+    return () => window.speechSynthesis.cancel();
+  }, [currentIndex, results, speechTrigger]);
+
   const [lastHeardCommand, setLastHeardCommand] = useState<string | null>(null);
+
+  // Ensure questionText is present on questions for speech
+  if (results?.questions) {
+    for (const q of results.questions) {
+      if (!q.questionText && q.text) {
+        q.questionText = q.text;
+      }
+    }
+  }
 
   // 1. Authoritative Question Resolution with fallback
   const rawQuestions = results?.questions && results.questions.length > 0 
@@ -103,43 +140,6 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     }
     setCurrentIndex((prev) => Math.max(prev - 1, 0));
   }, []);
-
-  // 3. Stable, Trigger-Based Speech Synthesis: NO infinite loops, NO recursive closures
-  useEffect(() => {
-    if (typeof window === 'undefined' || !results?.questions) return;
-    
-    const q = results.questions[currentIndex] || rawQuestions[currentIndex];
-    if (!q) return;
-
-    // 1. Instantly kill any ongoing audio
-    window.speechSynthesis.cancel(); 
-
-    const qPrompt = q.questionText || q.text || `Question ${currentIndex + 1}`;
-    const ansUser = q.userAnswer || userDisplay;
-    const ansCorrect = q.correctAnswer || correctDisplay;
-    const ansExp = q.explanation || explanation || "No explanation provided.";
-
-    const text = `Question ${currentIndex + 1}. ${qPrompt}. You answered ${ansUser}. ${
-      ansUser === ansCorrect || isCorrect ? "Correct!" : `Incorrect. The correct answer is ${ansCorrect}.`
-    } Explanation: ${ansExp}`;
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.lang = 'en-US';
-    
-    // 2. Store globally strictly to prevent Chrome GC on long text. NO intervals or onend loops.
-    (window as any)._activeUtterance = utterance; 
-    
-    // 3. Speak the current question
-    window.speechSynthesis.speak(utterance);
-
-    // 4. Cleanup: kill audio if the component unmounts
-    return () => {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, [currentIndex, results, speechTrigger]); // ONLY fires when index changes or Repeat is triggered
 
   // 4. Voice Command Interpreter (Dispatches corresponding action on voice match)
   const processVoiceCommand = useCallback((transcript: string) => {

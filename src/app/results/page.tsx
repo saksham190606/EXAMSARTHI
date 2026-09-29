@@ -104,7 +104,10 @@ function ResultsContent() {
       })
       .then((data) => {
         if (data.success && Array.isArray(data.questions)) {
-          setReviewQuestions(data.questions);
+          setReviewQuestions(data.questions.map((q: any) => ({
+            ...q,
+            questionText: q.questionText || q.text
+          })));
         } else {
           setReviewError(data.error || 'Unable to retrieve question breakdown');
         }
