@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -7,11 +8,22 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
 export async function POST(req: Request) {
   try {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) {
+      return NextResponse.json({ intent: 'UNKNOWN', target: '' }, { status: 401 });
+    }
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ intent: 'UNKNOWN', target: '' }, { status: 401 });
+    }
+
     const { transcript } = await req.json();
 
     if (!transcript || typeof transcript !== 'string') {
       return NextResponse.json({ intent: 'UNKNOWN', target: '' }, { status: 400 });
     }
+
+    const limitedTranscript = transcript.substring(0, 300);
 
     const prompt = `You are the navigation AI for "Exam Saarthi", an accessibility platform. 
     Analyze the user's speech (English or Hindi) and return ONLY a JSON object with 'intent' and 'target'. 
@@ -30,7 +42,7 @@ export async function POST(req: Request) {
     Example 5: "review" -> {"intent": "CONTROL", "target": "REVIEW"}
     Example 6: "begin review" -> {"intent": "CONTROL", "target": "REVIEW"}
     
-    User speech: "${transcript}"`;
+    User speech: ${JSON.stringify(limitedTranscript)}`;
 
     let chatCompletion;
     try {

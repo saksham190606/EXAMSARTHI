@@ -52,15 +52,7 @@ export function ExamInterface({
   // 2. Purge Multi-Select Questions: Filter incoming questions strictly
   const validQuestions = useMemo(() => {
     return (questions || []).filter(q =>
-      // Exclude if it's explicitly typed as multiple select
-      (q.type as string) !== 'MULTIPLE_SELECT' &&
-      (q.type as string) !== 'multiple-choice' &&
-      // Exclude if correctOption/answer is an array (meaning multiple answers)
-      !Array.isArray((q as any).correctOption) &&
-      !Array.isArray((q as any).correctAnswer) &&
-      !Array.isArray((q as any).acceptableAnswers) &&
-      // Strictly allow only these 3 types
-      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER', 'MULTIPLE_SELECT', 'multiple-choice'].includes((q.type as string) || 'MCQ')
     );
   }, [questions]);
 

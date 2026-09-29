@@ -42,12 +42,7 @@ export function ExamSession({ exam, onComplete }: ExamSessionProps) {
   // Purge Multi-Select Questions: Strictly filter single-response questions
   const validQuestions = React.useMemo(() => {
     return (exam.questions || []).filter(q =>
-      (q as any).type !== 'MULTIPLE_SELECT' &&
-      (q as any).type !== 'multiple-choice' &&
-      !Array.isArray((q as any).correctOption) &&
-      !Array.isArray((q as any).correctAnswer) &&
-      !Array.isArray((q as any).acceptableAnswers) &&
-      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q as any).type || 'MCQ')
+      ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER', 'MULTIPLE_SELECT', 'multiple-choice'].includes((q as any).type || 'MCQ')
     );
   }, [exam.questions]);
 

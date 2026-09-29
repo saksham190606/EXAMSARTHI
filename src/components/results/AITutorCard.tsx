@@ -5,10 +5,11 @@ import { speakText, startListening } from '@/lib/voice/useVoiceEngine';
 
 interface AITutorCardProps {
   results: { score: number; totalQuestions: number };
-  startReviewWalkthrough?: () => void;
+  correctTopics?: string;
+  weakTopics?: string;
 }
 
-export default function AITutorCard({ results, startReviewWalkthrough }: AITutorCardProps) {
+export default function AITutorCard({ results, correctTopics, weakTopics }: AITutorCardProps) {
   const [summary, setSummary] = useState("Analyzing your performance...");
   const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
 
@@ -21,11 +22,13 @@ export default function AITutorCard({ results, startReviewWalkthrough }: AITutor
           body: JSON.stringify({
             score: results?.score ?? 0,
             total: results?.totalQuestions ?? 0,
-            correctTopics: "Reasoning and Aptitude",
-            weakTopics: "General Knowledge"
+            correctTopics: correctTopics || "Reasoning and Aptitude",
+            weakTopics: weakTopics || "General Knowledge"
           })
         });
+        console.log("[FRONTEND DIAGNOSTIC] Received response from backend. Status:", res.status);
         const data = await res.json();
+        console.log("[FRONTEND DIAGNOSTIC] Final summary data received by UI:", data.summary);
         setSummary(data?.summary || "Analysis complete. You may now review your answers.");
       } catch (err) {
         setSummary("Analysis complete. You may now review your answers.");

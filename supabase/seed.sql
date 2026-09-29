@@ -15,7 +15,8 @@ VALUES
   ('p2', 'General Knowledge & Geography', 'practice', 'General Knowledge', 'Essential constitutional articles, history, science, geography, and economy with accessible question types.', 10, 'Intermediate', 8, true),
   ('p3', 'Logical Reasoning & Coding', 'practice', 'Reasoning', 'Deductive logic, number series, blood relations, and syllogisms across diverse question formats.', 10, 'Advanced', 8, true),
   ('p4', 'English Grammar & Comprehension', 'practice', 'English', 'Rules of grammar, vocabulary, error detection, spelling, and preposition usage.', 10, 'Intermediate', 8, true),
-  ('p5', 'Accessible Multi-Format Showcase', 'practice', 'Multi-Format Showcase', 'Curated session testing all 5 accessible question types: Single Choice, Multiple Choice, True/False, Short Answer, and Fill in the Blank.', 8, 'Beginner', 5, true)
+  ('p5', 'Accessible Multi-Format Showcase', 'practice', 'Multi-Format Showcase', 'Curated session testing all 5 accessible question types: Single Choice, Multiple Choice, True/False, Short Answer, and Fill in the Blank.', 8, 'Beginner', 5, true),
+  ('p6', 'Diagrams & Data Interpretation', 'practice', 'Visual Reasoning', 'Evaluates ability to comprehend and interpret visual information including charts, diagrams, and circuits.', 10, 'Intermediate', 4, true)
 ON CONFLICT (id) DO UPDATE SET
   title = EXCLUDED.title,
   category = EXCLUDED.category,
@@ -152,7 +153,11 @@ VALUES
   ('p5', 'gk-5', 'General Knowledge', 1),
   ('p5', 'reason-6', 'Reasoning', 2),
   ('p5', 'eng-7', 'English', 3),
-  ('p5', 'quant-10', 'Quantitative Aptitude', 4)
+  ('p5', 'quant-10', 'Quantitative Aptitude', 4),
+  ('p6', 'quant-diagram-1', 'Quantitative Aptitude', 0),
+  ('p6', 'reason-diagram-1', 'Reasoning', 1),
+  ('p6', 'gk-diagram-1', 'General Knowledge', 2),
+  ('p6', 'eng-diagram-1', 'English', 3)
 ON CONFLICT (exam_id, question_id) DO UPDATE SET
   section_name = EXCLUDED.section_name,
   order_index = EXCLUDED.order_index;

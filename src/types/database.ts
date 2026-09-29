@@ -281,6 +281,7 @@ export type Database = {
           difficulty: string | null
           explanation: string
           id: string
+          image_url: string | null
           options: Json | null
           subject: string
           text: string
@@ -294,6 +295,7 @@ export type Database = {
           difficulty?: string | null
           explanation: string
           id: string
+          image_url?: string | null
           options?: Json | null
           subject: string
           text: string
@@ -307,6 +309,7 @@ export type Database = {
           difficulty?: string | null
           explanation?: string
           id?: string
+          image_url?: string | null
           options?: Json | null
           subject?: string
           text?: string
@@ -323,6 +326,7 @@ export type Database = {
           difficulty: string | null
           exam_id: string | null
           explanation: string | null
+          image_url: string | null
           options: Json | null
           order_index: number | null
           question_id: string | null

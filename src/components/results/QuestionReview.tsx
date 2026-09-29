@@ -184,13 +184,13 @@ export function QuestionReview({
 
   return (
     <div 
-      className="relative w-full bg-neutral-950 border-2 border-[#ffed00]/50 rounded-2xl p-6 sm:p-8 shadow-[0_0_35px_rgba(255,237,0,0.15)] flex flex-col gap-6 text-foreground overflow-hidden mb-8 animate-in fade-in zoom-in-95 duration-200"
+      className="relative w-full bg-card border-2 border-primary/50 rounded-2xl p-6 sm:p-8 shadow-[0_0_35px_rgba(255,237,0,0.15)] flex flex-col gap-6 text-foreground overflow-hidden mb-8 animate-in fade-in zoom-in-95 duration-200"
       role="region"
       aria-label="AI Voice Question Walkthrough"
     >
         
         {/* TOP HEADER */}
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+        <div className="flex items-center justify-between border-b border-border pb-4">
           <div className="flex items-center gap-3">
             <span className="flex h-3 w-3 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ffed00] opacity-75"></span>
@@ -200,14 +200,14 @@ export function QuestionReview({
               <Sparkles className="h-3.5 w-3.5" />
               AI Voice Walkthrough
             </Badge>
-            <span className="text-sm text-neutral-400 font-medium">
+            <span className="text-sm text-muted-foreground font-medium">
               Question <strong className="text-white">{currentWalkthroughIndex + 1}</strong> of <strong className="text-white">{totalQuestions}</strong>
             </span>
           </div>
 
           <button
             onClick={handleClose}
-            className="text-neutral-400 hover:text-white p-1.5 rounded-lg hover:bg-neutral-800 transition-colors"
+            className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-muted transition-colors"
             title="Stop Walkthrough (Say 'Stop')"
             aria-label="Close walkthrough"
           >
@@ -216,7 +216,7 @@ export function QuestionReview({
         </div>
 
         {/* PROGRESS BAR */}
-        <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+        <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
           <div 
             className="bg-[#ffed00] h-full transition-all duration-300"
             style={{ width: `${((currentWalkthroughIndex + 1) / totalQuestions) * 100}%` }}
@@ -226,7 +226,7 @@ export function QuestionReview({
         {/* QUESTION CONTENT */}
         <div className="space-y-5">
           <div className="space-y-2">
-            <span className="text-xs uppercase font-bold tracking-wider text-neutral-400">
+            <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground">
               Question {currentWalkthroughIndex + 1}
             </span>
             <h3 className="text-xl sm:text-2xl font-bold text-white leading-relaxed">
@@ -243,7 +243,7 @@ export function QuestionReview({
                 : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
             }`}>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Your Answer
                 </span>
                 {isCurrentCorrect ? (
@@ -264,7 +264,7 @@ export function QuestionReview({
             {/* Correct Answer Block */}
             <div className="p-4 rounded-xl border bg-emerald-950/20 border-emerald-500/30 text-emerald-200">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Correct Answer
                 </span>
                 <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
@@ -279,13 +279,13 @@ export function QuestionReview({
 
           {/* EXPLANATION BLOCK */}
           {currentQ.explanation && (
-            <Card className="bg-neutral-900/90 border-neutral-800">
+            <Card className="bg-muted/50 border-border">
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#ffed00]">
                   <Lightbulb className="h-4 w-4" />
                   <span>Explanation</span>
                 </div>
-                <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
+                <p className="text-sm sm:text-base text-foreground leading-relaxed">
                   {currentQ.explanation}
                 </p>
               </CardContent>
@@ -294,18 +294,18 @@ export function QuestionReview({
         </div>
 
         {/* VOICE COMMAND HINT / MIC STATUS */}
-        <div className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs sm:text-sm text-neutral-300">
+        <div className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-muted border border-border text-xs sm:text-sm text-muted-foreground">
           <Mic className="h-4 w-4 text-[#ffed00] animate-pulse" />
           <span>Voice Commands Active: Say <strong>&ldquo;Next&rdquo;</strong>, <strong>&ldquo;Previous&rdquo;</strong>, or <strong>&ldquo;Stop&rdquo;</strong></span>
         </div>
 
         {/* NAVIGATION CONTROLS */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border">
           <Button
             variant="outline"
             onClick={() => setCurrentWalkthroughIndex(prev => Math.max(prev - 1, 0))}
             disabled={currentWalkthroughIndex === 0}
-            className="border-neutral-700 text-neutral-200 hover:bg-neutral-800 hover:text-white flex items-center gap-2"
+            className="border-border text-foreground hover:bg-muted flex items-center gap-2"
           >
             <ChevronLeft className="h-4 w-4" />
             Previous
@@ -324,7 +324,7 @@ export function QuestionReview({
             <Button
               variant="outline"
               onClick={handleClose}
-              className="border-neutral-700 text-neutral-400 hover:text-white hover:bg-neutral-800 text-xs"
+              className="border-border text-muted-foreground hover:text-foreground hover:bg-muted text-xs"
             >
               Stop
             </Button>

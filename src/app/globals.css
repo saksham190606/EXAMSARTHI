@@ -9,6 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: "NouvelR", "Inter Tight", "Manrope", var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-heading: "NouvelR", "Inter Tight", "Manrope", var(--font-geist-sans), sans-serif;
+  --font-serif: var(--font-lora-serif), Georgia, serif;
   --font-mono: var(--font-geist-mono), monospace;
 
   --color-primary: var(--primary);
@@ -62,80 +63,81 @@
 }
 
 :root {
-  /* LIGHT CANVAS (Browsing Mode) — Pure White, Stark Ink, Sunlight Yellow CTAs */
-  --background: #ffffff;
-  --foreground: #000000;
-  --card: #ffffff;
-  --card-foreground: #000000;
-  --popover: #ffffff;
-  --popover-foreground: #000000;
+  /* LIGHT CANVAS (Browsing Mode) — Warm Cream, Caspian Teal */
+  --background: #FAF8F4;
+  --foreground: #1A1815;
+  --card: #FFFFFF;
+  --card-foreground: #1A1815;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1815;
   
-  /* Primary Accent: Sunlight Yellow with mandatory pure black text */
-  --primary: #ffed00;
-  --primary-foreground: #000000;
-  --primary-deep: #e6d200;
+  --primary: #185A54;
+  --primary-foreground: #FFFFFF;
+  --primary-deep: #134B45;
   
-  /* Secondary: Solid black */
-  --secondary: #000000;
-  --secondary-foreground: #ffffff;
+  --secondary: #FFFFFF;
+  --secondary-foreground: #1A1815;
   
-  --muted: #f7f7f7;
-  --muted-foreground: #666666;
+  --muted: #F2EFEB;
+  --muted-foreground: #666055;
   
-  --accent: #f7f7f7;
-  --accent-foreground: #000000;
+  --accent: #E6E1D6;
+  --accent-foreground: #1A1815;
   
   --destructive: #be6464;
-  --border: #f2f2f2;
-  --border-strong: #000000;
-  --input: #000000;
-  --ring: #000000;
+  --border: #E6E1D6;
+  --border-strong: #1A1815;
+  --input: #1A1815;
+  --ring: #185A54;
   
   --radius: 0px;
 }
 
 .dark {
-  /* DARK CANVAS (Storytelling & Hero Mode) — Pure Black, Surface Deep, Sunlight Yellow CTAs */
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #111111;
-  --card-foreground: #ffffff;
-  --popover: #111111;
-  --popover-foreground: #ffffff;
+  /* DARK CANVAS (Storytelling & Hero Mode) — Warm Charcoal, Sage Teal */
+  --background: #11100F;
+  --foreground: #F5F3EF;
+  --card: #1A1816;
+  --card-foreground: #F5F3EF;
+  --popover: #1A1816;
+  --popover-foreground: #F5F3EF;
   
-  /* Primary Accent: Sunlight Yellow remains confident with black text */
-  --primary: #ffed00;
-  --primary-foreground: #000000;
-  --primary-deep: #e6d200;
+  --primary: #2DD4BF;
+  --primary-foreground: #0A2926;
+  --primary-deep: #14B8A6;
   
-  --secondary: #ffffff;
-  --secondary-foreground: #000000;
+  --secondary: #1A1816;
+  --secondary-foreground: #F5F3EF;
   
-  --muted: #111111;
-  --muted-foreground: rgba(255, 255, 255, 0.72);
+  --muted: #25221F;
+  --muted-foreground: #A39E93;
   
-  --accent: #111111;
-  --accent-foreground: #ffffff;
+  --accent: #2C2824;
+  --accent-foreground: #F5F3EF;
   
   --destructive: #be6464;
-  --border: rgba(255, 255, 255, 0.16);
-  --border-strong: #ffffff;
+  --border: #2C2824;
+  --border-strong: #F5F3EF;
   --input: rgba(255, 255, 255, 0.5);
-  --ring: #ffed00;
+  --ring: #2DD4BF;
   
   --radius: 0px;
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--border);
   }
   body {
-    @apply bg-background text-foreground antialiased font-sans font-normal;
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-sans);
     font-weight: 400;
   }
   html {
-    @apply font-sans;
+    font-family: var(--font-sans);
   }
 
   /* Strict Headings: weight 700 with line-height clamped to 0.95 */
@@ -152,7 +154,11 @@
 
   /* Accessibility Foundations: Strong visible focus */
   :focus-visible {
-    @apply outline-none ring-2 ring-black ring-offset-2 ring-offset-background dark:ring-[#ffed00];
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px #000000;
+  }
+  .dark :focus-visible {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px #2DD4BF;
   }
 
   /* Reduced motion preference from OS */

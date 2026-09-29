@@ -1138,13 +1138,6 @@ export function QuestionReviewList({
                   Sectional Breakdown
                 </Badge>
               )}
-              {/* Add this explicitly next to your "Sectional Breakdown" header */}
-              <button 
-                onClick={toggleWalkthrough} 
-                className="ml-4 px-4 py-2 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors z-10"
-              >
-                {isWalkthroughActive ? "⏹ Stop Audio Review" : "🔊 Start Audio Walkthrough"}
-              </button>
             </h2>
             <p className="text-sm text-muted-foreground">
               Official evaluation comparing your responses against verified answer keys.
@@ -1162,8 +1155,8 @@ export function QuestionReviewList({
             className={cn(
               "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[4px] text-xs transition-all cursor-pointer select-none",
               isAudioReviewActive
-                ? "bg-[#ffed00] text-black font-bold ring-2 ring-[#ffed00] shadow-[0_0_15px_rgba(255,237,0,0.35)]"
-                : "bg-neutral-900 text-white/80 border border-white/20 hover:text-white hover:border-white/40"
+                ? "bg-primary text-primary-foreground font-bold ring-2 ring-primary shadow-sm"
+                : "bg-muted text-muted-foreground border border-border hover:text-foreground"
             )}
             title="Toggle Audio Walkthrough (Alt+A)"
           >
@@ -1175,7 +1168,7 @@ export function QuestionReviewList({
             <span>Audio Walkthrough</span>
             <kbd className={cn(
               "px-1.5 py-0.5 text-2xs font-mono rounded",
-              isAudioReviewActive ? "bg-black text-[#ffed00] font-bold" : "bg-neutral-800 text-white/70"
+              isAudioReviewActive ? "bg-black text-[#ffed00] font-bold" : "bg-secondary text-secondary-foreground"
             )}>
               Alt+A
             </kbd>
@@ -1319,7 +1312,7 @@ export function QuestionReviewList({
       <div 
         role="toolbar"
         aria-label="Audio review walkthrough controls"
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-2.5 rounded-full bg-neutral-950/95 border border-[#ffed00]/50 shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-white max-w-[96vw] overflow-x-auto"
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-2.5 rounded-full bg-card/95 border border-primary/50 shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-foreground max-w-[96vw] overflow-x-auto"
       >
         {/* Left Segment: Question counter badge */}
         <span className="text-xs font-mono font-bold text-[#ffed00] bg-[#ffed00]/10 border border-[#ffed00]/30 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
@@ -1337,14 +1330,14 @@ export function QuestionReviewList({
           <button
             type="button"
             onClick={handlePrev}
-            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+            className="px-3 py-1.5 text-xs font-medium bg-muted border border-border hover:border-primary/50 rounded-lg cursor-pointer text-foreground"
           >
             ‹ Prev
           </button>
           <button
             type="button"
             onClick={handleRepeat}
-            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+            className="px-3 py-1.5 text-xs font-medium bg-muted border border-border hover:border-primary/50 rounded-lg cursor-pointer text-foreground"
           >
             ↻ Repeat
           </button>
@@ -1358,7 +1351,7 @@ export function QuestionReviewList({
           <button
             type="button"
             onClick={handleNext}
-            className="px-3 py-1.5 text-xs font-medium bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg cursor-pointer text-white"
+            className="px-3 py-1.5 text-xs font-medium bg-muted border border-border hover:border-primary/50 rounded-lg cursor-pointer text-foreground"
           >
             Next ›
           </button>

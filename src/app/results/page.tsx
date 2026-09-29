@@ -18,7 +18,6 @@ import {
   History,
   Award,
   ShieldCheck,
-  WifiOff,
   Layers
 } from 'lucide-react';
 
@@ -35,9 +34,8 @@ import { AvailableExams, PracticeSets } from '@/lib/mockData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
-import { getRemoteAttemptResult } from '@/lib/api/examRepository';
+import { getRemoteAttemptResult, getPreviousCompletedAttempt } from '@/lib/api/examRepository';
 import { QuestionReviewList, QuestionReviewItem } from '@/components/results/QuestionReviewList';
-import { QuestionReview } from '@/components/results/QuestionReview';
 import dynamic from 'next/dynamic';
 
 const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), { 
@@ -91,8 +89,6 @@ function ResultsContent() {
   const [reviewQuestions, setReviewQuestions] = useState<QuestionReviewItem[]>([]);
   const [loadingReview, setLoadingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [isWalkthroughActive, setIsWalkthroughActive] = useState<boolean>(false);
-  const [currentWalkthroughIndex, setCurrentWalkthroughIndex] = useState<number>(0);
   const { t } = useTranslation();
 
   const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
@@ -196,16 +192,35 @@ function ResultsContent() {
           setResults(officialResults);
 
           // Build candidate profile for personalization from official metrics
-          const remoteSubjectPerformances = subjectMetrics.map((sm: any) => ({
-            subject: sm.subject,
-            score: sm.correct,
-            totalQuestions: sm.totalQuestions,
-            attempted: sm.attempted,
-            correct: sm.correct,
-            incorrect: sm.incorrect,
-            accuracy: sm.accuracy,
-            topics: []
-          }));
+          // Build topic data from topicMetrics for weakTopics/recommendations
+          const topicMetricsArr = summaryMetrics.topicMetrics;
+          const remoteSubjectPerformances = subjectMetrics.map((sm: any) => {
+            const subjectTopics: Array<{ topic: string; totalQuestions: number; attempted: number; correct: number; incorrect: number; accuracy: number }> = [];
+            if (Array.isArray(topicMetricsArr)) {
+              for (const tm of topicMetricsArr) {
+                if (tm.subject === sm.subject) {
+                  subjectTopics.push({
+                    topic: tm.topic || 'General',
+                    totalQuestions: Number(tm.totalQuestions ?? 0),
+                    attempted: Number(tm.attempted ?? 0),
+                    correct: Number(tm.correct ?? 0),
+                    incorrect: Number(tm.incorrect ?? 0),
+                    accuracy: Number(tm.accuracy ?? 0),
+                  });
+                }
+              }
+            }
+            return {
+              subject: sm.subject,
+              score: sm.correct,
+              totalQuestions: sm.totalQuestions,
+              attempted: sm.attempted,
+              correct: sm.correct,
+              incorrect: sm.incorrect,
+              accuracy: sm.accuracy,
+              topics: subjectTopics,
+            };
+          });
 
           const remoteProfile: PerformanceProfile = {
             examId: attempt.exam_id,
@@ -218,9 +233,41 @@ function ResultsContent() {
           };
 
           setProfile(remoteProfile);
-          const history = getPerformanceHistory();
-          if (history.length > 0) setPreviousAttempt(history[0]);
-          setRecommendations(generateRecommendations(remoteProfile, history));
+
+          // Fetch remote previous completed attempt for trend comparison
+          getPreviousCompletedAttempt(attempt.id, attempt.submitted_at).then((prev) => {
+            if (prev) {
+              const prevSummary = prev.summary_metrics || {};
+              const prevSubMetrics = Array.isArray(prevSummary.subjectMetrics) ? prevSummary.subjectMetrics : [];
+              const prevProfile: PerformanceProfile = {
+                examId: prev.exam_id,
+                timestamp: new Date(prev.submitted_at || Date.now()).getTime(),
+                totalQuestions: prev.total_questions || 0,
+                attempted: prev.attempted_count ?? 0,
+                correct: prev.correct_count ?? 0,
+                accuracy: typeof prev.accuracy === 'number' ? prev.accuracy : 0,
+                subjects: prevSubMetrics.map((s: any) => ({
+                  subject: s.subject || 'General Assessment',
+                  score: s.correct ?? 0,
+                  totalQuestions: s.totalQuestions ?? 0,
+                  attempted: s.attempted ?? 0,
+                  correct: s.correct ?? 0,
+                  incorrect: s.incorrect ?? 0,
+                  accuracy: s.accuracy ?? 0,
+                  topics: [],
+                })),
+              };
+              setPreviousAttempt(prevProfile);
+            } else {
+              // Fall back to local history
+              const history = getPerformanceHistory();
+              if (history.length > 0) setPreviousAttempt(history[0]);
+            }
+          }).catch(() => {
+            const history = getPerformanceHistory();
+            if (history.length > 0) setPreviousAttempt(history[0]);
+          });
+          setRecommendations(generateRecommendations(remoteProfile, getPerformanceHistory()));
         } else {
           console.warn('[ResultsPage] Could not load remote attempt:', error);
           setAttemptError(error || 'Failed to locate examination attempt');
@@ -242,8 +289,8 @@ function ResultsContent() {
 
   // 2. No synthetic local results state: results are only shown for an authenticated, persisted attempt.
   useEffect(() => {
-    if (attemptId) return; // remote attempt flow active
-    setFinalState(null);
+    if (attemptId) return;
+    // No local fallback — results require a remote attempt
   }, [attemptId]);
 
   useEffect(() => {
@@ -309,62 +356,7 @@ function ResultsContent() {
 
   }, [finalState, attemptId]);
 
-  // Walkthrough Results data mapping for AI Voice Review Walkthrough
-  const walkthroughResults = useMemo(() => {
-    return {
-      ...(results || {}),
-      questions: reviewQuestions.map((q, idx) => ({
-        id: q.questionId || String(idx),
-        questionText: (q as any).questionText || q.text || `Question ${idx + 1}`,
-        text: (q as any).questionText || q.text || `Question ${idx + 1}`,
-        userAnswer: q.userAnswer !== undefined && q.userAnswer !== null ? String(q.userAnswer) : 'Not Answered',
-        correctAnswer: q.correctAnswer !== undefined && q.correctAnswer !== null ? String(q.correctAnswer) : 'N/A',
-        isCorrect: typeof q.isCorrect === 'boolean' ? q.isCorrect : (q.userAnswer === q.correctAnswer),
-        explanation: q.explanation || '',
-        options: q.options || []
-      }))
-    };
-  }, [results, reviewQuestions]);
 
-  // Fail-proof voice navigation listener for Walkthrough
-  useEffect(() => {
-    const handleVoiceCommand = (e: any) => {
-      const { intent, target } = e.detail || {};
-      
-      if (intent === 'CONTROL' || !intent) {
-        if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
-          if (typeof window !== 'undefined') {
-            window.speechSynthesis?.cancel();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-          // Revert to the dashboard results view
-          setIsWalkthroughActive(false); 
-        } else if (target === 'PREVIOUS') {
-          setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
-        } else if (target === 'NEXT') {
-          const totalQuestions = walkthroughResults?.questions?.length || (results as any)?.questions?.length || 1;
-          setCurrentWalkthroughIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
-        } else if (target === 'REVIEW' || target === 'START') {
-          setIsWalkthroughActive(true);
-        }
-      }
-    };
-
-    const handleExplicitStop = () => {
-      if (typeof window !== 'undefined') {
-        window.speechSynthesis?.cancel();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      setIsWalkthroughActive(false);
-    };
-
-    window.addEventListener('ai_voice_command', handleVoiceCommand);
-    window.addEventListener('examsarthi_review_stop', handleExplicitStop);
-    return () => {
-      window.removeEventListener('ai_voice_command', handleVoiceCommand);
-      window.removeEventListener('examsarthi_review_stop', handleExplicitStop);
-    };
-  }, [results, walkthroughResults]);
 
   // Extract weak topics directly from profile
   const weakTopics = useMemo<WeakTopicItem[]>(() => {
@@ -526,26 +518,13 @@ function ResultsContent() {
         </Badge>
       </nav>
 
-      {/* AI Tutor Summary Card OR Question Review Walkthrough Panel */}
-      {isWalkthroughActive ? (
-        // THE PANEL MUST BE MOUNTED HERE
-        <QuestionReview 
-          results={walkthroughResults} 
-          questions={reviewQuestions}
-          currentWalkthroughIndex={currentWalkthroughIndex}
-          setCurrentWalkthroughIndex={setCurrentWalkthroughIndex}
-          setIsWalkthroughActive={setIsWalkthroughActive}
-          onStop={() => setIsWalkthroughActive(false)}
-          onClose={() => setIsWalkthroughActive(false)}
-        /> 
-      ) : (
-        // THE SUMMARY CARD
-        examData && (
-          <AITutorCard 
-            results={examData} 
-            startReviewWalkthrough={() => setIsWalkthroughActive(true)} 
-          />
-        )
+      {/* AI Tutor Summary Card */}
+      {examData && (
+        <AITutorCard 
+          results={examData} 
+          correctTopics={profile?.subjects.flatMap(s => s.topics).filter(t => t.accuracy >= 60).map(t => t.topic).join(", ") || "General Study"}
+          weakTopics={profile?.subjects.flatMap(s => s.topics).filter(t => t.accuracy < 60).map(t => t.topic).join(", ") || "General Knowledge"}
+        />
       )}
 
       {/* SECTION A — RESULT HEADER */}
@@ -715,11 +694,15 @@ function ResultsContent() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {remoteAttempt.summary_metrics.sectionMetrics.map((sec: any) => {
-              const secTimeMins = Math.floor((sec.time_used_seconds || 0) / 60);
-              const secTimeSecs = (sec.time_used_seconds || 0) % 60;
+              const secTimeUsed = sec.timeUsedSeconds ?? sec.time_used_seconds ?? 0;
+              const secDurationSecs = sec.durationSeconds ?? (sec.duration_minutes ? sec.duration_minutes * 60 : sec.duration_seconds ?? 300);
+              const secTotalQ = sec.totalQuestions ?? sec.total_questions ?? 4;
+              const secTimingFlag = sec.timingFlag ?? sec.timing_flag ?? 'NORMAL';
+              const secTimeMins = Math.floor(secTimeUsed / 60);
+              const secTimeSecs = secTimeUsed % 60;
               const formattedSecTime = `${secTimeMins}m ${secTimeSecs}s`;
-              const isDiscrepancy = sec.timing_flag === 'CLIENT_SERVER_TIME_DISCREPANCY';
-              const isCapped = sec.timing_flag === 'EXCEEDED_ALLOTTED_TIME_CAPPED';
+              const isDiscrepancy = secTimingFlag === 'CLIENT_SERVER_TIME_DISCREPANCY';
+              const isCapped = secTimingFlag === 'EXCEEDED_ALLOTTED_TIME_CAPPED';
 
               return (
                 <Card key={sec.section_id || sec.name} className="border border-border/80 ">
@@ -729,7 +712,7 @@ function ResultsContent() {
                         Section {(sec.order_index ?? 0) + 1}
                       </Badge>
                       <span className="text-xs font-mono font-medium text-muted-foreground">
-                        {sec.duration_minutes || 5}m limit
+                        {Math.round(secDurationSecs / 60)}m limit
                       </span>
                     </div>
                     <CardTitle className="text-base font-bold text-foreground">
@@ -740,7 +723,7 @@ function ResultsContent() {
                     <div className="flex justify-between items-center py-1 border-b border-border/40">
                       <span className="text-muted-foreground">Score & Accuracy:</span>
                       <span className="font-semibold text-foreground">
-                        {sec.correct}/{sec.total_questions || 4} ({sec.accuracy}%)
+                        {sec.correct}/{secTotalQ} ({sec.accuracy}%)
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-1 border-b border-border/40">
@@ -779,21 +762,6 @@ function ResultsContent() {
           questions={reviewQuestions}
           isLoading={loadingReview}
           error={reviewError}
-          isWalkthroughActive={isWalkthroughActive}
-          onStop={() => {
-            setIsWalkthroughActive(false);
-            if (typeof window !== 'undefined') {
-              window.speechSynthesis?.cancel();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-          }}
-          onStopWalkthrough={() => {
-            setIsWalkthroughActive(false);
-            if (typeof window !== 'undefined') {
-              window.speechSynthesis?.cancel();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-          }}
           onRetry={() => {
             if (remoteAttempt?.id) {
               fetchQuestionReview(remoteAttempt.id);

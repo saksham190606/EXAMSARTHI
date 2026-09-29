@@ -213,6 +213,16 @@ export async function POST(req: NextRequest) {
       accuracy: number;
     }> = {};
 
+    const topicMetricsMap: Record<string, {
+      topic: string;
+      subject: string;
+      totalQuestions: number;
+      attempted: number;
+      correct: number;
+      incorrect: number;
+      accuracy: number;
+    }> = {};
+
     const evaluatedAnswers: Array<{
       attempt_id: string;
       question_id: string;
@@ -289,6 +299,22 @@ export async function POST(req: NextRequest) {
       }
       subjectMetricsMap[q.subject].totalQuestions++;
 
+      // Topic tracking
+      const topicName = q.topic || 'General';
+      const topicKey = `${q.subject}:::${topicName}`;
+      if (!topicMetricsMap[topicKey]) {
+        topicMetricsMap[topicKey] = {
+          topic: topicName,
+          subject: q.subject,
+          totalQuestions: 0,
+          attempted: 0,
+          correct: 0,
+          incorrect: 0,
+          accuracy: 0,
+        };
+      }
+      topicMetricsMap[topicKey].totalQuestions++;
+
       const candidateAns = submittedAnswers[q.id];
       const isAnswerProvided = candidateAns !== undefined && candidateAns !== null && candidateAns !== '';
 
@@ -297,6 +323,7 @@ export async function POST(req: NextRequest) {
       if (isAnswerProvided) {
         attemptedCount++;
         subjectMetricsMap[q.subject].attempted++;
+        topicMetricsMap[topicKey].attempted++;
 
         switch (q.type) {
           case 'single-choice': {
@@ -358,9 +385,11 @@ export async function POST(req: NextRequest) {
         if (isCorrect) {
           correctCount++;
           subjectMetricsMap[q.subject].correct++;
+          topicMetricsMap[topicKey].correct++;
         } else {
           incorrectCount++;
           subjectMetricsMap[q.subject].incorrect++;
+          topicMetricsMap[topicKey].incorrect++;
         }
 
         evaluatedAnswers.push({
@@ -377,9 +406,14 @@ export async function POST(req: NextRequest) {
       const sm = subjectMetricsMap[key];
       sm.accuracy = sm.attempted > 0 ? Math.round((sm.correct / sm.attempted) * 100) : 0;
     }
+    for (const key of Object.keys(topicMetricsMap)) {
+      const tm = topicMetricsMap[key];
+      tm.accuracy = tm.attempted > 0 ? Math.round((tm.correct / tm.attempted) * 100) : 0;
+    }
 
     const calculatedScore = correctCount; // 1 mark per correct question
-    const calculatedAccuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+    const calculatedAccuracy = attemptedCount > 0 ? Math.round((correctCount / attemptedCount) * 100) : 0;
+    const calculatedPercentage = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
     
     // Server-validated timer: verify started_at -> submitted_at against allotted duration
     const clientReportedUsedSeconds = Math.max(0, allottedDurationSeconds - (typeof timeRemaining === 'number' ? timeRemaining : 0));
@@ -497,8 +531,10 @@ export async function POST(req: NextRequest) {
 
     // 9. Update and lock the attempt as 'completed'
     const subjectMetricsArray = Object.values(subjectMetricsMap);
+    const topicMetricsArray = Object.values(topicMetricsMap);
     const summaryMetrics = {
       subjectMetrics: subjectMetricsArray,
+      topicMetrics: topicMetricsArray,
       sectionMetrics: sectionMetrics,
       evaluatedAt: serverNow.toISOString(),
       questionCount: totalQuestions,
@@ -551,7 +587,7 @@ export async function POST(req: NextRequest) {
         correct: correctCount,
         incorrect: incorrectCount,
         score: calculatedScore,
-        percentage: calculatedAccuracy,
+        percentage: calculatedPercentage,
         timeUsedSeconds: effectiveTimeUsed,
         submittedAt: serverNow.toISOString(),
         summaryMetrics,

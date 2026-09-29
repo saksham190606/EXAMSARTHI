@@ -77,6 +77,7 @@ function ActiveExamSession({
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [attemptError, setAttemptError] = useState<string | null>(null);
 
   // Initialize official remote attempt when in remote mode
   useEffect(() => {
@@ -92,6 +93,7 @@ function ActiveExamSession({
         })
         .catch((err) => {
           console.warn('[ExamPage] Remote attempt initialization notice:', err);
+          if (isSubscribed) setAttemptError("Couldn't start an official attempt; sign in / retry");
         });
     }
 
@@ -431,6 +433,27 @@ function ActiveExamSession({
           </Button>
           <Button variant="default" onClick={() => setIsSubmitDialogOpen(true)}>
             {language === 'hi' ? 'परीक्षा सबमिट करें' : 'Submit Examination'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (attemptError) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="size-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+          <AlertTriangle className="size-6" />
+        </div>
+        <h2 className="text-lg font-bold text-foreground">
+          {attemptError}
+        </h2>
+        <div className="flex gap-3 justify-center">
+          <Button variant="default" onClick={() => router.push('/login')}>
+            Sign In / Retry
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/dashboard')}>
+            Return to Dashboard
           </Button>
         </div>
       </div>
@@ -926,15 +949,7 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
 
         // 2. Purge Multi-Select Questions: Filter incoming questions strictly
         const validQuestions = fetchedQuestions.filter(q =>
-          // Exclude if it's explicitly typed as multiple select
-          (q.type as string) !== 'MULTIPLE_SELECT' &&
-          (q.type as string) !== 'multiple-choice' &&
-          // Exclude if correctOption/answer is an array (meaning multiple answers)
-          !Array.isArray((q as any).correctOption) &&
-          !Array.isArray((q as any).correctAnswer) &&
-          !Array.isArray((q as any).acceptableAnswers) &&
-          // Strictly allow only these 3 types
-          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER', 'MULTIPLE_SELECT', 'multiple-choice'].includes((q.type as string) || 'MCQ')
         );
 
         setQuestions(validQuestions);
@@ -950,12 +965,7 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
         console.warn('[ExamPage] Failed to load remote questions, using safe fallback:', err);
         const fallback = getSafeQuestionsForContext({ setId, examId });
         const validQuestions = fallback.filter(q =>
-          (q.type as string) !== 'MULTIPLE_SELECT' &&
-          (q.type as string) !== 'multiple-choice' &&
-          !Array.isArray((q as any).correctOption) &&
-          !Array.isArray((q as any).correctAnswer) &&
-          !Array.isArray((q as any).acceptableAnswers) &&
-          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER'].includes((q.type as string) || 'MCQ')
+          ['MCQ', 'single-choice', 'TRUE_FALSE', 'true-false', 'FILL_IN_BLANKS', 'fill-blank', 'short-answer', 'SHORT_ANSWER', 'MULTIPLE_SELECT', 'multiple-choice'].includes((q.type as string) || 'MCQ')
         );
         setQuestions(validQuestions);
         setIsRemote(false);

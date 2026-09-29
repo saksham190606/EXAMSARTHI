@@ -104,10 +104,10 @@ export async function GET(req: NextRequest) {
 
     const questionIds = examQuestions.map(eq => eq.question_id);
 
-    // 4. Fetch only candidate-safe metadata. Do not expose official answer data.
+    // 4. Fetch question metadata AND answer keys (safe: attempt is completed and owned by user)
     const { data: rawQuestions, error: rawError } = await admin
       .from('questions')
-      .select('id, text, type, subject, topic, difficulty, options')
+      .select('id, text, type, subject, topic, difficulty, options, correct_answer, acceptable_answers, explanation')
       .in('id', questionIds);
 
     if (rawError || !rawQuestions) {
@@ -145,9 +145,9 @@ export async function GET(req: NextRequest) {
         userAnswer: ans?.user_answer ?? null,
         isCorrect: ans?.is_correct ?? false,
         isAnswered: ans?.user_answer !== undefined && ans?.user_answer !== null,
-        correctAnswer: null,
-        acceptableAnswers: undefined,
-        explanation: undefined,
+        correctAnswer: q?.correct_answer ?? null,
+        acceptableAnswers: q?.acceptable_answers ?? undefined,
+        explanation: q?.explanation ?? undefined,
       };
     });
 

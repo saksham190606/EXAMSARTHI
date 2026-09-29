@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Groq } from 'groq-sdk';
 import { isExamRoute } from '@/lib/assistant/sarthiExamLock';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 // We initialize Groq here. It will pick up GROQ_API_KEY from the environment automatically.
 const groq = new Groq({
@@ -9,12 +10,23 @@ const groq = new Groq({
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { transcript, language, currentUrl, examContext } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: 'Missing transcript' }, { status: 400 });
     }
+
+    const limitedTranscript = transcript.substring(0, 300);
 
     // Server-side safety check: Sarthi is strictly disabled during active exams
     if (isExamRoute(currentUrl)) {
@@ -111,7 +123,7 @@ User: "What is the question?"
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `User's Request: "${transcript}"` }
+        { role: 'user', content: `User's Request: ${JSON.stringify(limitedTranscript)}` }
       ],
       model: 'openai/gpt-oss-120b', // Fast model suitable for JSON and quick responses
       temperature: 0.1,

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Lora } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { AccessibilityProvider } from "@/components/providers/AccessibilityProvider";
@@ -16,6 +16,12 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const loraSerif = Lora({
+  variable: "--font-lora-serif",
   subsets: ["latin"],
   display: "swap",
 });
@@ -38,16 +44,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+      <html
+        lang="en"
+        suppressHydrationWarning
+        className={`${geistSans.variable} ${geistMono.variable} ${loraSerif.variable} h-full antialiased`}
+      >
       <body 
         suppressHydrationWarning
         className="min-h-full flex flex-col bg-background text-foreground relative"
       >
-        <DotPattern className="fixed inset-0 z-[1] h-full w-full fill-white/20 [mask-image:radial-gradient(ellipse_at_center,white_60%,transparent_100%)] pointer-events-none" />
+        <DotPattern className="fixed inset-0 z-[1] h-full w-full fill-foreground/10 dark:fill-foreground/5 [mask-image:radial-gradient(ellipse_at_center,white_60%,transparent_100%)] pointer-events-none" />
 
         {/* Skip to Main Content Link for Keyboard and Screen-Reader Accessibility */}
         <a 

@@ -560,6 +560,42 @@ export async function getRemoteAttemptResult(attemptId: string): Promise<{
   }
 }
 
+/**
+ * Retrieves the candidate's most recent completed attempt BEFORE the given submission time.
+ * Used for trend comparison on the results page.
+ */
+export async function getPreviousCompletedAttempt(
+  currentAttemptId: string,
+  currentSubmittedAt?: string | null
+): Promise<any | null> {
+  try {
+    const supabase = createClient();
+    if (!supabase) return null;
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return null;
+
+    let query = supabase
+      .from('exam_attempts')
+      .select('id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, submitted_at')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .neq('id', currentAttemptId)
+      .order('submitted_at', { ascending: false })
+      .limit(1);
+
+    if (currentSubmittedAt) {
+      query = query.lt('submitted_at', currentSubmittedAt);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export interface CandidateActivityItem {
   id: string;
   examId: string;

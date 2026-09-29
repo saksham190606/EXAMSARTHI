@@ -53,6 +53,11 @@ export function unregisterVoiceContext(context: VoiceContextName): void {
   contextHandlers.delete(context);
 }
 
+export function hasActiveContext(contexts?: VoiceContextName[]): boolean {
+  if (!contexts || contexts.length === 0) return contextHandlers.size > 0;
+  return contexts.some(c => contextHandlers.has(c));
+}
+
 export function normalizeSpeechInput(raw: string): string {
   if (!raw) return '';
   return raw
@@ -65,7 +70,7 @@ export function normalizeSpeechInput(raw: string): string {
     .trim();
 }
 
-function wholeWordMatch(text: string, token: string): boolean {
+export function wholeWordMatch(text: string, token: string): boolean {
   if (!text || !token) return false;
   const regex = new RegExp(`(^|\\s)${escapeRegExp(token)}(?=\\s|$)`, 'i');
   return regex.test(text);

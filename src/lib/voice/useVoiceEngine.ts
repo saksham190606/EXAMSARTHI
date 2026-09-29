@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from '
 import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { wholeWordMatch, routeVoiceCommand } from './commandRouter';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
@@ -472,32 +473,38 @@ export function startListening(
       const lower = transcript.toLowerCase().trim();
       const rawLower = (raw || '').toLowerCase().trim();
       const finalLower = (finalTranscript || '').toLowerCase().trim();
-      const matches = (w: string) => lower.includes(w) || rawLower.includes(w) || finalLower.includes(w);
+      const matches = (w: string) => wholeWordMatch(lower, w) || wholeWordMatch(rawLower, w) || wholeWordMatch(finalLower, w);
 
-      if (matches('stop') || matches('exit')) {
-        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-          detail: { intent: 'CONTROL', target: 'STOP' } 
-        }));
-        return; 
-      }
-      if (matches('previous') || matches('back')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-          detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
-        }));
-        return;
-      }
-      if (matches('next')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-          detail: { intent: 'CONTROL', target: 'NEXT' } 
-        }));
-        return;
-      }
-      if (matches('review') || matches('start')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-          detail: { intent: 'CONTROL', target: 'REVIEW' } 
-        }));
-        return;
+      const isListenerActive = typeof window !== 'undefined' && (window.location.pathname.startsWith('/exam') || window.location.pathname.startsWith('/results'));
+
+      if (isListenerActive) {
+        if (matches('stop') || matches('exit')) {
+          stopSpeaking();
+          stopListening();
+          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'STOP' } 
+          }));
+          return; 
+        }
+        if (matches('previous') || matches('back')) {
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+          }));
+          return;
+        }
+        if (matches('next')) {
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'NEXT' } 
+          }));
+          return;
+        }
+        if (matches('review') || matches('start')) {
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+            detail: { intent: 'CONTROL', target: 'REVIEW' } 
+          }));
+          return;
+        }
       }
 
       // Broadcast recognized speech through AI Intent router
@@ -624,43 +631,61 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   }
 
   const lowerTranscript = transcript.toLowerCase().trim();
+  const isListenerActive = typeof window !== 'undefined' && (window.location.pathname.startsWith('/exam') || window.location.pathname.startsWith('/results'));
   
-  if (lowerTranscript.includes('stop') || lowerTranscript.includes('exit')) {
-    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'CONTROL', target: 'STOP' } 
-    }));
-    return { intent: 'CONTROL', target: 'STOP' };
+  if (isListenerActive) {
+    if (wholeWordMatch(lowerTranscript, 'stop') || wholeWordMatch(lowerTranscript, 'exit')) {
+      stopSpeaking();
+      stopListening();
+      if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'STOP' } 
+      }));
+      return { intent: 'CONTROL', target: 'STOP' };
+    }
+    if (wholeWordMatch(lowerTranscript, 'previous') || wholeWordMatch(lowerTranscript, 'back')) {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
+      }));
+      return { intent: 'CONTROL', target: 'PREVIOUS' };
+    }
+    if (wholeWordMatch(lowerTranscript, 'next')) {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'NEXT' } 
+      }));
+      return { intent: 'CONTROL', target: 'NEXT' };
+    }
+    if (wholeWordMatch(lowerTranscript, 'review') || wholeWordMatch(lowerTranscript, 'start')) {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+        detail: { intent: 'CONTROL', target: 'REVIEW' } 
+      }));
+      return { intent: 'CONTROL', target: 'REVIEW' };
+    }
   }
-  if (lowerTranscript.includes('previous') || lowerTranscript.includes('back')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
-    }));
-    return { intent: 'CONTROL', target: 'PREVIOUS' };
+
+  const routed = routeVoiceCommand(lowerTranscript, 'global-nav');
+  if (routed.handled) {
+    return { intent: 'UNKNOWN', target: '' };
   }
-  if (lowerTranscript.includes('next')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'CONTROL', target: 'NEXT' } 
-    }));
-    return { intent: 'CONTROL', target: 'NEXT' };
+
+  const now = Date.now();
+  const lastRemoteCall = (typeof window !== 'undefined' ? Number(sessionStorage.getItem('last_intent_call') || '0') : 0);
+  if (now - lastRemoteCall < 2000) {
+    console.warn('[VoiceEngine] Remote intent cooldown active');
+    return { intent: 'UNKNOWN', target: '' };
   }
-  if (lowerTranscript.includes('review') || lowerTranscript.includes('start')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'CONTROL', target: 'REVIEW' } 
-    }));
-    return { intent: 'CONTROL', target: 'REVIEW' };
-  }
+  if (typeof window !== 'undefined') sessionStorage.setItem('last_intent_call', now.toString());
 
   try {
     const res = await fetch('/api/intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript }),
+      body: JSON.stringify({ transcript: transcript.substring(0, 300) }),
     });
     const data = await res.json();
 
     // Dispatches the exact intent and target globally
-    if (typeof window !== 'undefined') {
+    if (isListenerActive && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ai_voice_command', { 
         detail: { intent: data.intent, target: data.target } 
       }));
