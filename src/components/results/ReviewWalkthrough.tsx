@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 export default function ReviewWalkthrough({ results, onClose }: { results: any, onClose: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Handle Voice Commands scoped specifically to this active panel
   useEffect(() => {
     const handleNav = (e: any) => {
       const { target } = e.detail;
@@ -19,7 +18,6 @@ export default function ReviewWalkthrough({ results, onClose }: { results: any, 
     return () => window.removeEventListener('ai_voice_command', handleNav);
   }, [results, onClose]);
 
-  // Handle Auto-Narration
   useEffect(() => {
     if (!results?.questions) return;
     const q = results.questions[currentIndex];
@@ -42,46 +40,23 @@ export default function ReviewWalkthrough({ results, onClose }: { results: any, 
         <p className="text-xl">{q.questionText}</p>
         
         <div className="p-4 rounded border border-gray-700 bg-gray-900 space-y-3">
-          <p>
-            <strong>Your Answer:</strong> <span className={q.userAnswer === q.correctAnswer ? "text-green-400" : "text-red-400"}>{q.userAnswer}</span>
-          </p>
+          <p><strong>Your Answer:</strong> <span className={q.userAnswer === q.correctAnswer ? "text-green-400" : "text-red-400"}>{q.userAnswer}</span></p>
           {q.userAnswer !== q.correctAnswer && (
-            <p>
-              <strong>Correct Answer:</strong> <span className="text-green-400">{q.correctAnswer}</span>
-            </p>
+            <p><strong>Correct Answer:</strong> <span className="text-green-400">{q.correctAnswer}</span></p>
           )}
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <h3 className="font-bold mb-2">Explanation</h3>
-            <p className="text-gray-300">{q.explanation || "No explanation provided."}</p>
-          </div>
+        </div>
+
+        <div className="p-4 rounded bg-gray-800">
+          <h3 className="font-bold mb-2 text-yellow-400">Explanation</h3>
+          <p className="leading-relaxed">{q.explanation}</p>
         </div>
       </div>
-      
-      {/* Footer controls */}
-      <div className="flex-none pt-6 border-t border-gray-800 flex justify-between items-center bg-[#0a0a0a]">
-        <button 
-          onClick={() => setCurrentIndex(prev => Math.max(prev - 1, 0))}
-          disabled={currentIndex === 0}
-          className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50 transition-colors"
-        >
-          Previous
-        </button>
-        <button 
-          onClick={() => {
-            if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-            onClose();
-          }}
-          className="px-6 py-2 bg-red-600 text-white font-bold rounded hover:bg-red-700 transition-colors shadow-[0_0_10px_rgba(220,38,38,0.5)]"
-        >
-          Exit Walkthrough
-        </button>
-        <button 
-          onClick={() => setCurrentIndex(prev => Math.min(prev + 1, results.questions.length - 1))}
-          disabled={currentIndex === results.questions.length - 1}
-          className="px-4 py-2 bg-[#ffed00] text-black font-bold rounded hover:bg-[#ffe100] disabled:opacity-50 transition-colors shadow-[0_0_10px_rgba(255,237,0,0.5)]"
-        >
-          Next
-        </button>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-4 flex justify-center gap-4">
+        <button onClick={() => window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PREVIOUS' } }))} className="px-6 py-2 bg-gray-700 rounded hover:bg-gray-600">Previous</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'PAUSE' } }))} className="px-6 py-2 bg-gray-700 rounded hover:bg-gray-600">Pause</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'STOP' } }))} className="px-6 py-2 bg-red-900 rounded hover:bg-red-800">Stop</button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { target: 'NEXT' } }))} className="px-6 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400">Next</button>
       </div>
     </div>
   );
