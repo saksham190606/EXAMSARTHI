@@ -640,6 +640,32 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     return { intent: 'UNKNOWN', target: '' };
   }
 
+  const lower = lowerTranscript;
+  if (lower.includes('dashboard') || lower.includes('home')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'NAVIGATE', target: 'DASHBOARD' } 
+    }));
+    return { intent: 'NAVIGATE', target: 'DASHBOARD' };
+  }
+  if (lower.includes('practice')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'NAVIGATE', target: 'PRACTICE' } 
+    }));
+    return { intent: 'NAVIGATE', target: 'PRACTICE' };
+  }
+  if (lower.includes('exam')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'NAVIGATE', target: 'EXAMS' } 
+    }));
+    return { intent: 'NAVIGATE', target: 'EXAMS' };
+  }
+  if (lower.includes('setting')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'NAVIGATE', target: 'SETTINGS' } 
+    }));
+    return { intent: 'NAVIGATE', target: 'SETTINGS' };
+  }
+
   // Try local routing first
   const routed = routeVoiceCommand(lowerTranscript, 'global-nav');
   if (routed.handled) {

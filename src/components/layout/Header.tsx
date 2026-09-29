@@ -48,6 +48,22 @@ export function Header() {
     router.refresh()
   }
 
+  React.useEffect(() => {
+    const handleVoiceNav = (e: Event) => {
+      const event = e as CustomEvent;
+      if (event.detail?.intent === 'NAVIGATE') {
+        const target = event.detail.target;
+        if (target === 'DASHBOARD') router.push('/dashboard');
+        else if (target === 'PRACTICE') router.push('/practice');
+        else if (target === 'EXAMS') router.push('/exam');
+        else if (target === 'SETTINGS') router.push('/settings');
+        else if (target === 'RESULTS') router.push('/results');
+      }
+    };
+    window.addEventListener('ai_voice_command', handleVoiceNav);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceNav);
+  }, [router]);
+
   return (
     <header className="sticky top-0 z-50 w-full h-[60px] border-b border-white/16 bg-black/80 backdrop-blur-md text-white">
       <div className="container flex h-full items-center justify-between mx-auto px-4 sm:px-8">
