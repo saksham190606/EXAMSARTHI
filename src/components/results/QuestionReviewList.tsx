@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
+import { isMaleVoice, isFemaleVoice } from '@/lib/accessibility/voice-companion';
 import { getHighFidelityVoice } from '@/lib/voice/speech-synthesis';
 import { subscribe, startListening, stopListening } from '@/lib/voice/useVoiceEngine';
 import { wholeWordMatch } from '@/lib/voice/commandRouter';
@@ -423,9 +423,10 @@ export function QuestionReviewList({
     const store = useAccessibilityStore.getState();
     utterance.rate = Math.min(1.5, Math.max(0.7, store.speechRate || 1.0));
 
-    const naturalVoice = getHighFidelityVoice(isHindiRef.current ? 'hi-IN' : 'en-US', store.selectedVoiceURI) || getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
-    if (naturalVoice) {
-      utterance.voice = naturalVoice;
+    const voices = typeof window !== 'undefined' && window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    const maleVoice = voices.find(v => isMaleVoice(v)) || voices.find(v => !isFemaleVoice(v) && v.lang.startsWith('en'));
+    if (maleVoice) {
+      utterance.voice = maleVoice;
     }
 
     // 2. Prevent garbage collection: store active utterance in persistent ref
@@ -518,27 +519,7 @@ export function QuestionReviewList({
     }
   }, [isAudioReviewActive, isWalkthroughActive, activeReviewIndex, filteredQuestions.length, readQuestionReview, stopAudioWalkthrough]);
 
-  useEffect(() => {
-    if (externalWalkthroughActive && !isAudioReviewActive && filteredQuestions.length > 0) {
-      readQuestionReview(0, true);
-    }
-  }, [externalWalkthroughActive, isAudioReviewActive, filteredQuestions.length, readQuestionReview]);
 
-  useEffect(() => {
-    if (!externalWalkthroughActive && (isWalkthroughActive || isAudioReviewActive)) {
-      stopAudioWalkthrough();
-    }
-  }, [externalWalkthroughActive, isWalkthroughActive, isAudioReviewActive, stopAudioWalkthrough]);
-
-  useEffect(() => {
-    const handleStartEvent = () => {
-      if (!isAudioReviewActiveRef.current && filteredQuestionsRef.current.length > 0) {
-        readQuestionReview(0, true);
-      }
-    };
-    window.addEventListener('examsarthi-start-walkthrough', handleStartEvent);
-    return () => window.removeEventListener('examsarthi-start-walkthrough', handleStartEvent);
-  }, [readQuestionReview]);
 
   // Playback Navigation Handlers
   const handlePause = useCallback(() => {
@@ -603,8 +584,11 @@ export function QuestionReviewList({
       const store = useAccessibilityStore.getState();
       const utterance = new SpeechSynthesisUtterance(completionMsg);
       utterance.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
-      utterance.rate = store.speechRate || 1.0;
-      const naturalVoice = getHighFidelityVoice(isHindiRef.current ? 'hi-IN' : 'en-US', store.selectedVoiceURI) || getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
+      const voices = typeof window !== 'undefined' && window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      const maleVoice = voices.find(v => isMaleVoice(v)) || voices.find(v => !isFemaleVoice(v) && v.lang.startsWith('en'));
+      if (maleVoice) {
+        utterance.voice = maleVoice;
+      }
       // Lock mutex and abort mic before final speech
       isSpeakingRef.current = true;
       try { stopListening(); } catch (e) {}
@@ -701,53 +685,7 @@ export function QuestionReviewList({
   const handlePrevQuestion = handlePrevQuestionReview;
   const readCurrentQuestion = handleRepeatQuestionReview;
 
-  // Global AI Voice Command Listener for Results Walkthrough
-  useEffect(() => {
-    const handleVoiceCommand = (e: any) => {
-      const { intent, target } = e.detail || {};
-      const normalizedTarget = (target || '').toUpperCase();
 
-      if (intent === 'CONTROL' || !intent) {
-        if (normalizedTarget === 'REVIEW' || normalizedTarget === 'START') {
-          setIsWalkthroughActive(true);
-          if (!isAudioReviewActiveRef.current && filteredQuestionsRef.current.length > 0) {
-            readQuestionReview(0, true);
-          }
-        } else if (normalizedTarget === 'NEXT') {
-          handleNextQuestion();
-        } else if (normalizedTarget === 'PREVIOUS' || normalizedTarget === 'PREV') {
-          handlePrevQuestion();
-        } else if (normalizedTarget === 'STOP' || normalizedTarget === 'EXIT' || normalizedTarget === 'QUIT') {
-          stopAudioWalkthrough();
-        } else if (normalizedTarget === 'PAUSE') {
-          handleTogglePause();
-        } else if (normalizedTarget === 'REPEAT' || normalizedTarget === 'AGAIN') {
-          readCurrentQuestion();
-        } else if (normalizedTarget === 'RESUME') {
-          handleResume();
-        }
-      }
-    };
-
-    const handleNextEvent = () => handleNextQuestion();
-    const handlePrevEvent = () => handlePrevQuestion();
-    const handleStopEvent = () => stopAudioWalkthrough();
-    const handleRepeatEvent = () => readCurrentQuestion();
-
-    window.addEventListener('ai_voice_command', handleVoiceCommand);
-    window.addEventListener('examsarthi_review_next', handleNextEvent);
-    window.addEventListener('examsarthi_review_prev', handlePrevEvent);
-    window.addEventListener('examsarthi_review_stop', handleStopEvent);
-    window.addEventListener('examsarthi_review_repeat', handleRepeatEvent);
-
-    return () => {
-      window.removeEventListener('ai_voice_command', handleVoiceCommand);
-      window.removeEventListener('examsarthi_review_next', handleNextEvent);
-      window.removeEventListener('examsarthi_review_prev', handlePrevEvent);
-      window.removeEventListener('examsarthi_review_stop', handleStopEvent);
-      window.removeEventListener('examsarthi_review_repeat', handleRepeatEvent);
-    };
-  }, [handleNextQuestionReview, handlePrevQuestionReview, stopAudioWalkthrough, handleRepeatQuestionReview, handleResume, handleTogglePause]);
 
   // 4. Individual Question Explanation Handler
   const handlePlayIndividualQuestion = useCallback((q: QuestionReviewItem) => {

@@ -3,6 +3,37 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { QuestionMap, SscCglMockQuestions } from '@/lib/examData';
 import { startListening, stopListening, subscribe } from '@/lib/voice/useVoiceEngine';
+import { isMaleVoice, isFemaleVoice } from '@/lib/accessibility/voice-companion';
+import { getAvailableVoices } from '@/lib/voice/speech-synthesis';
+
+function getMaleWalkthroughVoice(): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+  let voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) {
+    voices = getAvailableVoices();
+  }
+  if (!voices || voices.length === 0) return null;
+
+  // 1. Explicitly preferred male English voices
+  const maleKeywords = ['david', 'george', 'mark', 'guy', 'christopher', 'ravi', 'hemant', 'male'];
+  for (const kw of maleKeywords) {
+    const match = voices.find((v) => {
+      const name = v.name.toLowerCase();
+      return name.includes(kw) && !name.includes('female') && !name.includes('woman') && !name.includes('zira');
+    });
+    if (match) return match;
+  }
+
+  // 2. Any voice classified as male by voice-companion
+  const classifiedMale = voices.find((v) => isMaleVoice(v));
+  if (classifiedMale) return classifiedMale;
+
+  // 3. Fallback: Any voice that is strictly NOT female
+  const nonFemale = voices.find((v) => !isFemaleVoice(v) && v.lang.startsWith('en'));
+  if (nonFemale) return nonFemale;
+
+  return null;
+}
 
 interface ReviewWalkthroughProps {
   results?: { questions?: any[] };
@@ -28,16 +59,44 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     const q = results.questions[currentIndex];
     if (!q) return;
 
-    // 3. Kill any currently playing audio instantly
+    // 3. Kill any currently playing audio instantly & pause mic so it cannot hear itself
     window.speechSynthesis.cancel();
+    stopListening();
 
-    // 4. Speak exactly once
+    // 4. Speak exactly once with a strictly male voice
     const text = `Question ${currentIndex + 1}. ${q.questionText}. You answered ${q.userAnswer}. ${q.userAnswer === q.correctAnswer ? "Correct!" : `Incorrect. The correct answer is ${q.correctAnswer}.`} Explanation: ${q.explanation || "No explanation provided."}`;
     const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+
+    const maleVoice = getMaleWalkthroughVoice();
+    if (maleVoice) {
+      utterance.voice = maleVoice;
+    }
+
+    // Microphone opens ONLY after companion finishes speaking
+    utterance.onend = () => {
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          startListening('en-IN');
+        }, 300);
+      }
+    };
+
+    utterance.onerror = () => {
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          startListening('en-IN');
+        }, 300);
+      }
+    };
+
     window.speechSynthesis.speak(utterance);
 
     // 5. Cleanup on unmount
-    return () => window.speechSynthesis.cancel();
+    return () => {
+      window.speechSynthesis.cancel();
+      stopListening();
+    };
   }, [currentIndex, results, speechTrigger]);
 
   const [lastHeardCommand, setLastHeardCommand] = useState<string | null>(null);
@@ -210,16 +269,13 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
   // 6. Start Voice Engine Listener
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      startListening('en-IN');
-    }
-
     const unsub = subscribe((text: string) => {
       processVoiceCommand(text);
     });
 
     return () => {
       unsub();
+      stopListening();
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         try { window.speechSynthesis.cancel(); } catch (_) {}
       }
