@@ -51,11 +51,15 @@ function scheduleRecognitionRestart(delayMs: number): void {
   if (recognitionRetryTimer) {
     clearTimeout(recognitionRetryTimer);
   }
+  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'scheduleRecognitionRestart', delayMs, isListeningGlobal, globalRecognitionExists: !!globalRecognition });
   recognitionRetryTimer = setTimeout(() => {
     if (!isSpeakingGlobal && isListeningGlobal && globalRecognition && typeof globalRecognition.start === 'function') {
       try {
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'auto-restart-attempting', isListeningGlobal, isSpeakingGlobal });
         globalRecognition.start();
-      } catch (_) {}
+      } catch (e) {
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'auto-restart-failed', error: String(e) });
+      }
     }
   }, delayMs);
 }
@@ -108,6 +112,7 @@ export function useVoiceRecognitionSupport(): boolean {
 }
 
 export function stopListening(clearTranscriptHandler = true): void {
+  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'stopListening-start', clearTranscriptHandler, isListeningGlobal, globalRecognitionExists: !!globalRecognition });
   clearRetryTimer();
   if (clearTranscriptHandler) {
     activeRecognitionHandler = null;
@@ -115,15 +120,20 @@ export function stopListening(clearTranscriptHandler = true): void {
   }
   if (globalRecognition) {
     try {
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-cleanup-start' });
       globalRecognition.onend = null;
       globalRecognition.onerror = null;
       globalRecognition.onresult = null;
       globalRecognition.onnomatch = null;
       globalRecognition.abort();
-    } catch (_) {}
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-abort-called' });
+    } catch (e) {
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-cleanup-error', error: String(e) });
+    }
     globalRecognition = null;
   }
   isListeningGlobal = false;
+  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'stopListening-end', isListeningGlobal });
   notifyState();
 }
 
@@ -182,7 +192,7 @@ export function stopSpeaking(expectedGeneration?: number): void {
   notifyState();
 }
 
-function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; pitch?: number; voiceURI?: string | null; rate?: number } = {}): number | null {
+function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; rate?: number; pitch?: number; voiceURI?: string | null } = {}): number | null {
   const priority = opts.priority ?? 'content';
   const wasListeningBefore = isListeningGlobal;
   const currentPriority = currentSpeechPriority ?? 'talkback';
@@ -379,12 +389,22 @@ export const speakQuestion = (text: string, langOrCb?: string | (() => void), on
 
 function handleRecognitionError(error: any): void {
   const code = error?.error || '';
+  console.log('[EXAMSARTHI VOICE DEBUG]', { 
+    event: 'handleRecognitionError', 
+    code, 
+    isListeningGlobal, 
+    isSpeakingGlobal, 
+    globalRecognitionExists: !!globalRecognition 
+  });
+
   if (code === 'aborted' || code === 'no-speech') {
+    console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'error-ignored', code });
     return;
   }
 
   const fallbackText = 'Voice unavailable, use keyboard: Alt+N, Alt+P, 1-4';
   if (['network', 'not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(code)) {
+    console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'fallback-message-triggered', code });
     stopListening();
     globalLastError = code;
     notifyState();
@@ -402,6 +422,7 @@ function handleRecognitionError(error: any): void {
 
   if (isListeningGlobal) {
     recognitionRetryDelay = Math.min(recognitionRetryDelay * 2, 2000);
+    console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'error-retry-scheduled', code, nextDelay: recognitionRetryDelay });
     scheduleRecognitionRestart(recognitionRetryDelay);
   }
 }
@@ -411,6 +432,7 @@ export function startListening(
   onTranscript?: (text: string) => void,
   options: { resolveAlternatives?: boolean } = {}
 ): void {
+  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal });
   if (typeof window === 'undefined') return;
   const normalized = normalizeLanguage(lang);
   activeLang = normalized;
@@ -433,6 +455,7 @@ export function startListening(
 
   try {
     const recognition = new SpeechRecognition();
+    console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-created' });
     (window as any).globalRecognitionInstance = recognition;
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -463,6 +486,8 @@ export function startListening(
 
       const lower = transcript.toLowerCase().trim();
       if (!lower) return;
+
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'final-transcript-received', transcript: lower.substring(0, 50) });
 
       // Deduplicate identical transcripts within 800ms
       const now = Date.now();
@@ -522,22 +547,36 @@ export function startListening(
       recognitionRetryDelay = 100;
       notifyState();
 
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'transcript-handler-invoking', isListeningGlobal, isSpeakingGlobal });
       // Deliver ONCE: to activeRecognitionHandler if set, otherwise to subscribers
       if (activeRecognitionHandler) {
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'calling-activeRecognitionHandler' });
         activeRecognitionHandler(transcript);
       } else {
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'calling-transcriptSubscribers', subscriberCount: transcriptSubscribers.size });
         transcriptSubscribers.forEach((cb) => {
           try { cb(transcript); } catch (_) {}
         });
       }
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'transcript-handler-completed', isListeningGlobal });
     };
 
     recognition.onerror = (event: any) => {
+      console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-onerror-fired', code: event?.error });
       handleRecognitionError(event);
     };
 
     recognition.onend = () => {
-      if (isSpeakingGlobal || !isListeningGlobal) return;
+      console.log('[EXAMSARTHI VOICE DEBUG]', { 
+        event: 'recognition-onend-fired', 
+        isListeningGlobal, 
+        isSpeakingGlobal, 
+        willAutoRestart: isSpeakingGlobal === false && isListeningGlobal === true 
+      });
+      if (isSpeakingGlobal || !isListeningGlobal) {
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'onend-skipping-restart', isSpeakingGlobal, isListeningGlobal });
+        return;
+      }
       const delay = Math.min(recognitionRetryDelay, 2000);
       scheduleRecognitionRestart(delay);
     };
@@ -551,6 +590,7 @@ export function startListening(
     isListeningGlobal = true;
     globalLastError = null;
     notifyState();
+    console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'recognition-start-called' });
     recognition.start();
   } catch (err: any) {
     console.warn('[VoiceEngine] Recognition start error:', err);
