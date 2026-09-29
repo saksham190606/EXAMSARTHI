@@ -626,6 +626,32 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
 
   const lowerTranscript = transcript.toLowerCase().trim();
 
+  const lower = lowerTranscript;
+
+  // Immediate Hardcoded UI Bypasses (Execute globally)
+  if (lower.includes('dashboard') || lower.includes('home')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'DASHBOARD' } }));
+    return { intent: 'NAVIGATE', target: 'DASHBOARD' };
+  }
+  if (lower.includes('practice')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'PRACTICE' } }));
+    return { intent: 'NAVIGATE', target: 'PRACTICE' };
+  }
+  if (lower.includes('exam')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'EXAMS' } }));
+    return { intent: 'NAVIGATE', target: 'EXAMS' };
+  }
+  if (lower.includes('setting')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'SETTINGS' } }));
+    return { intent: 'NAVIGATE', target: 'SETTINGS' };
+  }
+  if (lower.includes('review') || lower.includes('start')) {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/results')) {
+      window.dispatchEvent(new Event('examsarthi-start-walkthrough'));
+      return { intent: 'CONTROL', target: 'REVIEW' };
+    }
+  }
+
   // NEVER call /api/intent in exam route or review context
   const isExamOrReview = typeof window !== 'undefined' && (
     window.location.pathname.startsWith('/exam') ||
@@ -638,32 +664,6 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   // Also skip if any active voice context is registered (exam/review/hub/practice)
   if (hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
     return { intent: 'UNKNOWN', target: '' };
-  }
-
-  const lower = lowerTranscript;
-  if (lower.includes('dashboard') || lower.includes('home')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'NAVIGATE', target: 'DASHBOARD' } 
-    }));
-    return { intent: 'NAVIGATE', target: 'DASHBOARD' };
-  }
-  if (lower.includes('practice')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'NAVIGATE', target: 'PRACTICE' } 
-    }));
-    return { intent: 'NAVIGATE', target: 'PRACTICE' };
-  }
-  if (lower.includes('exam')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'NAVIGATE', target: 'EXAMS' } 
-    }));
-    return { intent: 'NAVIGATE', target: 'EXAMS' };
-  }
-  if (lower.includes('setting')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'NAVIGATE', target: 'SETTINGS' } 
-    }));
-    return { intent: 'NAVIGATE', target: 'SETTINGS' };
   }
 
   // Try local routing first
