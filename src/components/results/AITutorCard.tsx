@@ -7,11 +7,25 @@ interface AITutorCardProps {
   results: { score: number; totalQuestions: number };
   correctTopics?: string;
   weakTopics?: string;
+  startReviewWalkthrough?: () => void;
 }
 
-export default function AITutorCard({ results, correctTopics, weakTopics }: AITutorCardProps) {
+export default function AITutorCard({ results, correctTopics, weakTopics, startReviewWalkthrough }: AITutorCardProps) {
   const [summary, setSummary] = useState("Analyzing your performance...");
   const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
+
+  useEffect(() => {
+    const handleReview = (e: any) => {
+      if (e.detail?.target === 'REVIEW') {
+        console.log("🔥 [UI] 'Review' event caught by AITutorCard! Forcing walkthrough state to TRUE.");
+        if (typeof startReviewWalkthrough === 'function') {
+          startReviewWalkthrough();
+        }
+      }
+    };
+    window.addEventListener('ai_voice_command', handleReview);
+    return () => window.removeEventListener('ai_voice_command', handleReview);
+  }, [startReviewWalkthrough]);
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -35,7 +49,7 @@ export default function AITutorCard({ results, correctTopics, weakTopics }: AITu
       }
     };
     if (results) fetchSummary();
-  }, [results]);
+  }, [results, correctTopics, weakTopics]);
 
   const handlePlaySummary = () => {
     setIsSpeakingSummary(true);

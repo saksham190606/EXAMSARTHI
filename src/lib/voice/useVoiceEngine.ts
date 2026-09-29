@@ -646,6 +646,7 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     return { intent: 'NAVIGATE', target: 'SETTINGS' };
   }
   if (lower.includes('review')) {
+    console.log("🔥 [VOICE ENGINE] 'Review' heard! Dispatching global event...");
     window.dispatchEvent(new CustomEvent('ai_voice_command', { 
       detail: { intent: 'CONTROL', target: 'REVIEW' } 
     }));
