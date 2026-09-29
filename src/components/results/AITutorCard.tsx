@@ -65,6 +65,17 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
     });
   };
 
+  const handleStartWalkthrough = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeakingSummary(false);
+    setIsWalkthroughActive(true);
+    if (typeof startReviewWalkthrough === 'function') {
+      startReviewWalkthrough();
+    }
+  };
+
   if (isWalkthroughActive) {
     return (
       <ReviewWalkthrough 
@@ -82,13 +93,22 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
       <p className="text-neutral-300 text-lg leading-relaxed mb-6">
         &ldquo;{summary}&rdquo;
       </p>
-      <button 
-        onClick={handlePlaySummary}
-        disabled={isSpeakingSummary}
-        className="px-6 py-3 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors disabled:opacity-50"
-      >
-        {isSpeakingSummary ? "🔊 Speaking..." : "▶ Listen to Performance Overview"}
-      </button>
+      <div className="flex flex-wrap items-center gap-4">
+        <button 
+          onClick={handlePlaySummary}
+          disabled={isSpeakingSummary}
+          className="px-6 py-3 bg-[#ffed00] text-black font-bold rounded-lg shadow-md hover:bg-[#ffe100] transition-colors disabled:opacity-50"
+        >
+          {isSpeakingSummary ? "🔊 Speaking..." : "▶ Listen to Performance Overview"}
+        </button>
+        <button 
+          id="btn-start-review-walkthrough"
+          onClick={handleStartWalkthrough}
+          className="px-6 py-3 bg-neutral-800 text-[#ffed00] border-2 border-[#ffed00] font-bold rounded-lg shadow-md hover:bg-[#ffed00] hover:text-black transition-all flex items-center gap-2 cursor-pointer"
+        >
+          📖 Start Review Walkthrough
+        </button>
+      </div>
     </div>
   );
 }
