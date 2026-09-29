@@ -2,30 +2,36 @@
 
 import { useState, useEffect } from 'react';
 import { speakText, startListening } from '@/lib/voice/useVoiceEngine';
+import { QuestionReview } from './QuestionReview';
 
 interface AITutorCardProps {
   results: { score: number; totalQuestions: number };
   correctTopics?: string;
   weakTopics?: string;
   startReviewWalkthrough?: () => void;
+  reviewQuestions?: any[];
 }
 
-export default function AITutorCard({ results, correctTopics, weakTopics, startReviewWalkthrough }: AITutorCardProps) {
+export default function AITutorCard({ results, correctTopics, weakTopics, startReviewWalkthrough, reviewQuestions }: AITutorCardProps) {
   const [summary, setSummary] = useState("Analyzing your performance...");
   const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
+  const [isWalkthroughActive, setIsWalkthroughActive] = useState(false);
 
   useEffect(() => {
-    const handleReview = (e: any) => {
-      if (e.detail?.target === 'REVIEW') {
-        console.log("🔥 [UI] 'Review' event caught by AITutorCard! Forcing walkthrough state to TRUE.");
-        if (typeof startReviewWalkthrough === 'function') {
-          startReviewWalkthrough();
+    const handleLocalCommand = (e: any) => {
+      const { target } = e.detail || {};
+      if (target === 'REVIEW') {
+        setIsWalkthroughActive(true);
+      } else if (target === 'STOP') {
+        setIsWalkthroughActive(false);
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
         }
       }
     };
-    window.addEventListener('ai_voice_command', handleReview);
-    return () => window.removeEventListener('ai_voice_command', handleReview);
-  }, [startReviewWalkthrough]);
+    window.addEventListener('ai_voice_command', handleLocalCommand);
+    return () => window.removeEventListener('ai_voice_command', handleLocalCommand);
+  }, []);
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -58,6 +64,18 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
       startListening(); // Automatically open mic here
     });
   };
+
+  if (isWalkthroughActive) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0a0a0a] min-h-screen p-6 overflow-y-auto">
+        <QuestionReview 
+          onStop={() => setIsWalkthroughActive(false)} 
+          onClose={() => setIsWalkthroughActive(false)}
+          questions={reviewQuestions} 
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-neutral-900 border border-[#ffed00]/40 rounded-xl p-6 mb-8 shadow-[0_0_15px_rgba(255,237,0,0.1)]">

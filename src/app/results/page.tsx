@@ -534,6 +534,7 @@ function ResultsContent() {
           correctTopics={profile?.subjects.flatMap(s => s.topics).filter(t => t.accuracy >= 60).map(t => t.topic).join(", ") || "General Study"}
           weakTopics={profile?.subjects.flatMap(s => s.topics).filter(t => t.accuracy < 60).map(t => t.topic).join(", ") || "General Knowledge"}
           startReviewWalkthrough={() => window.dispatchEvent(new Event('examsarthi-start-walkthrough'))}
+          reviewQuestions={reviewQuestions}
         />
       )}
 
