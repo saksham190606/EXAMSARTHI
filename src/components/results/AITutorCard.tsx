@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { speakText, startListening } from '@/lib/voice/useVoiceEngine';
-import { QuestionReview } from './QuestionReview';
+import ReviewWalkthrough from './ReviewWalkthrough';
 
 interface AITutorCardProps {
   results: { score: number; totalQuestions: number };
@@ -67,13 +67,10 @@ export default function AITutorCard({ results, correctTopics, weakTopics, startR
 
   if (isWalkthroughActive) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#0a0a0a] min-h-screen p-6 overflow-y-auto">
-        <QuestionReview 
-          onStop={() => setIsWalkthroughActive(false)} 
-          onClose={() => setIsWalkthroughActive(false)}
-          questions={reviewQuestions} 
-        />
-      </div>
+      <ReviewWalkthrough 
+        onClose={() => setIsWalkthroughActive(false)}
+        results={{ questions: reviewQuestions }} 
+      />
     );
   }
 
