@@ -26,7 +26,8 @@ import { cn } from '@/lib/utils';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { getNaturalFemaleVoice } from '@/lib/accessibility/voice-companion';
 import { getHighFidelityVoice } from '@/lib/voice/speech-synthesis';
-import { fetchAIIntent } from '@/lib/voice/useVoiceEngine';
+import { subscribe, startListening, stopListening } from '@/lib/voice/useVoiceEngine';
+import { wholeWordMatch } from '@/lib/voice/commandRouter';
 
 export interface QuestionReviewItem {
   questionId: string;
@@ -244,11 +245,7 @@ export function QuestionReviewList({
   const isTransitioningRef = useRef<boolean>(false);
   const isStoppingRef = useRef<boolean>(false);
 
-  // Background Listening & Barge-In Refs
-  const recognitionRef = useRef<any>(null);
-  const restartTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastActionTimestampRef = useRef<number>(0);
-  const isRecognitionStartingRef = useRef<boolean>(false);
+
 
   useEffect(() => {
     isAudioReviewActiveRef.current = isAudioReviewActive;
@@ -360,14 +357,9 @@ export function QuestionReviewList({
           if (window.speechSynthesis) window.speechSynthesis.cancel();
         } catch (e) {}
       }
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.onend = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.abort();
-        } catch (e) {}
-      }
+      try {
+        stopListening();
+      } catch (e) {}
       activeUtteranceRef.current = null;
       if (typeof window !== 'undefined') {
         (window as any).__reviewUtterance = null;
@@ -387,22 +379,7 @@ export function QuestionReviewList({
     }
   }, [clearAudioTimers, onStop, onStopWalkthrough]);
 
-  // Explicitly start or re-arm the microphone listener safely
-  const startListeningSafely = useCallback(() => {
-    if (!recognitionRef.current) return;
-    try {
-      recognitionRef.current.abort();
-      setTimeout(() => {
-        try {
-          recognitionRef.current?.start();
-        } catch (err) {
-          console.warn("Recognition already active or starting", err);
-        }
-      }, 100);
-    } catch (err) {
-      console.warn("Recognition already active or starting", err);
-    }
-  }, []);
+
 
   // 2. STRUCTURED AUDIO SCRIPT BUILDER & SYNTHESIZER
   const readQuestionReview = useCallback((questionIndex: number, isWalkthrough: boolean = false) => {
@@ -427,11 +404,9 @@ export function QuestionReviewList({
 
     // 1. Lock the mutex synchronously and kill microphone immediately
     isSpeakingRef.current = true;
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {}
-    }
+    try {
+      stopListening();
+    } catch (e) {}
 
     // Cancel prior utterance
     try {
@@ -476,7 +451,7 @@ export function QuestionReviewList({
         setIsSpeaking(false);
         isSpeakingRef.current = false;
         setIsWaitingForConsent(true);
-        startListeningSafely();
+        startListening(isHindiRef.current ? 'hi-IN' : 'en-US');
       } else {
         setIndividualPlayingId(null);
       }
@@ -497,7 +472,7 @@ export function QuestionReviewList({
           // STRICT SINGLE-QUESTION ISOLATION:
           // No auto-advancing loops! Stop TTS completely and wait for candidate command.
           setIsWaitingForConsent(true);
-          startListeningSafely();
+          startListening(isHindiRef.current ? 'hi-IN' : 'en-US');
         } else {
           setIndividualPlayingId(null);
         }
@@ -512,7 +487,7 @@ export function QuestionReviewList({
       activeUtteranceRef.current = null;
       if (isWalkthrough && isAudioReviewActiveRef.current) {
         setIsWaitingForConsent(true);
-        startListeningSafely();
+        startListening(isHindiRef.current ? 'hi-IN' : 'en-US');
       } else {
         setIndividualPlayingId(null);
       }
@@ -632,9 +607,7 @@ export function QuestionReviewList({
       const naturalVoice = getHighFidelityVoice(isHindiRef.current ? 'hi-IN' : 'en-US', store.selectedVoiceURI) || getNaturalFemaleVoice(isHindiRef.current ? 'hi' : 'en');
       // Lock mutex and abort mic before final speech
       isSpeakingRef.current = true;
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (e) {}
-      }
+      try { stopListening(); } catch (e) {}
       try { window.speechSynthesis.cancel(); } catch (e) {}
 
       utterance.onend = () => {
@@ -785,202 +758,70 @@ export function QuestionReviewList({
     }
   }, [individualPlayingId, filteredQuestions, readQuestionReview, stopAudioWalkthrough]);
 
-  // 5. Barge-In Voice Navigation & Playback Controls during Audio Walkthrough
+  // 5. Voice Navigation via engine subscriber during Audio Walkthrough
+  const lastActionTimestampRef = useRef<number>(0);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const isListeningNeeded = isAudioReviewActive || isSpeaking || isWaitingForConsent;
-    if (!isListeningNeeded) {
-      if (restartTimerRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = null;
-      }
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.onend = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.abort();
-        } catch (e) {}
-        recognitionRef.current = null;
-      }
-      isRecognitionStartingRef.current = false;
-      return;
-    }
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      return;
-    }
-
-    let recognition: any = null;
-    let isDisposed = false;
+    if (!isListeningNeeded) return;
 
     const pauseCommands = ["pause", "wait", "hold", "stop speaking", "रुको", "रुकिए", "पॉज़"];
     const resumeCommands = ["resume", "play", "continue", "चालू", "आगे बोलो"];
-    const nextCommands = ["next", "proceed", "yes", "continue", "agla", "आगे", "अगला", "हाँ"];
+    const nextCommands = ["next", "proceed", "agla", "आगे", "अगला"];
     const prevCommands = ["previous", "back", "pichla", "पिछला", "पीछे"];
     const repeatCommands = ["repeat", "again", "dobara", "दोबारा"];
-    const stopCommands = ["stop", "close review", "exit", "बंद करो", "close"];
+    const stopCommands = ["stop", "exit", "quit", "बंद करो", "close"];
 
-    const matchesList = (phrase: string, keywords: string[]) => {
-      if (!phrase) return false;
-      const words = phrase.split(/\s+/);
-      return keywords.some((k) => phrase === k || phrase.includes(k) || words.includes(k));
-    };
+    const handleTranscript = (raw: string) => {
+      if (!isAudioReviewActiveRef.current && !isWalkthroughActiveRef.current && !isWaitingForConsentRef.current && !isSpeakingRef.current) return;
 
-    const startRecognitionInstance = () => {
-      if (isDisposed || (!isAudioReviewActiveRef.current && !isSpeakingRef.current && !isWaitingForConsentRef.current)) return;
-      if (isRecognitionStartingRef.current) return;
+      const cleanCmd = raw.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+      if (!cleanCmd) return;
 
-      try {
-        if (recognition) {
-          try {
-            recognition.onend = null;
-            recognition.onerror = null;
-            recognition.onresult = null;
-            recognition.abort();
-          } catch (e) {}
-        }
+      const matchesWhole = (keywords: string[]) => keywords.some((k) => wholeWordMatch(cleanCmd, k) || cleanCmd === k);
 
-        recognition = new SpeechRecognition();
-        recognitionRef.current = recognition;
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 5;
-        recognition.lang = isHindiRef.current ? 'hi-IN' : 'en-US';
+      const isStop = matchesWhole(stopCommands);
+      if (isStop) {
+        handleStop();
+        return;
+      }
 
-        recognition.onstart = () => {
-          isRecognitionStartingRef.current = false;
-        };
+      // During speaking, only accept explicit barge-in commands
+      if (((window as any).isSystemSpeaking === true || isSpeakingRef.current) && !matchesWhole(pauseCommands) && !matchesWhole(nextCommands) && !matchesWhole(prevCommands) && !matchesWhole(repeatCommands) && !isStop) {
+        return;
+      }
 
-        recognition.onresult = (event: any) => {
-          if (!isAudioReviewActiveRef.current && !isWalkthroughActiveRef.current && !isWaitingForConsentRef.current && !isSpeakingRef.current) return;
-          if (!event.results || !event.results[0] || !event.results[0][0]) return;
+      const now = Date.now();
+      if (now - lastActionTimestampRef.current < 800) return;
 
-          const rawTranscript = event.results[event.results.length - 1]?.[0]?.transcript || event.results[0][0].transcript;
-          const cleanCmd = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-
-          const isPause = matchesList(cleanCmd, pauseCommands);
-          const isResume = matchesList(cleanCmd, resumeCommands);
-          const isNext = matchesList(cleanCmd, nextCommands);
-          const isPrev = matchesList(cleanCmd, prevCommands);
-          const isRepeat = matchesList(cleanCmd, repeatCommands);
-          const isStop = matchesList(cleanCmd, stopCommands) || cleanCmd.includes("stop") || cleanCmd.includes("exit") || cleanCmd.includes("quit");
-
-          // CRITICAL: Stop voice command executes immediately with zero cooldown lock
-          if (isStop) {
-            handleStop();
-            return;
-          }
-
-          // Barge-in: If the system is currently speaking, ONLY accept explicit review barge-in commands!
-          // Filter out room echo / TTS audio that does not match an explicit review control keyword.
-          if (((window as any).isSystemSpeaking === true || isSpeakingRef.current) && !isPause && !isResume && !isNext && !isPrev && !isRepeat && !isStop) {
-            return;
-          }
-
-          const now = Date.now();
-          if (now - lastActionTimestampRef.current < 1500) {
-            console.warn("BLOCKED MULTI-FIRE: Command ignored due to 1.5s cooldown lock.");
-            return;
-          }
-
-          if (isPause) {
-            lastActionTimestampRef.current = now;
-            handleTogglePause();
-          } else if (isResume) {
-            lastActionTimestampRef.current = now;
-            handleResume();
-          } else if (isNext) {
-            lastActionTimestampRef.current = now;
-            handleNext();
-          } else if (isPrev) {
-            lastActionTimestampRef.current = now;
-            handlePrev();
-          } else if (isRepeat) {
-            lastActionTimestampRef.current = now;
-            handleRepeat();
-          } else if (isStop) {
-            lastActionTimestampRef.current = now;
-            handleStop();
-          } else if (cleanCmd && cleanCmd.length > 1) {
-            // Asynchronously query AI Intent router for complex natural language commands
-            fetchAIIntent(cleanCmd).catch((err) => {
-              console.warn('[ReviewIntent] Failed to resolve AI intent:', err);
-            });
-          }
-        };
-
-        recognition.onerror = (event: any) => {
-          if (event.error === 'aborted' || event.error === 'no-speech') {
-            return;
-          }
-          console.warn('[ReviewBargeIn] Recognition error:', event.error);
-        };
-
-        recognition.onend = () => {
-          isRecognitionStartingRef.current = false;
-          if (isDisposed) return;
-
-          const isWalkthroughCurrentlyActive = isAudioReviewActiveRef.current;
-          const isSpeakingNow = isSpeakingRef.current;
-
-          // Auto-reconnect in recognition.onend: if walkthrough is active and !isSpeaking, restart listening after a 200ms delay.
-          if (isWalkthroughCurrentlyActive && !isSpeakingNow) {
-            if (restartTimerRef.current) {
-              clearTimeout(restartTimerRef.current);
-            }
-            restartTimerRef.current = setTimeout(() => {
-              if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
-                try {
-                  recognitionRef.current?.start();
-                } catch (err) {
-                  try {
-                    startRecognitionInstance();
-                  } catch (reErr) {
-                    console.warn("Recognition already active or starting", err);
-                  }
-                }
-              }
-            }, 200);
-          }
-        };
-
-        isRecognitionStartingRef.current = true;
-        recognition.start();
-      } catch (err: any) {
-        isRecognitionStartingRef.current = false;
-        if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
-          restartTimerRef.current = setTimeout(() => {
-            if (!isDisposed && isAudioReviewActiveRef.current && !isSpeakingRef.current) {
-              startRecognitionInstance();
-            }
-          }, 200);
-        }
+      if (matchesWhole(pauseCommands)) {
+        lastActionTimestampRef.current = now;
+        handleTogglePause();
+      } else if (matchesWhole(resumeCommands)) {
+        lastActionTimestampRef.current = now;
+        handleResume();
+      } else if (matchesWhole(nextCommands)) {
+        lastActionTimestampRef.current = now;
+        handleNext();
+      } else if (matchesWhole(prevCommands)) {
+        lastActionTimestampRef.current = now;
+        handlePrev();
+      } else if (matchesWhole(repeatCommands)) {
+        lastActionTimestampRef.current = now;
+        handleRepeat();
       }
     };
 
-    startRecognitionInstance();
+    const unsub = subscribe(handleTranscript);
+    const lang = isHindiRef.current ? 'hi-IN' : 'en-US';
+    startListening(lang);
 
     return () => {
-      isDisposed = true;
-      if (restartTimerRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = null;
-      }
-      if (recognition) {
-        try {
-          recognition.onend = null;
-          recognition.onerror = null;
-          recognition.onresult = null;
-          recognition.abort();
-        } catch (e) {}
-      }
-      recognitionRef.current = null;
-      isRecognitionStartingRef.current = false;
+      unsub();
     };
-  }, [isAudioReviewActive, isSpeaking, isWaitingForConsent, handleNext, handlePrev, handleRepeat, handleTogglePause, handleStop]);
+  }, [isAudioReviewActive, isSpeaking, isWaitingForConsent, handleNext, handlePrev, handleRepeat, handleTogglePause, handleStop, handleResume]);
 
   // Keyboard Shortcuts: Alt+A (Toggle Walkthrough), Alt+P (Prev), Alt+N (Next), Alt+R (Repeat), Space (Pause/Resume), Escape (Stop)
   useEffect(() => {

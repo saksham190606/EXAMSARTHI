@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from '
 import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { wholeWordMatch, routeVoiceCommand } from './commandRouter';
+import { wholeWordMatch, routeVoiceCommand, hasActiveContext } from './commandRouter';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
@@ -26,7 +26,7 @@ let resolveRecognitionAlternatives = true;
 let activeLang = 'en-IN';
 let currentSpeechPriority: VoicePriority | null = null;
 let recognitionRetryTimer: ReturnType<typeof setTimeout> | null = null;
-let recognitionRetryDelay = 200;
+let recognitionRetryDelay = 100;
 let speechGeneration = 0;
 let speechKeepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -65,7 +65,7 @@ function clearRetryTimer(): void {
     clearTimeout(recognitionRetryTimer);
     recognitionRetryTimer = null;
   }
-  recognitionRetryDelay = 200;
+  recognitionRetryDelay = 100;
 }
 
 export function subscribe(handler: (text: string) => void): () => void {
@@ -268,7 +268,7 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
   const speakNextChunk = () => {
     if (generation !== speechGeneration) return;
     if (chunkIndex >= safeChunks.length) {
-      setTimeout(finish, 350);
+      setTimeout(finish, 150);
       return;
     }
 
@@ -434,77 +434,74 @@ export function startListening(
   try {
     const recognition = new SpeechRecognition();
     (window as any).globalRecognitionInstance = recognition;
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 5;
     recognition.lang = normalized;
     injectExamGrammar(recognition);
 
-    recognition.onresult = async (event: any) => {
+    let lastDeliveredTranscript = '';
+    let lastDeliveredTime = 0;
+
+    recognition.onresult = (event: any) => {
       if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
         return;
       }
 
-      // 1. Safe Extraction
-      const transcript = event.results[event.results.length - 1][0].transcript;
-      if (!transcript || typeof transcript !== 'string') return;
-      
-      const lower = transcript.toLowerCase().trim();
-      console.log("[VOICE ENGINE] Heard:", lower);
+      // Only act on final results
+      const lastResult = event.results[event.results.length - 1];
+      if (!lastResult) return;
 
-      // Preserve UI updates for the Sarthi transcript bubble
+      if (!lastResult.isFinal) {
+        // Expose interim text as lastHeard for UI only
+        const interim = lastResult[0]?.transcript || '';
+        if (interim) {
+          globalTranscript = interim;
+          notifyState();
+        }
+        return;
+      }
+
+      const transcript = lastResult[0]?.transcript;
+      if (!transcript || typeof transcript !== 'string') return;
+
+      const lower = transcript.toLowerCase().trim();
+      if (!lower) return;
+
+      // Deduplicate identical transcripts within 800ms
+      const now = Date.now();
+      if (lower === lastDeliveredTranscript && now - lastDeliveredTime < 800) {
+        return;
+      }
+      lastDeliveredTranscript = lower;
+      lastDeliveredTime = now;
+
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('voiceDebug') === '1') {
+        const confidence = lastResult[0]?.confidence ?? -1;
+        console.debug('[VoiceEngine] final:', lower, 'conf:', confidence.toFixed(2));
+      }
+
+      // Ignore single short tokens with low confidence unless they exactly match a command
+      const confidence = lastResult[0]?.confidence ?? 1;
+      if (confidence < 0.4 && lower.split(/\s+/).length === 1 && lower.length < 4) {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('voiceDebug') === '1') {
+          console.debug('[VoiceEngine] rejected: low confidence single short token');
+        }
+        return;
+      }
+
       globalTranscript = transcript;
       globalLastError = null;
-      recognitionRetryDelay = 200;
+      recognitionRetryDelay = 100;
       notifyState();
-      activeRecognitionHandler?.(transcript);
-      transcriptSubscribers.forEach((cb) => {
-        try { cb(transcript); } catch (_) {}
-      });
 
-      // 2. Instant Navigation Interceptors (Bypass AI)
-      if (lower.includes('stop') || lower.includes('exit')) {
-        stopSpeaking();
-        stopListening();
-        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
-        return; 
-      }
-      if (lower.includes('previous') || lower.includes('back')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
-        return;
-      }
-      if (lower.includes('next')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
-        return;
-      }
-      if (lower.includes('review') || lower.includes('start')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
-        return;
-      }
-
-      // 3. Default AI Flow (CRITICAL: Do not remove this)
-      // If it's not a basic command, send it to the backend so the AI companion can respond normally.
-      try {
-        const res = await fetch('/api/intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript })
+      // Deliver ONCE: to activeRecognitionHandler if set, otherwise to subscribers
+      if (activeRecognitionHandler) {
+        activeRecognitionHandler(transcript);
+      } else {
+        transcriptSubscribers.forEach((cb) => {
+          try { cb(transcript); } catch (_) {}
         });
-        
-        if (!res.ok) {
-          console.error("[VOICE ENGINE] AI API failed with status:", res.status);
-          return;
-        }
-        
-        const data = await res.json();
-        // Broadcast the AI's determined intent to the platform
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-          detail: { intent: data.intent, target: data.target, message: data.message } 
-        }));
-        
-      } catch (error) {
-        console.error("[VOICE ENGINE] Fatal error reaching AI:", error);
       }
     };
 
@@ -628,47 +625,37 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   }
 
   const lowerTranscript = transcript.toLowerCase().trim();
-  const isListenerActive = typeof window !== 'undefined' && (window.location.pathname.startsWith('/exam') || window.location.pathname.startsWith('/results'));
-  
-  if (isListenerActive) {
-    if (wholeWordMatch(lowerTranscript, 'stop') || wholeWordMatch(lowerTranscript, 'exit')) {
-      stopSpeaking();
-      stopListening();
-      if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'STOP' } 
-      }));
-      return { intent: 'CONTROL', target: 'STOP' };
-    }
-    if (wholeWordMatch(lowerTranscript, 'previous') || wholeWordMatch(lowerTranscript, 'back')) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
-      }));
-      return { intent: 'CONTROL', target: 'PREVIOUS' };
-    }
-    if (wholeWordMatch(lowerTranscript, 'next')) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'NEXT' } 
-      }));
-      return { intent: 'CONTROL', target: 'NEXT' };
-    }
-    if (wholeWordMatch(lowerTranscript, 'review') || wholeWordMatch(lowerTranscript, 'start')) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: 'CONTROL', target: 'REVIEW' } 
-      }));
-      return { intent: 'CONTROL', target: 'REVIEW' };
-    }
+
+  // NEVER call /api/intent in exam route or review context
+  const isExamOrReview = typeof window !== 'undefined' && (
+    window.location.pathname.startsWith('/exam') ||
+    window.location.pathname.startsWith('/results')
+  );
+  if (isExamOrReview) {
+    return { intent: 'UNKNOWN', target: '' };
   }
 
+  // Also skip if any active voice context is registered (exam/review/hub/practice)
+  if (hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
+    return { intent: 'UNKNOWN', target: '' };
+  }
+
+  // Try local routing first
   const routed = routeVoiceCommand(lowerTranscript, 'global-nav');
   if (routed.handled) {
     return { intent: 'UNKNOWN', target: '' };
   }
 
+  // Only call /api/intent if transcript has >= 3 words
+  const wordCount = lowerTranscript.split(/\s+/).length;
+  if (wordCount < 3) {
+    return { intent: 'UNKNOWN', target: '' };
+  }
+
+  // 1.5s cooldown
   const now = Date.now();
   const lastRemoteCall = (typeof window !== 'undefined' ? Number(sessionStorage.getItem('last_intent_call') || '0') : 0);
-  if (now - lastRemoteCall < 2000) {
-    console.warn('[VoiceEngine] Remote intent cooldown active');
+  if (now - lastRemoteCall < 1500) {
     return { intent: 'UNKNOWN', target: '' };
   }
   if (typeof window !== 'undefined') sessionStorage.setItem('last_intent_call', now.toString());
@@ -680,14 +667,6 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
       body: JSON.stringify({ transcript: transcript.substring(0, 300) }),
     });
     const data = await res.json();
-
-    // Dispatches the exact intent and target globally
-    if (isListenerActive && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-        detail: { intent: data.intent, target: data.target } 
-      }));
-    }
-
     return { intent: data.intent || 'UNKNOWN', target: data.target || '' };
   } catch (err) {
     console.error('[VoiceEngine] AI Intent Routing failed:', err);

@@ -11,6 +11,7 @@
 import { useAccessibilityStore } from "@/store/useAccessibilityStore";
 import { parseSpokenIntent, playVoiceFeedbackChime } from "@/lib/voice/intent-parser";
 import { startListening as globalStartListening, stopListening as globalStopListening } from "@/lib/voice/useVoiceEngine";
+import { hasActiveContext } from "@/lib/voice/commandRouter";
 
 /**
  * Formats text for natural speech synthesis pronunciation.
@@ -1382,6 +1383,12 @@ class VoiceNavigationEngine {
 
   public async processCommand(rawInput: string) {
     if (!rawInput || !rawInput.trim()) return;
+
+    // Skip if an active voice context is registered (exam/review/hub/practice handles transcripts)
+    if (hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
+      return;
+    }
+
     const input = rawInput.trim();
     const isHi = useAccessibilityStore.getState().language === "hi";
 

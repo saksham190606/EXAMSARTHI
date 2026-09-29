@@ -16,7 +16,7 @@ import {
   requestMicAccess,
   stopSpeaking,
 } from '@/lib/voice/useVoiceEngine';
-import { routeVoiceCommand } from '@/lib/voice/commandRouter';
+import { routeVoiceCommand, wholeWordMatch } from '@/lib/voice/commandRouter';
 
 export type VoiceStatus =
   | 'Ready'
@@ -313,8 +313,7 @@ export function useVoiceMode({
     }
 
     const now = Date.now();
-    if (now - lastCommandTimeRef.current < 1500) {
-      console.warn("BLOCKED MULTI-FIRE: Command ignored due to 1.5s cooldown lock.");
+    if (now - lastCommandTimeRef.current < 800) {
       return; 
     }
 
@@ -483,8 +482,8 @@ export function useVoiceMode({
 
     // NEXT QUESTION:
     // Keywords: ["next", "agla", "आगे", "अगला"]
-    const nextKeywords = ["next", "agla", "अगला", "आगे", "next question"];
-    if (["next", "agla", "आगे", "अगला"].some((k) => transcript.includes(k)) || phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    const nextKeywords = ["next", "agla", "अगला", "next question"];
+    if (phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || wholeWordMatch(transcript, k))) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleNextQuestion();
@@ -494,7 +493,7 @@ export function useVoiceMode({
     // PREVIOUS QUESTION:
     // Keywords: ["previous", "back", "pichla", "पिछला", "पीछे"]
     const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
-    if (["previous", "back", "pichla", "पिछला"].some((k) => transcript.includes(k)) || phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || transcript.includes(k) || words.includes(k))) {
+    if (phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || wholeWordMatch(transcript, k))) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handlePrevQuestion();
@@ -535,7 +534,7 @@ export function useVoiceMode({
       // Recognized inputs for TRUE:
       // ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ"]
       const trueTokens = ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ", "हा"];
-      if (phoneticMatch?.action === 'SELECT_TRUE' || trueTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+      if (phoneticMatch?.action === 'SELECT_TRUE' || trueTokens.some((t) => transcript === t || (t.length > 3 && wholeWordMatch(transcript, t)))) {
         playVoiceFeedbackChime();
         const trueOptId = (currentQ.options && currentQ.options[0]) ? currentQ.options[0].id : "true";
         if (actionsRef.current.setAnswer) {
@@ -552,7 +551,7 @@ export function useVoiceMode({
       // Recognized inputs for FALSE:
       // ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं"]
       const falseTokens = ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं", "ना"];
-      if (phoneticMatch?.action === 'SELECT_FALSE' || falseTokens.some((t) => transcript === t || words.includes(t) || (t.length > 2 && transcript.includes(t)))) {
+      if (phoneticMatch?.action === 'SELECT_FALSE' || falseTokens.some((t) => transcript === t || (t.length > 3 && wholeWordMatch(transcript, t)))) {
         playVoiceFeedbackChime();
         const falseOptId = (currentQ.options && currentQ.options[1]) ? currentQ.options[1].id : "false";
         if (actionsRef.current.setAnswer) {
@@ -630,15 +629,15 @@ export function useVoiceMode({
     // C. TYPE: "MCQ" (Standard 4 Options)
     // -------------------------------------------------------------------------
     // Option A: ["a", "ay", "hey", "one", "1", "option a", "ए", "विकल्प ए", "पहला"]
-    const optATokens = ["option a", "विकल्प ए", "पहला", "one", "a", "ay", "hey", "1", "ए", "एक"];
-    // Option B: ["b", "be", "bee", "two", "2", "option b", "बी", "विकल्प बी", "दूसरा"]
-    const optBTokens = ["option b", "विकल्प बी", "दूसरा", "two", "b", "be", "bee", "2", "बी", "दो"];
-    // Option C: ["c", "see", "sea", "three", "3", "option c", "सी", "विकल्प सी", "तीसरा"]
-    const optCTokens = ["option c", "विकल्प सी", "तीसरा", "three", "c", "see", "sea", "3", "सी", "तीन"];
-    // Option D: ["d", "dee", "four", "4", "option d", "डी", "विकल्प डी", "चौथा"]
-    const optDTokens = ["option d", "विकल्प डी", "चौथा", "four", "d", "dee", "4", "डी", "चार"];
+    const optATokens = ["option a", "विकल्प ए", "पहला", "ए", "एक"];
+    const optBTokens = ["option b", "विकल्प बी", "दूसरा", "बी", "दो"];
+    const optCTokens = ["option c", "विकल्प सी", "तीसरा", "सी", "तीन"];
+    const optDTokens = ["option d", "विकल्प डी", "चौथा", "डी", "चार"];
 
-    if (phoneticMatch?.action === 'SELECT_A' || optATokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    // Single-letter/number: only match if the WHOLE transcript is that token
+    const singleTokenExact = (t: string) => /^[a-d1-4]$/.test(t) ? transcript === t : (transcript === t || wholeWordMatch(transcript, t));
+
+    if (phoneticMatch?.action === 'SELECT_A' || optATokens.some(singleTokenExact)) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(0);
@@ -648,7 +647,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (phoneticMatch?.action === 'SELECT_B' || optBTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_B' || optBTokens.some(singleTokenExact)) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(1);
@@ -658,7 +657,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (phoneticMatch?.action === 'SELECT_C' || optCTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_C' || optCTokens.some(singleTokenExact)) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(2);
@@ -668,7 +667,7 @@ export function useVoiceMode({
       return;
     }
 
-    if (phoneticMatch?.action === 'SELECT_D' || optDTokens.some((t) => transcript === t || transcript.includes(t) || words.includes(t))) {
+    if (phoneticMatch?.action === 'SELECT_D' || optDTokens.some(singleTokenExact)) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleSelectOption(3);

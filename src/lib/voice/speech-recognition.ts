@@ -35,34 +35,34 @@ export interface ResolvedVoiceCommand {
 // 1. Phonetic Homophones & Command Dictionary
 const PHONETIC_MAP: Record<CanonicalAction, string[]> = {
   SELECT_A: [
-    "a", "ay", "hey", "eight", "eh", "an", "at", "option a", "opt a", "choice a", "select a", "विकल्प ए", "पहला", "ए", "एक", "1", "one"
+    "a", "eight", "option a", "opt a", "choice a", "select a", "विकल्प ए", "पहला", "ए", "एक", "1", "one"
   ],
   SELECT_B: [
-    "b", "be", "bee", "beat", "me", "option b", "opt b", "choice b", "select b", "विकल्प बी", "दूसरा", "बी", "दो", "2", "two"
+    "b", "bee", "option b", "opt b", "choice b", "select b", "विकल्प बी", "दूसरा", "बी", "दो", "2", "two"
   ],
   SELECT_C: [
-    "c", "see", "sea", "si", "she", "option c", "opt c", "choice c", "select c", "विकल्प सी", "तीसरा", "सी", "तीन", "3", "three"
+    "c", "see", "sea", "si", "option c", "opt c", "choice c", "select c", "विकल्प सी", "तीसरा", "सी", "तीन", "3", "three"
   ],
   SELECT_D: [
-    "d", "dee", "the", "deal", "option d", "opt d", "choice d", "select d", "विकल्प डी", "चौथा", "डी", "चार", "4", "four"
+    "d", "dee", "option d", "opt d", "choice d", "select d", "विकल्प डी", "चौथा", "डी", "चार", "4", "four"
   ],
   SELECT_TRUE: [
-    "true", "through", "truth", "two", "to", "too", "yes", "sahi", "satya", "ट्रू", "सत्य", "सही", "हाँ", "हा", "haan"
+    "true", "truth", "yes", "sahi", "satya", "ट्रू", "सत्य", "सही", "हाँ", "हा", "haan"
   ],
   SELECT_FALSE: [
-    "false", "falls", "fault", "folks", "no", "galat", "asatya", "फॉल्स", "गलत", "असत्य", "नहीं", "ना", "nahin"
+    "false", "falls", "fault", "no", "galat", "asatya", "फॉल्स", "गलत", "असत्य", "नहीं", "ना", "nahin"
   ],
   NAVIGATE_NEXT: [
-    "next", "necks", "nest", "text", "agla", "अगला", "आगे", "next question", "skip", "aage"
+    "next", "necks", "agla", "अगला", "आगे", "next question", "skip", "aage"
   ],
   NAVIGATE_PREVIOUS: [
     "previous", "privious", "back", "pichla", "पिछला", "पीछे", "piche", "prev", "previous question"
   ],
   PAUSE_PLAYBACK: [
-    "pause", "paws", "pass", "pose", "रुको", "पॉज़", "रुकिए", "wait", "hold", "stop speaking", "ruko"
+    "pause", "paws", "रुको", "पॉज़", "रुकिए", "wait", "hold", "stop speaking", "ruko"
   ],
   RESUME_PLAYBACK: [
-    "resume", "play", "continue", "start", "आगे बोलो", "जारी रखें", "chalu", "shuru", "aage bolo"
+    "resume", "continue", "आगे बोलो", "जारी रखें", "chalu", "shuru", "aage bolo"
   ],
   REPEAT_QUESTION: [
     "repeat", "repeet", "re-read", "दोबारा", "फिर से", "read again", "repeat question", "dobara padho", "दोबारा बोलो", "फिर से पढ़ो"
@@ -141,7 +141,7 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
 
   // 2. Individual word token matching
   const words = candidate.split(/\s+/).map(normalizeToken);
-  const isExplicitSelection = /\b(?:option|opt|choice|select|choose|answer)\s+(?:option\s+)?[a-d1-4]\b/i.test(candidate);
+  const isExplicitSelection = /\b(?:option|opt|choice|select|choose|answer|vikalp)\s+(?:option\s+)?[a-d1-4]\b/i.test(candidate);
   const allowsFuzzyCommand = words.length === 1 ||
     /\b(?:go|move|navigate|select|choose|answer|pause|stop|resume|repeat|read|flag|mark|clear|submit|finish|skip)\b/i.test(candidate);
   const isChoiceAction = (action: CanonicalAction) =>
@@ -152,12 +152,17 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
     action === 'SELECT_TRUE' ||
     action === 'SELECT_FALSE';
 
+  // Single-letter/number choices: only accept if the WHOLE utterance is that token
+  const isSingleLetterToken = (t: string) => /^[a-d1-4]$/.test(t);
+
   for (const word of words) {
     if (!word) continue;
     for (const action of actions) {
       const list = PHONETIC_MAP[action];
       for (const phrase of list) {
         if (!phrase.includes(' ') && word === phrase) {
+          // Single-letter/number choice tokens require whole-utterance match
+          if (isSingleLetterToken(phrase) && candidate !== phrase) continue;
           if (isChoiceAction(action) && words.length > 1 && !isExplicitSelection) continue;
           return { action, matchedToken: phrase, confidence: 0.9 };
         }
@@ -166,24 +171,23 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
   }
 
   // 3. Levenshtein edit-distance match for near-sounds
-  // Only evaluate for tokens of length >= 3 to avoid false positive collapses on 'a', 'b', 'c', 'd'
+  // Disabled for tokens shorter than 5 characters and for all choice actions (A-D/true/false)
   for (const word of allowsFuzzyCommand ? words : []) {
-    if (word.length < 3) continue;
+    if (word.length < 5) continue;
 
     for (const action of actions) {
+      // No fuzzy matching for choice selection actions
+      if (isChoiceAction(action)) continue;
       const list = PHONETIC_MAP[action];
       for (const phrase of list) {
-        // Skip single-character targets
-        if (phrase.length < 3 || phrase.includes(' ')) continue;
-        if (isChoiceAction(action) && words.length > 1 && !isExplicitSelection) continue;
+        if (phrase.length < 5 || phrase.includes(' ')) continue;
 
         const dist = levenshteinDistance(word, phrase);
         const maxLen = Math.max(word.length, phrase.length);
         const similarity = 1 - dist / maxLen;
 
-        // Allow distance of 1 for 4-5 letter words ('next' vs 'nest', 'pass' vs 'pause')
-        // Allow distance of 2 for words >= 7 letters ('previous' vs 'privious')
-        const isClose = (maxLen <= 5 && dist <= 1) || (maxLen > 5 && dist <= 2);
+        // Allow distance of 1 for 5-6 letter words, distance of 2 for words >= 7 letters
+        const isClose = (maxLen <= 6 && dist <= 1) || (maxLen > 6 && dist <= 2);
         if (isClose && similarity >= 0.8) {
           return { action, matchedToken: phrase, confidence: similarity };
         }

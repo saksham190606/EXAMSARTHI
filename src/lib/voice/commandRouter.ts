@@ -138,13 +138,13 @@ function isSingleOptionUtterance(normalized: string): boolean {
 function maybeDedupe(type: CommandType, normalized: string): { deduped: boolean; reason?: string } {
   const now = Date.now();
   const cooldownUntil = cooldownMap.get(type) || 0;
-  if (now - cooldownUntil < 1500) {
+  if (now - cooldownUntil < 800) {
     return { deduped: true };
   }
 
   const idKey = `${type}:${normalized}`;
   const lastSeen = idempotencyMap.get(idKey) || 0;
-  if (now - lastSeen < 1500) {
+  if (now - lastSeen < 800) {
     return { deduped: true };
   }
 
@@ -199,13 +199,6 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     return { ...base, handled: false, message: 'exam command ignored by global-nav context' };
   }
 
-  const shouldConfirm = /^(yes|haan|haan ji|हाँ|हां|confirm|submit|proceed)$/.test(normalized) || /^(no|nahin|nahi|cancel|रद्द|नहीं)$/.test(normalized);
-  if (shouldConfirm) {
-    const deduped = maybeDedupe('confirm', normalized);
-    if (deduped.deduped) return { ...base, type: 'confirm', handled: true, deduped: true, readback: 'Confirmation already processed' };
-    return { ...base, type: 'confirm', handled: true, confidence: 1, readback: 'Confirmed', deduped: false };
-  }
-
   const optionIndex = optionFromText(normalized);
   if (optionIndex !== undefined && (normalized === 'a' || normalized === 'b' || normalized === 'c' || normalized === 'd' || normalized === '1' || normalized === '2' || normalized === '3' || normalized === '4' || isSingleOptionUtterance(normalized))) {
     const dedupe = maybeDedupe('select-option', normalized);
@@ -223,7 +216,7 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     };
   }
 
-  const positivePhrases = ['next', 'next question', 'agla', 'aage', 'अगला', 'आगे', 'next question please'];
+  const positivePhrases = ['next', 'next question', 'agla', 'aage', 'अगला', 'next question please'];
   const negativePhrases = ['previous', 'back', 'pichla', 'पिछला', 'पीछे', 'prev'];
   const repeatPhrases = ['repeat', 'repeat question', 'read again', 'dobara', 'दोबारा', 'फिर से', 'read question'];
   const clearPhrases = ['clear', 'clear answer', 'remove answer', 'erase', 'साफ करो', 'खाली करो', 'हटाओ'];
@@ -233,14 +226,16 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
   const cancelPhrases = ['no', 'cancel', 'nahin', 'नहीं', 'रद्द'];
   const describePhrases = ['describe diagram', 'explain diagram', 'diagram', 'चित्र समझाओ', 'विवरण'];
   const pausePhrases = ['pause', 'ruko', 'रुको', 'pause speech'];
-  const resumePhrases = ['resume', 'continue', 'chalu', 'जारी रखें', 'आगे'];
+  const resumePhrases = (context === 'review' || context === 'practice') ? ['resume', 'continue', 'आगे', 'chalu', 'जारी रखें'] : ['resume', 'chalu', 'जारी रखें'];
   const stopPhrases = ['stop', 'stop speaking', 'band karo', 'बंद करो'];
   const timePhrases = ['time left', 'samay bacha', 'समय बचा', 'time remaining'];
   const answeredPhrases = ['how many answered', 'kitne jawab', 'कितने उत्तर'];
   const nextSectionPhrases = ['next section', 'agla section', 'अगला सेक्शन'];
-  const readOptionsPhrases = ['read options', 'option read', 'options', 'vikalp', 'विकल्प'];
+  const readOptionsPhrases = ['read options', 'option read'];
   const readAllPhrases = ['read everything', 'read all', 'sara padho', 'सभी पढ़ो', 'सब पढ़ो'];
-  const navPhrases: Record<string, string> = {
+
+  // Navigation phrases only apply in global-nav context (not during exam)
+  const navPhrases: Record<string, string> = (context === 'exam' || context === 'review') ? {} : {
     dashboard: '/dashboard',
     'go to dashboard': '/dashboard',
     home: '/dashboard',
