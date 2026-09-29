@@ -12,13 +12,15 @@ interface ReviewWalkthroughProps {
 export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroughProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isMicListening, setIsMicListening] = useState(true);
+  const [isMicListening, setIsMicListening] = useState(false);
   const [lastHeardCommand, setLastHeardCommand] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
+  const isSpeakingRef = useRef(false);
+  const localRecognitionRef = useRef<any>(null);
   const lastActionTimestampRef = useRef<number>(0);
 
-  // 1. Resolve Questions: Guaranteed non-empty array with authoritative master questions fallback
+  // 1. Authoritative Question Resolution with MasterQuestionBank fallback
   const rawQuestions = results?.questions && results.questions.length > 0 
     ? results.questions 
     : SscCglMockQuestions;
@@ -28,10 +30,10 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
   const qId = currentQ.questionId || currentQ.id || '';
   const masterQ = (QuestionMap as any)[qId] || {};
 
-  // Question Text
+  // Clean Question Text
   const questionText = currentQ.questionText || currentQ.text || masterQ.text || `Question ${currentIndex + 1}`;
 
-  // Options
+  // Options Mapping
   const options: Array<{ id: string; text: string }> = currentQ.options || masterQ.options || [];
 
   // User Answer Resolution
@@ -78,7 +80,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     ? Boolean(currentQ.isCorrect)
     : (userDisplay !== 'Not Answered' && (userDisplay === correctDisplay || rawUser === masterQ.correctAnswerId));
 
-  // Explanation: Guaranteed to always be informative and non-empty
+  // In-Depth Explanation
   const explanation = currentQ.explanation || masterQ.explanation || (
     isCorrect 
       ? `Correct! Your chosen response matches the verified answer key (${correctDisplay}).` 
@@ -87,8 +89,16 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
   // 2. Navigation Actions with speech cancellation and timestamp debouncing
   const handleStop = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+    if (typeof window !== 'undefined') {
+      (window as any).isSystemSpeaking = false;
+      if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+    }
+    if (localRecognitionRef.current) {
+      try { localRecognitionRef.current.abort(); } catch (_) {}
     }
     stopListening();
     onClose();
@@ -99,8 +109,13 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     if (now - lastActionTimestampRef.current < 500) return;
     lastActionTimestampRef.current = now;
 
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+    if (typeof window !== 'undefined') {
+      (window as any).isSystemSpeaking = false;
+      if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
     }
     setCurrentIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
   }, [totalQuestions]);
@@ -110,13 +125,18 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     if (now - lastActionTimestampRef.current < 500) return;
     lastActionTimestampRef.current = now;
 
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+    if (typeof window !== 'undefined') {
+      (window as any).isSystemSpeaking = false;
+      if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
     }
     setCurrentIndex((prev) => Math.max(prev - 1, 0));
   }, []);
 
-  // 3. Speech Synthesis: Reads Question, User Answer, Correct Answer, and Full Explanation
+  // 3. Speech Synthesis: MUTES microphone while speaking, RE-OPENS microphone when finished
   const speakCurrentQuestion = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
@@ -124,35 +144,49 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       window.speechSynthesis.cancel();
     } catch (_) {}
 
+    // STEP A: Pause microphone immediately when companion starts speaking
+    isSpeakingRef.current = true;
+    setIsSpeaking(true);
+    setIsMicListening(false);
+    (window as any).isSystemSpeaking = true;
+
+    // Halt any active speech recognition while companion speaks
+    if (localRecognitionRef.current) {
+      try { localRecognitionRef.current.abort(); } catch (_) {}
+    }
+    stopListening();
+
     const cleanQ = questionText.replace(/[#*_`]/g, '');
     const cleanExp = explanation.replace(/[#*_`]/g, '');
 
     const speechText = `Question ${currentIndex + 1}. ${cleanQ}. You answered: ${userDisplay}. ${
       isCorrect ? 'Correct!' : `Incorrect. The correct answer is: ${correctDisplay}.`
-    } Explanation: ${cleanExp}. Review complete for Question ${currentIndex + 1}. Say Next, Previous, Repeat, or Stop.`;
+    } Explanation: ${cleanExp}. You can now say Next, Previous, or Stop.`;
 
     const utterance = new SpeechSynthesisUtterance(speechText);
     utterance.rate = 1.0;
     utterance.lang = 'en-US';
 
-    utterance.onstart = () => {
-      if (isMountedRef.current) setIsSpeaking(true);
+    const onSpeechFinished = () => {
+      if (!isMountedRef.current) return;
+      isSpeakingRef.current = false;
+      setIsSpeaking(false);
+      setIsMicListening(true);
+      (window as any).isSystemSpeaking = false;
+
+      // STEP B: As soon as companion is done speaking, cleanly open microphone for user commands
+      setTimeout(() => {
+        if (isMountedRef.current && !isSpeakingRef.current) {
+          if (localRecognitionRef.current) {
+            try { localRecognitionRef.current.start(); } catch (_) {}
+          }
+          startListening('en-IN');
+        }
+      }, 150);
     };
 
-    utterance.onend = () => {
-      if (isMountedRef.current) {
-        setIsSpeaking(false);
-        // Ensure microphone is active for user response
-        startListening('en-IN');
-      }
-    };
-
-    utterance.onerror = () => {
-      if (isMountedRef.current) {
-        setIsSpeaking(false);
-        startListening('en-IN');
-      }
-    };
+    utterance.onend = onSpeechFinished;
+    utterance.onerror = onSpeechFinished;
 
     window.speechSynthesis.speak(utterance);
   }, [currentIndex, questionText, userDisplay, isCorrect, correctDisplay, explanation]);
@@ -161,41 +195,88 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     speakCurrentQuestion();
   }, [speakCurrentQuestion]);
 
+  // Skip Audio helper: immediately stops speech and opens microphone
+  const handleSkipSpeech = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    isSpeakingRef.current = false;
+    setIsSpeaking(false);
+    setIsMicListening(true);
+    if (typeof window !== 'undefined') {
+      (window as any).isSystemSpeaking = false;
+    }
+    setTimeout(() => {
+      if (isMountedRef.current && !isSpeakingRef.current) {
+        if (localRecognitionRef.current) {
+          try { localRecognitionRef.current.start(); } catch (_) {}
+        }
+        startListening('en-IN');
+      }
+    }, 100);
+  }, []);
+
   // Auto-speak question on index change
   useEffect(() => {
     speakCurrentQuestion();
   }, [speakCurrentQuestion]);
 
-  // 4. Voice Command Interpreter (Dispatches corresponding action on voice match)
+  // 4. Voice Command Interpreter (Only processes when microphone is open / companion NOT speaking)
   const processVoiceCommand = useCallback((transcript: string) => {
+    // If companion is speaking, microphone is paused to prevent audio loopback
+    if (isSpeakingRef.current) return;
     if (!transcript) return;
-    const lower = transcript.toLowerCase().trim();
-    console.log('[ReviewWalkthrough Voice Command Detected]:', lower);
 
-    if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage') || lower.includes('nest')) {
+    const lower = transcript.toLowerCase().trim();
+    console.log('[ReviewWalkthrough Voice Command Heard]:', lower);
+
+    if (
+      lower.includes('next') || 
+      lower.includes('forward') || 
+      lower.includes('agla') || 
+      lower.includes('aage') || 
+      lower.includes('nest')
+    ) {
       setLastHeardCommand('Next');
       handleNext();
-    } else if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('peeche')) {
+    } else if (
+      lower.includes('previous') || 
+      lower.includes('back') || 
+      lower.includes('prev') || 
+      lower.includes('pichhla') || 
+      lower.includes('peeche')
+    ) {
       setLastHeardCommand('Previous');
       handlePrevious();
-    } else if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se')) {
+    } else if (
+      lower.includes('repeat') || 
+      lower.includes('again') || 
+      lower.includes('once more') || 
+      lower.includes('dohrao') || 
+      lower.includes('fir se') || 
+      lower.includes('phir se')
+    ) {
       setLastHeardCommand('Repeat');
       handleRepeat();
-    } else if (lower.includes('stop') || lower.includes('exit') || lower.includes('close') || lower.includes('quit') || lower.includes('cancel') || lower.includes('khatam') || lower.includes('ruko')) {
+    } else if (
+      lower.includes('stop') || 
+      lower.includes('exit') || 
+      lower.includes('close') || 
+      lower.includes('quit') || 
+      lower.includes('cancel') || 
+      lower.includes('khatam') || 
+      lower.includes('ruko')
+    ) {
       setLastHeardCommand('Stop');
       handleStop();
     }
   }, [handleNext, handlePrevious, handleRepeat, handleStop]);
 
-  // 5. Dedicated Continuous Web Speech Recognition Loop
+  // 5. Speech Recognition Lifecycle: Auto-pauses while speaking, auto-restarts when idle
   useEffect(() => {
     isMountedRef.current = true;
     if (typeof window === 'undefined') return;
 
-    // Start global engine listening
-    startListening('en-IN');
-
-    // Layer A: Dedicated local SpeechRecognition instance for instant barge-in
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     let localRecognition: any = null;
     let isAborted = false;
@@ -206,12 +287,16 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         localRecognition.continuous = true;
         localRecognition.interimResults = false;
         localRecognition.lang = 'en-IN';
+        localRecognitionRef.current = localRecognition;
 
         localRecognition.onstart = () => {
-          if (isMountedRef.current) setIsMicListening(true);
+          if (isMountedRef.current && !isSpeakingRef.current) {
+            setIsMicListening(true);
+          }
         };
 
         localRecognition.onresult = (event: any) => {
+          if (isSpeakingRef.current) return;
           const lastIdx = event.results.length - 1;
           const text = event.results[lastIdx]?.[0]?.transcript || '';
           if (text) processVoiceCommand(text);
@@ -219,33 +304,35 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
         localRecognition.onerror = (err: any) => {
           if (err.error !== 'no-speech' && err.error !== 'aborted') {
-            console.warn('[ReviewWalkthrough Local Mic Error]:', err.error);
+            console.warn('[ReviewWalkthrough Local Mic Notice]:', err.error);
           }
         };
 
         localRecognition.onend = () => {
-          if (!isAborted && isMountedRef.current) {
+          // Restart only if idle and NOT currently speaking
+          if (!isAborted && isMountedRef.current && !isSpeakingRef.current) {
             setTimeout(() => {
-              if (!isAborted && isMountedRef.current) {
+              if (!isAborted && isMountedRef.current && !isSpeakingRef.current) {
                 try { localRecognition.start(); } catch (_) {}
               }
             }, 300);
           }
         };
-
-        localRecognition.start();
       } catch (err) {
-        console.warn('[ReviewWalkthrough Local SpeechRecognition Unavailable]:', err);
+        console.warn('[ReviewWalkthrough SpeechRecognition Init]:', err);
       }
     }
 
-    // Layer B: Global engine subscriber
+    // Subscribe to Global Voice Engine (for fallback)
     const unsubVoiceEngine = subscribe((text: string) => {
-      processVoiceCommand(text);
+      if (!isSpeakingRef.current) {
+        processVoiceCommand(text);
+      }
     });
 
-    // Layer C: Global CustomEvent listener
+    // Subscribe to Global CustomEvent
     const handleGlobalCommandEvent = (e: any) => {
+      if (isSpeakingRef.current) return;
       const { target } = e.detail || {};
       if (target === 'NEXT') handleNext();
       else if (target === 'PREVIOUS') handlePrevious();
@@ -271,7 +358,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     };
   }, [processVoiceCommand, handleNext, handlePrevious, handleRepeat, handleStop]);
 
-  // 6. Keyboard Shortcuts for accessibility: Alt+N (Next), Alt+P (Prev), Alt+R (Repeat), Esc (Stop)
+  // 6. Keyboard Shortcuts: Alt+N (Next), Alt+P (Prev), Alt+R (Repeat), Esc (Stop)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -308,22 +395,38 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
           </span>
           <span className="text-neutral-600">•</span>
           
-          {/* Microphone Live Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Mic Listening (Say: &quot;Next&quot;, &quot;Previous&quot;, &quot;Repeat&quot;, &quot;Stop&quot;)</span>
-          </div>
-
-          {/* Speech State Badge */}
-          {isSpeaking && (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#ffed00]/10 text-[#ffed00] border border-[#ffed00]/30 animate-pulse">
-              <span>🔊 Reading Question &amp; Explanation...</span>
+          {/* Dynamic Microphone Status Badge */}
+          {isSpeaking ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse">
+              <span className="size-2 rounded-full bg-amber-400" />
+              <span>🔊 Companion Speaking (Microphone Paused)</span>
             </div>
+          ) : isMicListening ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+              <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>🎤 Microphone Open — Say &quot;Next&quot;, &quot;Previous&quot;, or &quot;Stop&quot;</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-neutral-800 text-neutral-400 border border-neutral-700">
+              <span className="size-2 rounded-full bg-neutral-500" />
+              <span>Mic Ready</span>
+            </div>
+          )}
+
+          {/* Quick Skip Audio button if user wants to speak right away */}
+          {isSpeaking && (
+            <button
+              onClick={handleSkipSpeech}
+              className="text-xs px-2.5 py-1 rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition-colors cursor-pointer"
+              title="Skip audio and open microphone immediately"
+            >
+              Skip Audio ⏭️
+            </button>
           )}
 
           {/* Last Heard Feedback */}
           {lastHeardCommand && (
-            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
               <span>🎙️ Heard: &ldquo;{lastHeardCommand}&rdquo;</span>
             </div>
           )}
