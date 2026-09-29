@@ -440,75 +440,72 @@ export function startListening(
     recognition.lang = normalized;
     injectExamGrammar(recognition);
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = async (event: any) => {
       if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
         return;
       }
 
-      const result = event?.results?.[event.resultIndex];
-      if (!result || result.isFinal === false) {
-        return;
-      }
-      const transcript = (result[0]?.transcript || '').trim();
-      if (!transcript) return;
+      // 1. Safe Extraction
+      const transcript = event.results[event.results.length - 1][0].transcript;
+      if (!transcript || typeof transcript !== 'string') return;
+      
+      const lower = transcript.toLowerCase().trim();
+      console.log("[VOICE ENGINE] Heard:", lower);
 
-      const candidates = extractTranscriptsFromEvent(event);
-      let raw = candidates[0] || transcript;
-      if (resolveRecognitionAlternatives && candidates.length > 0) {
-        const resolved = resolveMultiAlternativeCommand(candidates);
-        if (resolved) raw = resolved.matchedToken;
-      }
-
-      const finalTranscript = cleanVoiceTranscript(raw || transcript);
-      if (!finalTranscript) return;
-      globalTranscript = finalTranscript;
+      // Preserve UI updates for the Sarthi transcript bubble
+      globalTranscript = transcript;
       globalLastError = null;
       recognitionRetryDelay = 200;
       notifyState();
-      activeRecognitionHandler?.(finalTranscript);
+      activeRecognitionHandler?.(transcript);
       transcriptSubscribers.forEach((cb) => {
-        try { cb(finalTranscript); } catch (_) {}
+        try { cb(transcript); } catch (_) {}
       });
 
-      const lower = transcript.toLowerCase().trim();
-      const rawLower = (raw || '').toLowerCase().trim();
-      const finalLower = (finalTranscript || '').toLowerCase().trim();
-      const matches = (w: string) => wholeWordMatch(lower, w) || wholeWordMatch(rawLower, w) || wholeWordMatch(finalLower, w);
-
-      const isListenerActive = typeof window !== 'undefined' && (window.location.pathname.startsWith('/exam') || window.location.pathname.startsWith('/results'));
-
-      if (isListenerActive) {
-        if (matches('stop') || matches('exit')) {
-          stopSpeaking();
-          stopListening();
-          if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'STOP' } 
-          }));
-          return; 
-        }
-        if (matches('previous') || matches('back')) {
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'PREVIOUS' } 
-          }));
-          return;
-        }
-        if (matches('next')) {
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'NEXT' } 
-          }));
-          return;
-        }
-        if (matches('review') || matches('start')) {
-          window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-            detail: { intent: 'CONTROL', target: 'REVIEW' } 
-          }));
-          return;
-        }
+      // 2. Instant Navigation Interceptors (Bypass AI)
+      if (lower.includes('stop') || lower.includes('exit')) {
+        stopSpeaking();
+        stopListening();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+        return; 
+      }
+      if (lower.includes('previous') || lower.includes('back')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+        return;
+      }
+      if (lower.includes('next')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+        return;
+      }
+      if (lower.includes('review') || lower.includes('start')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
+        return;
       }
 
-      // Broadcast recognized speech through AI Intent router
-      fetchAIIntent(finalTranscript).catch(() => {});
+      // 3. Default AI Flow (CRITICAL: Do not remove this)
+      // If it's not a basic command, send it to the backend so the AI companion can respond normally.
+      try {
+        const res = await fetch('/api/intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript })
+        });
+        
+        if (!res.ok) {
+          console.error("[VOICE ENGINE] AI API failed with status:", res.status);
+          return;
+        }
+        
+        const data = await res.json();
+        // Broadcast the AI's determined intent to the platform
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+          detail: { intent: data.intent, target: data.target, message: data.message } 
+        }));
+        
+      } catch (error) {
+        console.error("[VOICE ENGINE] Fatal error reaching AI:", error);
+      }
     };
 
     recognition.onerror = (event: any) => {
