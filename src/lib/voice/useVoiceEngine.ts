@@ -495,6 +495,19 @@ export function startListening(
       recognitionRetryDelay = 100;
       notifyState();
 
+      // Check and dispatch global voice commands immediately
+      if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+      } else if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('peeche')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+      } else if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
+      } else if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+      } else if (lower.includes('review')) {
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
+      }
+
       // Deliver ONCE: to activeRecognitionHandler if set, otherwise to subscribers
       if (activeRecognitionHandler) {
         activeRecognitionHandler(transcript);
@@ -645,6 +658,10 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   if (lower.includes('stop') || lower.includes('exit')) {
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
     return { intent: 'CONTROL', target: 'STOP' };
+  }
+  if (lower.includes('repeat') || lower.includes('again')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
+    return { intent: 'CONTROL', target: 'REPEAT' };
   }
   if (lower.includes('pause')) {
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PAUSE' } }));

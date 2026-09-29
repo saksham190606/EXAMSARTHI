@@ -31,6 +31,7 @@ import { useSearchParams } from 'next/navigation';
 import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
 import { evaluateAnswer } from '@/lib/questionEvaluation';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
+import { QuestionMap } from '@/lib/examData';
 import { ExamState } from '@/lib/useExamEngine';
 import { calculateResults, ExamResults } from '@/lib/resultsUtils';
 import { SubjectPerformance } from '@/components/results/SubjectPerformance';
@@ -322,10 +323,27 @@ function ResultsContent() {
     // Populate reviewQuestions for local fallback if not already set from remote attempt
     if (!attemptId && examQuestions.length > 0) {
       setReviewQuestions(examQuestions.map((q, idx) => {
+        const masterQ = (QuestionMap as any)[q.id] || (q as any);
         const anyQ = q as any;
-        const rawCorrect = anyQ.correctAnswerId || anyQ.correctAnswerIds || anyQ.correctAnswer || 'N/A';
+        const rawCorrect = masterQ.correctAnswerId || masterQ.correctAnswerIds || masterQ.correctAnswer || anyQ.correctAnswerId || 'N/A';
         const userAns = stateToProcess.answers[q.id];
-        const isCorr = evaluateAnswer(q, userAns);
+        const isCorr = evaluateAnswer(masterQ, userAns);
+
+        const options = masterQ.options || anyQ.options || [];
+
+        // Format user answer text
+        let userDisplay = userAns ? String(userAns) : 'Not Answered';
+        if (options.length > 0 && userAns) {
+          const opt = options.find((o: any) => o.id === userAns);
+          if (opt) userDisplay = opt.text;
+        }
+
+        // Format correct answer text
+        let correctDisplay = String(rawCorrect);
+        if (options.length > 0 && masterQ.correctAnswerId) {
+          const opt = options.find((o: any) => o.id === masterQ.correctAnswerId);
+          if (opt) correctDisplay = opt.text;
+        }
 
         return {
           questionId: q.id,
@@ -333,12 +351,12 @@ function ResultsContent() {
           text: q.text,
           type: q.type || 'multiple-choice',
           subject: q.subject || 'General Assessment',
-          userAnswer: userAns || 'Not Answered',
-          correctAnswer: Array.isArray(rawCorrect) ? rawCorrect.join(', ') : String(rawCorrect),
+          userAnswer: userDisplay,
+          correctAnswer: correctDisplay,
           isCorrect: isCorr,
           isAnswered: Boolean(userAns),
-          explanation: (q as any).explanation || '',
-          options: (q as any).options || []
+          explanation: masterQ.explanation || anyQ.explanation || `The correct answer is ${correctDisplay}.`,
+          options: options
         };
       }));
     }
