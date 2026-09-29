@@ -287,10 +287,19 @@ function ResultsContent() {
     };
   }, [attemptId, fetchQuestionReview]);
 
-  // 2. No synthetic local results state: results are only shown for an authenticated, persisted attempt.
+  // 2. Safe local fallback if offline, unauthenticated, or server unreachable
   useEffect(() => {
     if (attemptId) return;
-    // No local fallback — results require a remote attempt
+
+    try {
+      const stored = sessionStorage.getItem('examResultState');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setFinalState(parsed);
+      }
+    } catch (e) {
+      console.warn('[ResultsPage] Failed to parse local exam state:', e);
+    }
   }, [attemptId]);
 
   useEffect(() => {
