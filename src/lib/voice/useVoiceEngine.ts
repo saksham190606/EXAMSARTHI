@@ -444,10 +444,6 @@ export function startListening(
     let lastDeliveredTime = 0;
 
     recognition.onresult = (event: any) => {
-      if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
-        return;
-      }
-
       // Only act on final results
       const lastResult = event.results[event.results.length - 1];
       if (!lastResult) return;
@@ -476,6 +472,37 @@ export function startListening(
       lastDeliveredTranscript = lower;
       lastDeliveredTime = now;
 
+      // Always allow critical navigation & review commands to fire immediately!
+      if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage')) {
+        console.log("🔥 [VOICE ENGINE] 'Next' command caught! Dispatching global event...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+        return;
+      }
+      if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('peeche')) {
+        console.log("🔥 [VOICE ENGINE] 'Previous' command caught! Dispatching global event...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+        return;
+      }
+      if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se')) {
+        console.log("🔥 [VOICE ENGINE] 'Repeat' command caught! Dispatching global event...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
+        return;
+      }
+      if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko')) {
+        console.log("🔥 [VOICE ENGINE] 'Stop' command caught! Dispatching global event...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+        return;
+      }
+      if (lower.includes('review')) {
+        console.log("🔥 [VOICE ENGINE] 'Review' command caught! Dispatching global event...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
+        return;
+      }
+
+      if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+        return;
+      }
+
       if (typeof localStorage !== 'undefined' && localStorage.getItem('voiceDebug') === '1') {
         const confidence = lastResult[0]?.confidence ?? -1;
         console.debug('[VoiceEngine] final:', lower, 'conf:', confidence.toFixed(2));
@@ -494,19 +521,6 @@ export function startListening(
       globalLastError = null;
       recognitionRetryDelay = 100;
       notifyState();
-
-      // Check and dispatch global voice commands immediately
-      if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
-      } else if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('peeche')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
-      } else if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
-      } else if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
-      } else if (lower.includes('review')) {
-        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
-      }
 
       // Deliver ONCE: to activeRecognitionHandler if set, otherwise to subscribers
       if (activeRecognitionHandler) {
@@ -659,7 +673,7 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
     return { intent: 'CONTROL', target: 'STOP' };
   }
-  if (lower.includes('repeat') || lower.includes('again')) {
+  if (lower.includes('repeat')) {
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
     return { intent: 'CONTROL', target: 'REPEAT' };
   }
