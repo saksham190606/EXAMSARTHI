@@ -11,14 +11,10 @@ interface ReviewWalkthroughProps {
 
 export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroughProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechTrigger, setSpeechTrigger] = useState(0);
   const [lastHeardCommand, setLastHeardCommand] = useState<string | null>(null);
 
-  const isMountedRef = useRef(true);
-  const isSpeakingRef = useRef(false);
-  const lastActionTimestampRef = useRef<number>(0);
-
-  // 1. Authoritative Question Resolution with MasterQuestionBank fallback
+  // 1. Authoritative Question Resolution with fallback
   const rawQuestions = results?.questions && results.questions.length > 0 
     ? results.questions 
     : SscCglMockQuestions;
@@ -85,120 +81,65 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       : `The official correct response is ${correctDisplay}. Review foundational subject principles to reinforce this topic.`
   );
 
-  // 2. Navigation Actions with speech cancellation and timestamp debouncing
+  // 2. Navigation Actions
   const handleStop = useCallback(() => {
-    isSpeakingRef.current = false;
-    setIsSpeaking(false);
-    if (typeof window !== 'undefined') {
-      (window as any).isSystemSpeaking = false;
-      if (window.speechSynthesis) {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     stopListening();
     onClose();
   }, [onClose]);
 
   const handleNext = useCallback(() => {
-    const now = Date.now();
-    if (now - lastActionTimestampRef.current < 400) return;
-    lastActionTimestampRef.current = now;
-
-    isSpeakingRef.current = false;
-    setIsSpeaking(false);
-    if (typeof window !== 'undefined') {
-      (window as any).isSystemSpeaking = false;
-      if (window.speechSynthesis) {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     setCurrentIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
   }, [totalQuestions]);
 
   const handlePrevious = useCallback(() => {
-    const now = Date.now();
-    if (now - lastActionTimestampRef.current < 400) return;
-    lastActionTimestampRef.current = now;
-
-    isSpeakingRef.current = false;
-    setIsSpeaking(false);
-    if (typeof window !== 'undefined') {
-      (window as any).isSystemSpeaking = false;
-      if (window.speechSynthesis) {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     setCurrentIndex((prev) => Math.max(prev - 1, 0));
   }, []);
 
-  // 3. Speech Synthesis: Reads Question, User Answer, Correct Answer, and Full Explanation
-  const speakCurrentQuestion = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  // 3. Stable, Trigger-Based Speech Synthesis: NO infinite loops, NO recursive closures
+  useEffect(() => {
+    if (typeof window === 'undefined' || !results?.questions) return;
+    
+    const q = results.questions[currentIndex] || rawQuestions[currentIndex];
+    if (!q) return;
 
-    try {
-      window.speechSynthesis.cancel();
-    } catch (_) {}
+    // 1. Instantly kill any ongoing audio
+    window.speechSynthesis.cancel(); 
 
-    isSpeakingRef.current = true;
-    setIsSpeaking(true);
-    (window as any).isSystemSpeaking = true;
+    const qPrompt = q.questionText || q.text || `Question ${currentIndex + 1}`;
+    const ansUser = q.userAnswer || userDisplay;
+    const ansCorrect = q.correctAnswer || correctDisplay;
+    const ansExp = q.explanation || explanation || "No explanation provided.";
 
-    const cleanQ = questionText.replace(/[#*_`]/g, '');
-    const cleanExp = explanation.replace(/[#*_`]/g, '');
-
-    const speechText = `Question ${currentIndex + 1}. ${cleanQ}. You answered: ${userDisplay}. ${
-      isCorrect ? 'Correct!' : `Incorrect. The correct answer is: ${correctDisplay}.`
-    } Explanation: ${cleanExp}. You can now say Next, Previous, Repeat, or Stop.`;
-
-    const utterance = new SpeechSynthesisUtterance(speechText);
+    const text = `Question ${currentIndex + 1}. ${qPrompt}. You answered ${ansUser}. ${
+      ansUser === ansCorrect || isCorrect ? "Correct!" : `Incorrect. The correct answer is ${ansCorrect}.`
+    } Explanation: ${ansExp}`;
+    
+    const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.lang = 'en-US';
+    
+    // 2. Store globally strictly to prevent Chrome GC on long text. NO intervals or onend loops.
+    (window as any)._activeUtterance = utterance; 
+    
+    // 3. Speak the current question
+    window.speechSynthesis.speak(utterance);
 
-    // Store global reference to prevent garbage collection in Chromium
-    (window as any).__activeReviewUtterance = utterance;
-
-    const onSpeechFinished = () => {
-      if (!isMountedRef.current) return;
-      isSpeakingRef.current = false;
-      setIsSpeaking(false);
-      (window as any).isSystemSpeaking = false;
-      startListening('en-IN');
-    };
-
-    utterance.onstart = () => {
-      if (isMountedRef.current) {
-        setIsSpeaking(true);
-        (window as any).isSystemSpeaking = true;
+    // 4. Cleanup: kill audio if the component unmounts
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
       }
     };
-
-    utterance.onend = onSpeechFinished;
-    utterance.onerror = onSpeechFinished;
-
-    window.speechSynthesis.speak(utterance);
-  }, [currentIndex, questionText, userDisplay, isCorrect, correctDisplay, explanation]);
-
-  const handleRepeat = useCallback(() => {
-    speakCurrentQuestion();
-  }, [speakCurrentQuestion]);
-
-  // Skip Audio helper: immediately stops speech and opens microphone
-  const handleSkipSpeech = useCallback(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
-    }
-    isSpeakingRef.current = false;
-    setIsSpeaking(false);
-    if (typeof window !== 'undefined') {
-      (window as any).isSystemSpeaking = false;
-    }
-    startListening('en-IN');
-  }, []);
-
-  // Auto-speak question on index change
-  useEffect(() => {
-    speakCurrentQuestion();
-  }, [speakCurrentQuestion]);
+  }, [currentIndex, results, speechTrigger]); // ONLY fires when index changes or Repeat is triggered
 
   // 4. Voice Command Interpreter (Dispatches corresponding action on voice match)
   const processVoiceCommand = useCallback((transcript: string) => {
@@ -242,7 +183,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     }
   }, []);
 
-  // 5. UNIFIED EVENT LISTENER: Executes state changes and speech immediately when commands arrive
+  // 5. UNIFIED EVENT LISTENER: Executes state changes and speech trigger safely
   useEffect(() => {
     const handleVoiceCommand = (e: any) => {
       const { target } = e.detail || {};
@@ -250,35 +191,25 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
       if (target === 'NEXT') {
         setLastHeardCommand('Next');
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-          try { window.speechSynthesis.cancel(); } catch (_) {}
-        }
-        setCurrentIndex((prev) => Math.min(prev + 1, totalQuestions - 1));
+        handleNext();
       } else if (target === 'PREVIOUS') {
         setLastHeardCommand('Previous');
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-          try { window.speechSynthesis.cancel(); } catch (_) {}
-        }
-        setCurrentIndex((prev) => Math.max(prev - 1, 0));
+        handlePrevious();
       } else if (target === 'REPEAT') {
         setLastHeardCommand('Repeat');
-        speakCurrentQuestion();
+        setSpeechTrigger((prev) => prev + 1);
       } else if (target === 'STOP') {
         setLastHeardCommand('Stop');
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-          try { window.speechSynthesis.cancel(); } catch (_) {}
-        }
-        onClose();
+        handleStop();
       }
     };
 
     window.addEventListener('ai_voice_command', handleVoiceCommand);
     return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
-  }, [totalQuestions, speakCurrentQuestion, onClose]);
+  }, [handleNext, handlePrevious, handleStop]);
 
   // 6. Start Voice Engine Listener
   useEffect(() => {
-    isMountedRef.current = true;
     if (typeof window !== 'undefined') {
       startListening('en-IN');
     }
@@ -288,13 +219,9 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     });
 
     return () => {
-      isMountedRef.current = false;
       unsub();
-      if (typeof window !== 'undefined') {
-        (window as any).isSystemSpeaking = false;
-        if (window.speechSynthesis) {
-          try { window.speechSynthesis.cancel(); } catch (_) {}
-        }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
       }
     };
   }, [processVoiceCommand]);
@@ -313,13 +240,13 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         handlePrevious();
       } else if (e.altKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
-        handleRepeat();
+        setSpeechTrigger((prev) => prev + 1);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrevious, handleRepeat, handleStop]);
+  }, [handleNext, handlePrevious, handleStop]);
 
   return (
     <div 
@@ -337,28 +264,10 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
           <span className="text-neutral-600">•</span>
           
           {/* Dynamic Microphone Status Badge */}
-          {isSpeaking ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse">
-              <span className="size-2 rounded-full bg-amber-400" />
-              <span>🔊 Companion Speaking...</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
-              <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>🎤 Microphone Open — Say &quot;Next&quot;, &quot;Previous&quot;, &quot;Repeat&quot;, or &quot;Stop&quot;</span>
-            </div>
-          )}
-
-          {/* Quick Skip Audio button */}
-          {isSpeaking && (
-            <button
-              onClick={handleSkipSpeech}
-              className="text-xs px-2.5 py-1 rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition-colors cursor-pointer"
-              title="Skip audio and open microphone immediately"
-            >
-              Skip Audio ⏭️
-            </button>
-          )}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+            <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>🎤 Microphone Open — Say &quot;Next&quot;, &quot;Previous&quot;, &quot;Repeat&quot;, or &quot;Stop&quot;</span>
+          </div>
 
           {/* Last Heard Feedback */}
           {lastHeardCommand && (
@@ -459,7 +368,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         {/* Repeat Button */}
         <button 
           id="walkthrough-btn-repeat"
-          onClick={handleRepeat} 
+          onClick={() => setSpeechTrigger((prev) => prev + 1)} 
           className="px-5 sm:px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
         >
           <span>🔁 Repeat</span>
