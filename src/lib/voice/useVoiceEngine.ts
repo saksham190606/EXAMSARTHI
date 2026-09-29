@@ -628,29 +628,27 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
 
   const lower = lowerTranscript;
 
-  // Immediate Hardcoded UI Bypasses (Execute globally)
-  if (lower.includes('dashboard') || lower.includes('home')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'DASHBOARD' } }));
-    return { intent: 'NAVIGATE', target: 'DASHBOARD' };
-  }
-  if (lower.includes('practice')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'PRACTICE' } }));
-    return { intent: 'NAVIGATE', target: 'PRACTICE' };
-  }
-  if (lower.includes('exam')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'EXAMS' } }));
-    return { intent: 'NAVIGATE', target: 'EXAMS' };
-  }
-  if (lower.includes('setting')) {
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'SETTINGS' } }));
-    return { intent: 'NAVIGATE', target: 'SETTINGS' };
-  }
+  // 1. Trigger the Panel
   if (lower.includes('review')) {
-    console.log("🔥 [VOICE ENGINE] 'Review' heard! Dispatching global event...");
-    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
-      detail: { intent: 'CONTROL', target: 'REVIEW' } 
-    }));
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
     return { intent: 'CONTROL', target: 'REVIEW' };
+  }
+  // 2. Navigation Commands
+  if (lower.includes('next')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+    return { intent: 'CONTROL', target: 'NEXT' };
+  }
+  if (lower.includes('previous') || lower.includes('back')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+    return { intent: 'CONTROL', target: 'PREVIOUS' };
+  }
+  if (lower.includes('stop') || lower.includes('exit')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+    return { intent: 'CONTROL', target: 'STOP' };
+  }
+  if (lower.includes('pause')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PAUSE' } }));
+    return { intent: 'CONTROL', target: 'PAUSE' };
   }
 
   // NEVER call /api/intent in exam route or review context
