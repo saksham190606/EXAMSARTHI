@@ -645,11 +645,11 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'SETTINGS' } }));
     return { intent: 'NAVIGATE', target: 'SETTINGS' };
   }
-  if (lower.includes('review') || lower.includes('start')) {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/results')) {
-      window.dispatchEvent(new Event('examsarthi-start-walkthrough'));
-      return { intent: 'CONTROL', target: 'REVIEW' };
-    }
+  if (lower.includes('review')) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { 
+      detail: { intent: 'CONTROL', target: 'REVIEW' } 
+    }));
+    return { intent: 'CONTROL', target: 'REVIEW' };
   }
 
   // NEVER call /api/intent in exam route or review context

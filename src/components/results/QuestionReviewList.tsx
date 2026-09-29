@@ -708,7 +708,12 @@ export function QuestionReviewList({
       const normalizedTarget = (target || '').toUpperCase();
 
       if (intent === 'CONTROL' || !intent) {
-        if (normalizedTarget === 'NEXT') {
+        if (normalizedTarget === 'REVIEW' || normalizedTarget === 'START') {
+          setIsWalkthroughActive(true);
+          if (!isAudioReviewActiveRef.current && filteredQuestionsRef.current.length > 0) {
+            readQuestionReview(0, true);
+          }
+        } else if (normalizedTarget === 'NEXT') {
           handleNextQuestion();
         } else if (normalizedTarget === 'PREVIOUS' || normalizedTarget === 'PREV') {
           handlePrevQuestion();
