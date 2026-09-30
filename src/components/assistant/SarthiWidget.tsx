@@ -22,6 +22,12 @@ interface Message {
   text: string;
 }
 
+let sarthiMessageSequence = 0;
+export function createSarthiMessageId(sender: 'user' | 'sarthi'): string {
+  sarthiMessageSequence += 1;
+  return `${sender}-${Date.now()}-${sarthiMessageSequence}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export function SarthiWidget() {
   const [state, setState] = useState<SarthiState>('CLOSED');
   const [typedInput, setTypedInput] = useState('');
@@ -99,7 +105,7 @@ export function SarthiWidget() {
         : "Hi, I'm Sarthi. How can I help you? You can speak or type your question below.";
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: greeting }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: greeting }
       ]);
       speak(greeting, 'Voice feedback');
       // Focus the text input for keyboard users
@@ -124,7 +130,7 @@ export function SarthiWidget() {
     stopListening();
     setMessages((prev) => [
       ...prev,
-      { id: String(Date.now()), sender: 'user', text }
+      { id: createSarthiMessageId('user'), sender: 'user', text }
     ]);
     const lower = text.toLowerCase();
 
@@ -134,7 +140,7 @@ export function SarthiWidget() {
       const bye = isHindi ? 'धन्यवाद, सारथी बंद हो रहा है।' : 'Thank you, closing Sarthi.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: bye }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: bye }
       ]);
       speak(bye, 'Voice feedback');
       return;
@@ -156,7 +162,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'परीक्षा केंद्र खोला जा रहा है।' : 'Opening the exams hub.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       router.push('/exam');
       speak(resp, 'Voice feedback');
@@ -174,7 +180,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'डैशबोर्ड खोला जा रहा है।' : 'Navigating to your dashboard.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       router.push('/dashboard');
       speak(resp, 'Voice feedback');
@@ -191,7 +197,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'अभ्यास अनुभाग खोला जा रहा है।' : 'Navigating to the practice section.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       router.push('/practice');
       speak(resp, 'Voice feedback');
@@ -209,7 +215,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'परिणाम अनुभाग खोला जा रहा है।' : 'Navigating to results section.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       router.push('/results');
       speak(resp, 'Voice feedback');
@@ -230,7 +236,7 @@ export function SarthiWidget() {
         : (isHindi ? 'सामान्य कंट्रास्ट mode सक्षम किया गया।' : 'Standard contrast mode enabled.');
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       speak(resp, 'Voice feedback');
       return;
@@ -248,7 +254,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'सेटिंग्स अनुभाग खोला जा रहा है।' : 'Navigating to settings section.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       router.push('/settings');
       speak(resp, 'Voice feedback');
@@ -266,7 +272,7 @@ export function SarthiWidget() {
       const resp = isHindi ? 'लॉगआउट किया जा रहा है...' : 'Logging you out of ExamSarthi.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: resp }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }
       ]);
       speak(resp, 'Voice feedback');
       setTimeout(() => {
@@ -299,7 +305,7 @@ export function SarthiWidget() {
         const resp = isHindi 
           ? 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित) पैलेट लागू किया गया।' 
           : 'Deuteranopia red-green accessible color palette applied.';
-        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
         speak(resp, 'Voice feedback');
         return;
       }
@@ -310,7 +316,7 @@ export function SarthiWidget() {
         const resp = isHindi 
           ? 'ट्रिटेनोपिया (नीला-पीला सुरक्षित) पैलेट लागू किया गया।' 
           : 'Tritanopia blue-yellow accessible color palette applied.';
-        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
         speak(resp, 'Voice feedback');
         return;
       }
@@ -321,7 +327,7 @@ export function SarthiWidget() {
         const resp = isHindi 
           ? 'मोनोक्रोम उच्च-कंट्रास्ट ग्रेस्केल पैलेट लागू किया गया।' 
           : 'Monochrome high-contrast grayscale palette applied.';
-        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
         speak(resp, 'Voice feedback');
         return;
       }
@@ -332,7 +338,7 @@ export function SarthiWidget() {
         const resp = isHindi 
           ? 'वार्म सेपिया कम्फर्ट पैलेट लागू किया गया।' 
           : 'Warm sepia eye-comfort palette applied.';
-        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
         speak(resp, 'Voice feedback');
         return;
       }
@@ -343,7 +349,7 @@ export function SarthiWidget() {
         const resp = isHindi 
           ? 'मानक डार्क एम्बर डिफ़ॉल्ट थीम बहाल की गई।' 
           : 'Standard dark amber UI default theme restored.';
-        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
         speak(resp, 'Voice feedback');
         return;
       }
@@ -360,7 +366,7 @@ export function SarthiWidget() {
       const resp = isHindi
         ? `रंग थीम बदलकर ${nextTheme} की गई। आप 'ड्यूटरेनोपिया', 'ट्रिटेनोपिया', 'मोनोक्रोम', 'सेपिया', या 'डिफ़ॉल्ट' बोल सकते हैं।`
         : `Color theme switched to ${nextTheme}. You can say 'Deuteranopia', 'Tritanopia', 'Monochrome', 'Sepia', or 'Default colors'.`;
-      setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+      setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
       speak(resp, 'Voice feedback');
       return;
     }
@@ -397,7 +403,7 @@ export function SarthiWidget() {
         const errText = isHindi ? 'मुझे कुछ समझने में दिक्कत हुई।' : 'I had trouble understanding that.';
         setMessages((prev) => [
           ...prev,
-          { id: String(Date.now()), sender: 'sarthi', text: errText }
+          { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: errText }
         ]);
         speak(errText, 'Voice feedback');
         return;
@@ -413,7 +419,7 @@ export function SarthiWidget() {
       const replyText = spokenResponse || (isHindi ? 'कार्रवाई पूरी हुई।' : 'Action completed.');
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: replyText }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: replyText }
       ]);
       handleStateChange(actionData.action === 'CLOSE_SARTHI' ? 'CLOSING_SPEAKING' : 'SPEAKING');
       speak(replyText, 'Voice feedback');
@@ -427,7 +433,7 @@ export function SarthiWidget() {
       const failText = isHindi ? 'सर्वर से संपर्क नहीं हो पाया।' : 'Could not reach the server.';
       setMessages((prev) => [
         ...prev,
-        { id: String(Date.now()), sender: 'sarthi', text: failText }
+        { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: failText }
       ]);
       speak(failText, 'Voice feedback');
     } finally {
@@ -646,9 +652,9 @@ export function SarthiWidget() {
               : "Hello! I am Sarthi. Ask me anything, type commands like 'exam', 'dashboard', or click the mic to speak."}
           </div>
         ) : (
-          messages.map((m) => (
+          messages.map((m, idx) => (
             <div
-              key={m.id}
+              key={`${m.id || 'msg'}-${idx}`}
               className={`p-2.5 rounded-xl text-xs leading-relaxed ${
                 m.sender === 'user'
                   ? 'bg-amber-500/20 text-amber-100 border border-amber-400/30 ml-6 text-right'
