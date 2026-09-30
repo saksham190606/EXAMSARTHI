@@ -43,63 +43,10 @@ interface ReviewWalkthroughProps {
 export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroughProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [speechTrigger, setSpeechTrigger] = useState(0);
-  const lastSpokenRef = useRef({ index: -1, trigger: 0 });
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !results?.questions) return;
-
-    // 1. The Anti-Loop Lock: Only proceed if the index or the repeat trigger actually changed
-    if (lastSpokenRef.current.index === currentIndex && lastSpokenRef.current.trigger === speechTrigger) {
-      return;
-    }
-    
-    // 2. Lock it in
-    lastSpokenRef.current = { index: currentIndex, trigger: speechTrigger };
-
-    const q = results.questions[currentIndex];
-    if (!q) return;
-
-    // 3. Kill any currently playing audio instantly & pause mic so it cannot hear itself
-    window.speechSynthesis.cancel();
-    stopListening();
-
-    // 4. Speak exactly once with a strictly male voice
-    const text = `Question ${currentIndex + 1}. ${q.questionText}. You answered ${q.userAnswer}. ${q.userAnswer === q.correctAnswer ? "Correct!" : `Incorrect. The correct answer is ${q.correctAnswer}.`} Explanation: ${q.explanation || "No explanation provided."}`;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-
-    const maleVoice = getMaleWalkthroughVoice();
-    if (maleVoice) {
-      utterance.voice = maleVoice;
-    }
-
-    // Microphone opens ONLY after companion finishes speaking
-    utterance.onend = () => {
-      if (typeof window !== 'undefined') {
-        setTimeout(() => {
-          startListening('en-IN');
-        }, 300);
-      }
-    };
-
-    utterance.onerror = () => {
-      if (typeof window !== 'undefined') {
-        setTimeout(() => {
-          startListening('en-IN');
-        }, 300);
-      }
-    };
-
-    window.speechSynthesis.speak(utterance);
-
-    // 5. Cleanup on unmount
-    return () => {
-      window.speechSynthesis.cancel();
-      stopListening();
-    };
-  }, [currentIndex, results, speechTrigger]);
-
   const [lastHeardCommand, setLastHeardCommand] = useState<string | null>(null);
+  const lastSpokenRef = useRef({ index: -1, trigger: 0 });
+  const lastCommandTimeRef = useRef<number>(0);
+  const COMMAND_COOLDOWN_MS = 600;
 
   // Ensure questionText is present on questions for speech
   if (results?.questions) {
@@ -177,8 +124,64 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       : `The official correct response is ${correctDisplay}. Review foundational subject principles to reinforce this topic.`
   );
 
-  // 2. Navigation Actions
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // 1. The Anti-Loop Lock: Only proceed if the index or the repeat trigger actually changed
+    if (lastSpokenRef.current.index === currentIndex && lastSpokenRef.current.trigger === speechTrigger) {
+      return;
+    }
+    
+    // 2. Lock it in
+    lastSpokenRef.current = { index: currentIndex, trigger: speechTrigger };
+
+    const q = rawQuestions[currentIndex];
+    if (!q) return;
+
+    // 3. Kill any currently playing audio instantly & pause mic so it cannot hear itself
+    window.speechSynthesis.cancel();
+    stopListening();
+
+    // 4. Speak exactly once with a strictly male voice
+    const text = `Question ${currentIndex + 1}. ${q.questionText || q.text || `Question ${currentIndex + 1}`}. You answered ${userDisplay}. ${isCorrect ? "Correct!" : `Incorrect. The correct answer is ${correctDisplay}.`} Explanation: ${explanation}`;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+
+    const maleVoice = getMaleWalkthroughVoice();
+    if (maleVoice) {
+      utterance.voice = maleVoice;
+    }
+
+    // Microphone opens ONLY after companion finishes speaking
+    utterance.onend = () => {
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          startListening('en-IN');
+        }, 300);
+      }
+    };
+
+    utterance.onerror = () => {
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          startListening('en-IN');
+        }, 300);
+      }
+    };
+
+    window.speechSynthesis.speak(utterance);
+
+    // 5. Cleanup on unmount
+    return () => {
+      window.speechSynthesis.cancel();
+      stopListening();
+    };
+  }, [currentIndex, rawQuestions, speechTrigger, userDisplay, isCorrect, correctDisplay, explanation]);
+
+  // 2. Navigation Actions with Cooldown Guard
   const handleStop = useCallback(() => {
+    const now = Date.now();
+    lastCommandTimeRef.current = now;
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
@@ -187,6 +190,13 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
   }, [onClose]);
 
   const handleNext = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < COMMAND_COOLDOWN_MS) {
+      console.log('⏳ [ReviewWalkthrough] Ignoring duplicate NEXT (cooldown active)');
+      return;
+    }
+    lastCommandTimeRef.current = now;
+
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
@@ -194,41 +204,75 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
   }, [totalQuestions]);
 
   const handlePrevious = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < COMMAND_COOLDOWN_MS) {
+      console.log('⏳ [ReviewWalkthrough] Ignoring duplicate PREVIOUS (cooldown active)');
+      return;
+    }
+    lastCommandTimeRef.current = now;
+
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
     setCurrentIndex((prev) => Math.max(prev - 1, 0));
   }, []);
 
-  // 4. Voice Command Interpreter (Dispatches corresponding action on voice match)
+  const handleRepeat = useCallback(() => {
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < COMMAND_COOLDOWN_MS) {
+      return;
+    }
+    lastCommandTimeRef.current = now;
+
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+    setSpeechTrigger((prev) => prev + 1);
+  }, []);
+
+  // 4. Voice Command Interpreter (Direct Mic Subscriber)
   const processVoiceCommand = useCallback((transcript: string) => {
     if (!transcript) return;
 
     const lower = transcript.toLowerCase().trim();
     console.log('[ReviewWalkthrough Direct Mic]:', lower);
 
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < COMMAND_COOLDOWN_MS) {
+      return;
+    }
+
     if (
       lower.includes('next') || 
       lower.includes('forward') || 
       lower.includes('agla') || 
-      lower.includes('aage')
+      lower.includes('aage') ||
+      lower.includes('अगला')
     ) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+      setLastHeardCommand('Next');
+      handleNext();
     } else if (
       lower.includes('previous') || 
       lower.includes('back') || 
       lower.includes('prev') || 
       lower.includes('pichhla') || 
-      lower.includes('peeche')
+      lower.includes('pichla') ||
+      lower.includes('peeche') ||
+      lower.includes('पिछला')
     ) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+      setLastHeardCommand('Previous');
+      handlePrevious();
     } else if (
       lower.includes('repeat') || 
       lower.includes('again') || 
       lower.includes('once more') || 
-      lower.includes('dohrao')
+      lower.includes('dohrao') ||
+      lower.includes('fir se') ||
+      lower.includes('phir se') ||
+      lower.includes('दोबारा')
     ) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
+      setLastHeardCommand('Repeat');
+      handleRepeat();
     } else if (
       lower.includes('stop') || 
       lower.includes('exit') || 
@@ -236,13 +280,15 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       lower.includes('quit') || 
       lower.includes('cancel') || 
       lower.includes('khatam') || 
-      lower.includes('ruko')
+      lower.includes('ruko') ||
+      lower.includes('रुक')
     ) {
-      window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+      setLastHeardCommand('Stop');
+      handleStop();
     }
-  }, []);
+  }, [handleNext, handlePrevious, handleRepeat, handleStop]);
 
-  // 5. UNIFIED EVENT LISTENER: Executes state changes and speech trigger safely
+  // 5. UNIFIED EVENT LISTENER: Executes state changes safely from global voice engine
   useEffect(() => {
     const handleVoiceCommand = (e: any) => {
       const { target } = e.detail || {};
@@ -256,7 +302,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         handlePrevious();
       } else if (target === 'REPEAT') {
         setLastHeardCommand('Repeat');
-        setSpeechTrigger((prev) => prev + 1);
+        handleRepeat();
       } else if (target === 'STOP') {
         setLastHeardCommand('Stop');
         handleStop();
@@ -265,7 +311,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
     window.addEventListener('ai_voice_command', handleVoiceCommand);
     return () => window.removeEventListener('ai_voice_command', handleVoiceCommand);
-  }, [handleNext, handlePrevious, handleStop]);
+  }, [handleNext, handlePrevious, handleRepeat, handleStop]);
 
   // 6. Start Voice Engine Listener
   useEffect(() => {
@@ -296,13 +342,13 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         handlePrevious();
       } else if (e.altKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
-        setSpeechTrigger((prev) => prev + 1);
+        handleRepeat();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext, handlePrevious, handleStop]);
+  }, [handleNext, handlePrevious, handleRepeat, handleStop]);
 
   return (
     <div 
@@ -424,7 +470,7 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
         {/* Repeat Button */}
         <button 
           id="walkthrough-btn-repeat"
-          onClick={() => setSpeechTrigger((prev) => prev + 1)} 
+          onClick={handleRepeat} 
           className="px-5 sm:px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
         >
           <span>🔁 Repeat</span>

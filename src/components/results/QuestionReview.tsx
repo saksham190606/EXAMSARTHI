@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -113,13 +113,17 @@ export function QuestionReview({
     });
   }, [currentWalkthroughIndex, results]);
 
+  const lastNavTimeRef = useRef<number>(0);
+
   // NAVIGATION: Handle NEXT, PREVIOUS, STOP, PAUSE voice commands
   useEffect(() => {
     const handleNavigation = (e: any) => {
       const { intent, target } = e.detail || {};
       
       if (!intent || intent === 'CONTROL') {
+        const now = Date.now();
         if (target === 'STOP' || target === 'PAUSE' || target === 'EXIT') {
+          lastNavTimeRef.current = now;
           if (typeof window !== 'undefined') window.speechSynthesis.cancel();
           
           // CRITICAL: Execute the parent's function to forcefully unmount this panel
@@ -131,10 +135,16 @@ export function QuestionReview({
             setIsWalkthroughActive(false);
           }
         } else if (target === 'PREVIOUS') {
+          if (now - lastNavTimeRef.current < 600) return;
+          lastNavTimeRef.current = now;
           setCurrentWalkthroughIndex((prev) => Math.max(prev - 1, 0));
         } else if (target === 'NEXT') {
+          if (now - lastNavTimeRef.current < 600) return;
+          lastNavTimeRef.current = now;
           setCurrentWalkthroughIndex((prev) => Math.min(prev + 1, (results?.questions?.length || 1) - 1));
         } else if (target === 'REPEAT') {
+          if (now - lastNavTimeRef.current < 600) return;
+          lastNavTimeRef.current = now;
           if (results?.questions && results.questions[currentWalkthroughIndex]) {
             const q = results.questions[currentWalkthroughIndex];
             const isCorrect = q.userAnswer === q.correctAnswer || Boolean(q.isCorrect);
