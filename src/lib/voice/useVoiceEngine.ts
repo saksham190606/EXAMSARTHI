@@ -7,6 +7,7 @@ import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { routeVoiceCommand, hasActiveContext } from './commandRouter';
 import { matchExamTokens, matchExamVoiceRoute } from './exam-router';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { isExamRoute, isExamActiveNow } from '@/lib/assistant/sarthiExamLock';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
@@ -581,7 +582,21 @@ export function startListening(
         return;
       }
 
-      if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko') || lower.includes('रुक')) {
+      const isStopCommand = 
+        lower.includes('stop') || 
+        lower.includes('exit') || 
+        lower.includes('quit') || 
+        lower.includes('close') || 
+        lower.includes('khatam') || 
+        lower.includes('ruko') || 
+        lower.includes('रुक') || 
+        lower.includes('band karo') || 
+        lower.includes('बंद करो') || 
+        lower.includes('बंद') || 
+        lower.includes('समाप्त') || 
+        lower.includes('cancel');
+
+      if (isStopCommand) {
         console.log("🔥 [VOICE ENGINE] 'Stop' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
         forwardTranscript(transcript);
@@ -598,6 +613,40 @@ export function startListening(
         }
         console.log("🔥 [VOICE ENGINE] 'Review' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
+        forwardTranscript(transcript);
+        return;
+      }
+
+      // "Hi Sarthi" assistant activation (allowed everywhere EXCEPT on the Exams tab)
+      const cleanSarthiText = lower.replace(/examsarthi/g, '').trim();
+      const isSarthiWakeWord = 
+        cleanSarthiText.includes('hi sarthi') || 
+        cleanSarthiText.includes('hey sarthi') || 
+        cleanSarthiText.includes('hello sarthi') || 
+        cleanSarthiText.includes('open sarthi') || 
+        cleanSarthiText.includes('sarthi ai') || 
+        cleanSarthiText.includes('सारथी') || 
+        cleanSarthiText.includes('हाय सारथी') || 
+        cleanSarthiText.includes('हे सारथी') || 
+        cleanSarthiText.includes('नमस्ते सारथी') || 
+        cleanSarthiText.includes('सारथी खोलो') || 
+        cleanSarthiText.includes('सारथी एआई') || 
+        cleanSarthiText === 'sarthi' ||
+        /\b(hi|hey|hello|open|start)\s+sarthi\b/.test(cleanSarthiText);
+
+      if (isSarthiWakeWord) {
+        const inExamTab = isExamActiveNow() || (typeof window !== 'undefined' && isExamRoute(window.location.pathname));
+        if (inExamTab) {
+          console.log("🚫 [VOICE ENGINE] 'Hi Sarthi' ignored: Sarthi AI is strictly locked on the Exams tab!");
+          return;
+        }
+
+        console.log("🔥 [VOICE ENGINE] 'Hi Sarthi' caught! Dispatching assistant open event...");
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'SARTHI', target: 'OPEN' } }));
+        window.dispatchEvent(new CustomEvent('examsarthi-open-sarthi', { detail: { source: 'voice', transcript: lower } }));
         forwardTranscript(transcript);
         return;
       }

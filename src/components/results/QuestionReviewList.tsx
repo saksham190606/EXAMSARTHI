@@ -766,6 +766,18 @@ export function QuestionReviewList({
     };
   }, [isAudioReviewActive, isSpeaking, isWaitingForConsent, handleNext, handlePrev, handleRepeat, handleTogglePause, handleStop, handleResume]);
 
+  // Global voice command listener for STOP to instantly halt walkthrough
+  useEffect(() => {
+    const handleVoiceStop = (e: any) => {
+      const { target } = e.detail || {};
+      if (target === 'STOP') {
+        stopAudioWalkthrough();
+      }
+    };
+    window.addEventListener('ai_voice_command', handleVoiceStop);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceStop);
+  }, [stopAudioWalkthrough]);
+
   // Keyboard Shortcuts: Alt+A (Toggle Walkthrough), Alt+P (Prev), Alt+N (Next), Alt+R (Repeat), Space (Pause/Resume), Escape (Stop)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -291,6 +291,32 @@ export function SarthiWidget() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Open Sarthi AI on voice wake word ("Hi Sarthi"), strictly blocked on Exams tab
+  useEffect(() => {
+    const handleVoiceWakeWord = (e: any) => {
+      // Strictly prevent opening on the Exams tab or during an active exam
+      if (isExamActiveRef.current || isExamActiveNow() || isExamRoute(pathnameRef.current)) {
+        console.log("🚫 [SarthiWidget] Voice wake word rejected: Sarthi AI is disabled on Exams tab");
+        return;
+      }
+
+      const { target, intent } = e.detail || {};
+      const isWakeMatch = (intent === 'SARTHI' && target === 'OPEN') || e.type === 'examsarthi-open-sarthi';
+      if (isWakeMatch) {
+        console.log("🔥 [SarthiWidget] 'Hi Sarthi' wake word activated: Opening Sarthi AI Assistant");
+        handleStateChange('ACTIVATED');
+      }
+    };
+
+    window.addEventListener('ai_voice_command', handleVoiceWakeWord);
+    window.addEventListener('examsarthi-open-sarthi', handleVoiceWakeWord);
+
+    return () => {
+      window.removeEventListener('ai_voice_command', handleVoiceWakeWord);
+      window.removeEventListener('examsarthi-open-sarthi', handleVoiceWakeWord);
+    };
+  }, [handleStateChange]);
+
   // Side effects for state transitions when triggered via keyboard
   useEffect(() => {
     if (isExamActive || isExamActiveNow()) {

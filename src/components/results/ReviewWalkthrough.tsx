@@ -124,6 +124,9 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       : `The official correct response is ${correctDisplay}. Review foundational subject principles to reinforce this topic.`
   );
 
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const keepaliveTimerRef = useRef<any>(null);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -138,11 +141,19 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     const q = rawQuestions[currentIndex];
     if (!q) return;
 
-    // 3. Kill any currently playing audio instantly & pause mic so it cannot hear itself
-    window.speechSynthesis.cancel();
-    stopListening();
+    // 3. Clear any ongoing speech and timers cleanly
+    if (keepaliveTimerRef.current) {
+      clearInterval(keepaliveTimerRef.current);
+      keepaliveTimerRef.current = null;
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
 
-    // 4. Speak exactly once with a strictly male voice
+    // Ensure continuous microphone listening is running so candidate can say "stop" or other commands at any time
+    try { startListening('en-IN'); } catch (_) {}
+
+    // 4. Speak with a strictly male voice
     const text = `Question ${currentIndex + 1}. ${q.questionText || q.text || `Question ${currentIndex + 1}`}. You answered ${userDisplay}. ${isCorrect ? "Correct!" : `Incorrect. The correct answer is ${correctDisplay}.`} Explanation: ${explanation}`;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
@@ -152,29 +163,65 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       utterance.voice = maleVoice;
     }
 
-    // Microphone opens ONLY after companion finishes speaking
+    // Retain global and ref anchor to avoid Chromium garbage collection bug on longer explanations
+    activeUtteranceRef.current = utterance;
+    (window as any).__reviewUtterance = utterance;
+    (window as any).isSystemSpeaking = true;
+
+    // Keepalive loop: pulses pause/resume every 5s to bypass Chromium TTS buffer stall
+    keepaliveTimerRef.current = setInterval(() => {
+      try {
+        if (typeof window !== 'undefined' && window.speechSynthesis?.speaking && !window.speechSynthesis?.paused) {
+          window.speechSynthesis.pause();
+          setTimeout(() => {
+            if (typeof window !== 'undefined' && window.speechSynthesis) {
+              window.speechSynthesis.resume();
+            }
+          }, 40);
+        }
+      } catch (_) {}
+    }, 5000);
+
+    utterance.onstart = () => {
+      (window as any).isSystemSpeaking = true;
+    };
+
     utterance.onend = () => {
-      if (typeof window !== 'undefined') {
-        setTimeout(() => {
-          startListening('en-IN');
-        }, 300);
+      if (keepaliveTimerRef.current) {
+        clearInterval(keepaliveTimerRef.current);
+        keepaliveTimerRef.current = null;
       }
+      (window as any).isSystemSpeaking = false;
+      activeUtteranceRef.current = null;
+      (window as any).__reviewUtterance = null;
+      try { startListening('en-IN'); } catch (_) {}
     };
 
     utterance.onerror = () => {
-      if (typeof window !== 'undefined') {
-        setTimeout(() => {
-          startListening('en-IN');
-        }, 300);
+      if (keepaliveTimerRef.current) {
+        clearInterval(keepaliveTimerRef.current);
+        keepaliveTimerRef.current = null;
       }
+      (window as any).isSystemSpeaking = false;
+      activeUtteranceRef.current = null;
+      (window as any).__reviewUtterance = null;
+      try { startListening('en-IN'); } catch (_) {}
     };
 
     window.speechSynthesis.speak(utterance);
 
-    // 5. Cleanup on unmount
+    // 5. Cleanup on unmount or index change
     return () => {
-      window.speechSynthesis.cancel();
-      stopListening();
+      if (keepaliveTimerRef.current) {
+        clearInterval(keepaliveTimerRef.current);
+        keepaliveTimerRef.current = null;
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+      (window as any).isSystemSpeaking = false;
+      activeUtteranceRef.current = null;
+      (window as any).__reviewUtterance = null;
     };
   }, [currentIndex, rawQuestions, speechTrigger, userDisplay, isCorrect, correctDisplay, explanation]);
 
@@ -182,10 +229,22 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
   const handleStop = useCallback(() => {
     const now = Date.now();
     lastCommandTimeRef.current = now;
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      try { window.speechSynthesis.cancel(); } catch (_) {}
+
+    if (keepaliveTimerRef.current) {
+      clearInterval(keepaliveTimerRef.current);
+      keepaliveTimerRef.current = null;
     }
-    stopListening();
+
+    if (typeof window !== 'undefined') {
+      (window as any).isSystemSpeaking = false;
+      (window as any).__reviewUtterance = null;
+      if (window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+      }
+    }
+
+    // Keep microphone alive for voice navigation on the results page
+    try { startListening('en-IN'); } catch (_) {}
     onClose();
   }, [onClose]);
 
@@ -237,6 +296,32 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     const lower = transcript.toLowerCase().trim();
     console.log('[ReviewWalkthrough Direct Mic]:', lower);
 
+    // CRITICAL: Stop & exit commands are ALWAYS prioritized immediately without cooldown
+    const isStop = 
+      lower.includes('stop') || 
+      lower.includes('exit') || 
+      lower.includes('close') || 
+      lower.includes('quit') || 
+      lower.includes('cancel') || 
+      lower.includes('khatam') || 
+      lower.includes('ruko') || 
+      lower.includes('रुक') ||
+      lower.includes('band karo') ||
+      lower.includes('बंद करो') ||
+      lower.includes('बंद') ||
+      lower.includes('समाप्त') ||
+      lower.includes('वापस') ||
+      lower.includes('back to result') ||
+      lower.includes('go back to result') ||
+      lower === 'result' ||
+      lower === 'results';
+
+    if (isStop) {
+      setLastHeardCommand('Stop');
+      handleStop();
+      return;
+    }
+
     const now = Date.now();
     if (now - lastCommandTimeRef.current < COMMAND_COOLDOWN_MS) {
       return;
@@ -273,18 +358,6 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
     ) {
       setLastHeardCommand('Repeat');
       handleRepeat();
-    } else if (
-      lower.includes('stop') || 
-      lower.includes('exit') || 
-      lower.includes('close') || 
-      lower.includes('quit') || 
-      lower.includes('cancel') || 
-      lower.includes('khatam') || 
-      lower.includes('ruko') ||
-      lower.includes('रुक')
-    ) {
-      setLastHeardCommand('Stop');
-      handleStop();
     }
   }, [handleNext, handlePrevious, handleRepeat, handleStop]);
 
@@ -294,7 +367,10 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       const { target } = e.detail || {};
       console.log('🔥 [ReviewWalkthrough Event Listener] Command received:', target);
 
-      if (target === 'NEXT') {
+      if (target === 'STOP') {
+        setLastHeardCommand('Stop');
+        handleStop();
+      } else if (target === 'NEXT') {
         setLastHeardCommand('Next');
         handleNext();
       } else if (target === 'PREVIOUS') {
@@ -303,9 +379,6 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
       } else if (target === 'REPEAT') {
         setLastHeardCommand('Repeat');
         handleRepeat();
-      } else if (target === 'STOP') {
-        setLastHeardCommand('Stop');
-        handleStop();
       }
     };
 
@@ -315,16 +388,18 @@ export default function ReviewWalkthrough({ results, onClose }: ReviewWalkthroug
 
   // 6. Start Voice Engine Listener
   useEffect(() => {
+    try { startListening('en-IN'); } catch (_) {}
+
     const unsub = subscribe((text: string) => {
       processVoiceCommand(text);
     });
 
     return () => {
       unsub();
-      stopListening();
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         try { window.speechSynthesis.cancel(); } catch (_) {}
       }
+      try { startListening('en-IN'); } catch (_) {}
     };
   }, [processVoiceCommand]);
 
