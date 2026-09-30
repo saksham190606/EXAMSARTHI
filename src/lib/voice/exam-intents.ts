@@ -85,7 +85,7 @@ export const EXAM_KEYWORD_MAPS: KeywordDefinition[] = [
   },
   {
     type: 'MARK_FOR_REVIEW',
-    keywords: ["mark for review", "review", "flag", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "mark", "flag question", "चिन्हित करो"],
+    keywords: ["flag for review", "flagfor review", "flagfor", "flag", "mark for review", "review", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "mark", "flag question", "flag this", "चिन्हित करो"],
     audioConfirmationEn: "Marked for review",
     audioConfirmationHi: "समीक्षा के लिए चिह्नित किया गया",
   },

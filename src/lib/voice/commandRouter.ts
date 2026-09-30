@@ -216,11 +216,14 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     };
   }
 
-  const positivePhrases = ['next', 'next question', 'agla', 'aage', 'अगला', 'next question please'];
-  const negativePhrases = ['previous', 'back', 'pichla', 'पिछला', 'पीछे', 'prev'];
-  const repeatPhrases = ['repeat', 'repeat question', 'read again', 'dobara', 'दोबारा', 'फिर से', 'read question'];
+  const positivePhrases = ['next', 'next question', 'agla', 'aage', 'अगला', 'next question please', 'forward', 'aage badho', 'आगे'];
+  const negativePhrases = ['previous', 'back', 'pichla', 'पिछला', 'पीछे', 'prev', 'previous question', 'piche', 'peeche'];
+  const repeatPhrases = ['repeat', 'repeat question', 'read again', 'dobara', 'दोबारा', 'फिर से', 'read question', 'once more', 'dohrao'];
   const clearPhrases = ['clear', 'clear answer', 'remove answer', 'erase', 'साफ करो', 'खाली करो', 'हटाओ'];
-  const flagPhrases = ['flag', 'mark for review', 'review', 'फ्लैग', 'रिव्यू', 'चिह्नित करो'];
+  const flagPhrases = [
+    'flag', 'flag for review', 'flagfor review', 'flagfor', 'mark for review', 'flag this', 'flag question',
+    'mark', 'review later', 'bookmark', 'review', 'फ्लैग', 'रिव्यू', 'चिह्नित करो', 'चिह्नित'
+  ];
   const submitPhrases = ['submit', 'submit exam', 'finish exam', 'submit test', 'सबमिट', 'परीक्षा समाप्त'];
   const confirmPhrases = ['yes', 'confirm', 'haan', 'हाँ', 'हां', 'proceed'];
   const cancelPhrases = ['no', 'cancel', 'nahin', 'नहीं', 'रद्द'];

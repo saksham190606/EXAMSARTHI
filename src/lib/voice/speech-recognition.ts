@@ -68,7 +68,7 @@ const PHONETIC_MAP: Record<CanonicalAction, string[]> = {
     "repeat", "repeet", "re-read", "दोबारा", "फिर से", "read again", "repeat question", "dobara padho", "दोबारा बोलो", "फिर से पढ़ो"
   ],
   FLAG_REVIEW: [
-    "flag", "mark", "review", "flag for review", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
+    "flag", "mark", "review", "flag for review", "flagfor review", "flagfor", "flag this", "flag question", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
   ],
   CLEAR_RESPONSE: [
     "clear", "clear response", "clear answer", "unselect", "remove answer", "erase", "साफ करो", "हटाओ", "खाली करो", "remove"

@@ -497,30 +497,76 @@ export function startListening(
       lastDeliveredTranscript = lower;
       lastDeliveredTime = now;
 
-      // Always allow critical navigation & review commands to fire immediately!
-      if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage')) {
-        console.log("🔥 [VOICE ENGINE] 'Next' command caught! Dispatching global event...");
+      const forwardTranscript = (text: string) => {
+        if (activeRecognitionHandler) {
+          try { activeRecognitionHandler(text); } catch (_) {}
+        } else {
+          transcriptSubscribers.forEach((cb) => {
+            try { cb(text); } catch (_) {}
+          });
+        }
+      };
+
+      // Always allow critical navigation, flag & review commands to fire immediately and notify handlers!
+      const isFlagCommand = 
+        lower.includes('flag') || 
+        lower.includes('mark for review') || 
+        lower.includes('flag for review') || 
+        lower.includes('flagfor review') || 
+        lower.includes('flagfor') || 
+        lower.includes('flag this') || 
+        lower.includes('flag question') || 
+        lower.includes('review later') || 
+        lower.includes('bookmark') || 
+        lower.includes('चिह्नित') || 
+        lower.includes('फ्लैग');
+
+      if (isFlagCommand) {
+        console.log("🔥 [VOICE ENGINE] 'Flag for review' command caught! Dispatching event and forwarding...");
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'FLAG' } }));
+        forwardTranscript(transcript);
+        return;
+      }
+
+      if (lower.includes('next') || lower.includes('forward') || lower.includes('agla') || lower.includes('aage') || lower.includes('अगला')) {
+        console.log("🔥 [VOICE ENGINE] 'Next' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'NEXT' } }));
+        forwardTranscript(transcript);
         return;
       }
-      if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('peeche')) {
-        console.log("🔥 [VOICE ENGINE] 'Previous' command caught! Dispatching global event...");
+
+      if (lower.includes('previous') || lower.includes('back') || lower.includes('prev') || lower.includes('pichhla') || lower.includes('pichla') || lower.includes('peeche') || lower.includes('पिछला')) {
+        console.log("🔥 [VOICE ENGINE] 'Previous' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'PREVIOUS' } }));
+        forwardTranscript(transcript);
         return;
       }
-      if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se')) {
-        console.log("🔥 [VOICE ENGINE] 'Repeat' command caught! Dispatching global event...");
+
+      if (lower.includes('repeat') || lower.includes('again') || lower.includes('once more') || lower.includes('dohrao') || lower.includes('fir se') || lower.includes('phir se') || lower.includes('दोबारा')) {
+        console.log("🔥 [VOICE ENGINE] 'Repeat' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REPEAT' } }));
+        forwardTranscript(transcript);
         return;
       }
-      if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko')) {
-        console.log("🔥 [VOICE ENGINE] 'Stop' command caught! Dispatching global event...");
+
+      if (lower.includes('stop') || lower.includes('exit') || lower.includes('quit') || lower.includes('close') || lower.includes('khatam') || lower.includes('ruko') || lower.includes('रुक')) {
+        console.log("🔥 [VOICE ENGINE] 'Stop' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'STOP' } }));
+        forwardTranscript(transcript);
         return;
       }
-      if (lower.includes('review')) {
-        console.log("🔥 [VOICE ENGINE] 'Review' command caught! Dispatching global event...");
+
+      if (lower.includes('review') || lower.includes('रिव्यू')) {
+        const inExam = typeof window !== 'undefined' && window.location.pathname.startsWith('/exam');
+        if (inExam) {
+          console.log("🔥 [VOICE ENGINE] 'Review' in exam context -> Handling as Flag for review!");
+          window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'FLAG' } }));
+          forwardTranscript(transcript);
+          return;
+        }
+        console.log("🔥 [VOICE ENGINE] 'Review' command caught! Dispatching global event & forwarding...");
         window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
+        forwardTranscript(transcript);
         return;
       }
 
@@ -692,11 +738,22 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   }
 
   const lowerTranscript = transcript.toLowerCase().trim();
-
   const lower = lowerTranscript;
+
+  // 0. Flag for review
+  const isFlag = lower.includes('flag') || lower.includes('mark for review') || lower.includes('flag for review') || lower.includes('flagfor review') || lower.includes('flagfor') || lower.includes('bookmark');
+  if (isFlag) {
+    window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'FLAG' } }));
+    return { intent: 'CONTROL', target: 'FLAG' };
+  }
 
   // 1. Trigger the Panel
   if (lower.includes('review')) {
+    const inExam = typeof window !== 'undefined' && window.location.pathname.startsWith('/exam');
+    if (inExam) {
+      window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'FLAG' } }));
+      return { intent: 'CONTROL', target: 'FLAG' };
+    }
     window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'CONTROL', target: 'REVIEW' } }));
     return { intent: 'CONTROL', target: 'REVIEW' };
   }

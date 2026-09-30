@@ -465,9 +465,9 @@ export function useVoiceMode({
     }
 
     // FLAG FOR REVIEW:
-    // Keywords: ["flag", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग"]
+    // Keywords: ["flag", "flagfor", "flag for review", "flagfor review", "mark for review", "mark", "review later", "bookmark", "चिह्नित करो", "फ्लैग"]
     const flagKeywords = [
-      "flag", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग", "flag for review", "mark for review", "बाद में देखेंगे", "bookmark", "चिह्नित"
+      "flag", "flagfor", "flag for review", "flagfor review", "flag this", "flag question", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग", "mark for review", "बाद में देखेंगे", "bookmark", "चिह्नित"
     ];
     if (phoneticMatch?.action === 'FLAG_REVIEW' || flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
       lastCommandTimeRef.current = now;
@@ -490,7 +490,7 @@ export function useVoiceMode({
 
     // NEXT QUESTION:
     // Keywords: ["next", "agla", "आगे", "अगला"]
-    const nextKeywords = ["next", "agla", "अगला", "next question"];
+    const nextKeywords = ["next", "agla", "अगला", "next question", "forward", "aage", "आगे", "next please"];
     if (phoneticMatch?.action === 'NAVIGATE_NEXT' || nextKeywords.some((k) => transcript === k || wholeWordMatch(transcript, k))) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
@@ -500,7 +500,7 @@ export function useVoiceMode({
 
     // PREVIOUS QUESTION:
     // Keywords: ["previous", "back", "pichla", "पिछला", "पीछे"]
-    const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche"];
+    const prevKeywords = ["previous", "back", "pichla", "पिछला", "पीछे", "piche", "prev", "previous question", "peeche"];
     if (phoneticMatch?.action === 'NAVIGATE_PREVIOUS' || prevKeywords.some((k) => transcript === k || wholeWordMatch(transcript, k))) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
@@ -776,6 +776,47 @@ export function useVoiceMode({
     window.addEventListener('keydown', handleSpaceUnlock);
     return () => window.removeEventListener('keydown', handleSpaceUnlock);
   }, [isAudioUnlocked, unlockAudio]);
+
+  // Support globally dispatched AI Voice Commands (NEXT, PREVIOUS, FLAG, REPEAT, STOP)
+  useEffect(() => {
+    const handleVoiceCommandEvent = (e: Event) => {
+      const event = e as CustomEvent;
+      if (event.detail?.intent !== 'CONTROL') return;
+      const target = event.detail?.target;
+      const now = Date.now();
+
+      if (target === 'NEXT') {
+        if (now - lastCommandTimeRef.current >= 600) {
+          lastCommandTimeRef.current = now;
+          playVoiceFeedbackChime();
+          handleNextQuestion();
+        }
+      } else if (target === 'PREVIOUS') {
+        if (now - lastCommandTimeRef.current >= 600) {
+          lastCommandTimeRef.current = now;
+          playVoiceFeedbackChime();
+          handlePrevQuestion();
+        }
+      } else if (target === 'FLAG') {
+        if (now - lastCommandTimeRef.current >= 600) {
+          lastCommandTimeRef.current = now;
+          playVoiceFeedbackChime();
+          handleToggleFlag();
+        }
+      } else if (target === 'REPEAT') {
+        if (now - lastCommandTimeRef.current >= 600) {
+          lastCommandTimeRef.current = now;
+          playVoiceFeedbackChime();
+          readCurrentQuestion();
+        }
+      } else if (target === 'STOP') {
+        stopSpeaking();
+      }
+    };
+
+    window.addEventListener('ai_voice_command', handleVoiceCommandEvent);
+    return () => window.removeEventListener('ai_voice_command', handleVoiceCommandEvent);
+  }, [handleNextQuestion, handlePrevQuestion, handleToggleFlag, readCurrentQuestion]);
 
   // Auto-read question 1 on initial load
   useEffect(() => {
