@@ -390,56 +390,58 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         </div>
       )}
 
-      {/* Accessibility Live Status Indicator */}
-      {accessibilityMode === 'keyboard' ? (
-        <div
-          aria-live="polite"
-          className="fixed bottom-4 left-16 z-[9998] flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md backdrop-blur-md border transition-all duration-300 select-none bg-background/90 text-foreground border-border/80"
-        >
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          <span>
-            {language === 'hi' 
-              ? 'कीबोर्ड मोड (E: परीक्षा | D: डैशबोर्ड | S: सारथी | ?: मदद)' 
-              : 'Keyboard Mode (E: Exam | D: Dashboard | S: Sarthi | ?: Help)'}
-          </span>
-        </div>
-      ) : (
-        <div
-          aria-live="polite"
-          className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium shadow-lg backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
-        >
-          {isSpeaking ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
-              </span>
-              <Volume2 className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
-              <span className="text-blue-600 dark:text-blue-400 font-semibold">
-                {language === 'hi' ? 'साथी बोल रहा है (माइक रुका हुआ)' : 'Companion Speaking (Mic Paused)'}
-              </span>
-            </>
-          ) : isListening ? (
-            <>
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-              </span>
-              <Mic className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                {language === 'hi' ? 'माइक सक्रिय (सुन रहा है)' : 'Mic Live (Listening Always)'}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-              <MicOff className="h-3.5 w-3.5 text-amber-500" />
-              <span className="text-muted-foreground font-semibold">
-                {language === 'hi' ? 'वॉइस कनेक्ट हो रहा है...' : 'Voice Connecting...'}
-              </span>
-            </>
-          )}
-        </div>
+      {/* Accessibility Live Status Indicator - Hidden on root landing page */}
+      {!isLandingRoute && (
+        accessibilityMode === 'keyboard' ? (
+          <div
+            aria-live="polite"
+            className="fixed bottom-4 left-16 z-[9998] flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md backdrop-blur-md border transition-all duration-300 select-none bg-background/90 text-foreground border-border/80"
+          >
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            <span>
+              {language === 'hi' 
+                ? 'कीबोर्ड मोड (E: परीक्षा | D: डैशबोर्ड | S: सारथी | ?: मदद)' 
+                : 'Keyboard Mode (E: Exam | D: Dashboard | S: Sarthi | ?: Help)'}
+            </span>
+          </div>
+        ) : (
+          <div
+            aria-live="polite"
+            className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium shadow-lg backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
+          >
+            {isSpeaking ? (
+              <>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+                </span>
+                <Volume2 className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
+                <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                  {language === 'hi' ? 'साथी बोल रहा है (माइक रुका हुआ)' : 'Companion Speaking (Mic Paused)'}
+                </span>
+              </>
+            ) : isListening ? (
+              <>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                <Mic className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {language === 'hi' ? 'माइक सक्रिय (सुन रहा है)' : 'Mic Live (Listening Always)'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                <MicOff className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-muted-foreground font-semibold">
+                  {language === 'hi' ? 'वॉइस कनेक्ट हो रहा है...' : 'Voice Connecting...'}
+                </span>
+              </>
+            )}
+          </div>
+        )
       )}
     </>
   )

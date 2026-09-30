@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { Database } from '@/types/database';
@@ -143,8 +144,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return fallbackProfile;
   }, [supabase]);
 
+  const pathname = usePathname();
+
   useEffect(() => {
-    // Check if demo user is stored in localStorage or cookie
+    // If on the launch page ('/'), explicitly sign out any previous session so previous login is not preserved
+    if (pathname === '/' || pathname === '') {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('examsarthi_demo_auth');
+          sessionStorage.removeItem('examsarthi_demo_auth');
+          document.cookie = 'examsarthi_demo_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        } catch (_) {}
+      }
+      if (supabase) {
+        supabase.auth.signOut().catch(() => {});
+      }
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    // Check if demo user is stored in localStorage or cookie (only on authenticated/app routes)
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('examsarthi_demo_auth');
@@ -194,6 +216,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen to real-time auth state transitions
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
       if (!isMounted) return;
+      if (pathname === '/' || pathname === '') {
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       setSession(currentSession);
       const currentUser = currentSession?.user ?? null;
       setUser(currentUser);
@@ -212,7 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase, syncProfile]);
+  }, [supabase, syncProfile, pathname]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     // Demo credentials bypass (priyansh01 / 12345)

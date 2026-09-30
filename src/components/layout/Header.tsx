@@ -117,7 +117,7 @@ export function Header() {
             </span>
           </Link>
           
-          <NavigationTabs className="hidden md:flex ml-4" />
+          {user && <NavigationTabs className="hidden md:flex ml-4" />}
         </div>
 
         <div className="flex items-center gap-3">

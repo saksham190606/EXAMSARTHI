@@ -466,7 +466,8 @@ export function startListening(
 ): void {
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal, explicitSession: options.explicitSession });
   if (typeof window === 'undefined') return;
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard' && !options.explicitSession) {
+  const isLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
+  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard' && !options.explicitSession && !isLanding) {
     (window as any).__alwaysListening = false;
     return;
   }

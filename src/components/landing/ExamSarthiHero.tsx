@@ -113,10 +113,12 @@ export default function ExamSarthiHero() {
   }, []);
 
   // 1. Initial Voice Assistant Brief on Landing Page
-  // 1. Initial Voice Assistant Brief on Landing Page
-  const playBrief = useCallback(async (force: boolean = false) => {
+  const playBrief = useCallback((force: boolean = false) => {
     if (!force && hasSpokenBriefSuccessfullyRef.current) return;
     if (isSpeakingBriefRef.current) return;
+
+    // Reset mode to voice while on landing page so speech recognition is not blocked
+    useAccessibilityStore.getState().setAccessibilityMode('voice');
 
     // Strictly stop microphone while the launch brief is playing so it doesn't listen to itself
     voiceEngine.stop();
@@ -133,24 +135,40 @@ export default function ExamSarthiHero() {
     unlockAudioContext();
     isSpeakingBriefRef.current = true;
 
+    let briefFinished = false;
+    const onBriefComplete = () => {
+      if (briefFinished) return;
+      briefFinished = true;
+      isSpeakingBriefRef.current = false;
+      hasSpokenBriefSuccessfullyRef.current = true;
+
+      // ONLY AFTER completing the launch brief: open the mic for user to say their choice!
+      unlockAudioContext();
+      requestMicPermission().catch(() => {});
+      useAccessibilityStore.getState().setIsListeningCommands(true);
+      setTimeout(() => {
+        voiceEngine.startAlwaysOnListening();
+      }, 150);
+    };
+
     forceSpeak(
       briefText,
-      () => {
-        isSpeakingBriefRef.current = false;
-        hasSpokenBriefSuccessfullyRef.current = true;
-        // ONLY AFTER completing the launch brief: open the mic for user to say their choice!
-        unlockAudioContext();
-        requestMicPermission().catch(() => {});
-        setTimeout(() => {
-          voiceEngine.startAlwaysOnListening();
-        }, 200);
-      },
+      onBriefComplete,
       isHindi ? 'hi-IN' : 'en-US',
       (err) => {
         console.warn("[ExamSarthiHero] Brief speech deferred until user gesture:", err);
         isSpeakingBriefRef.current = false;
+        onBriefComplete();
       }
     );
+
+    // Safety fallback timer: guarantee mic opens after speech duration if onend is swallowed by browser
+    setTimeout(() => {
+      if (isSpeakingBriefRef.current && !briefFinished) {
+        console.log("[ExamSarthiHero] Fallback timeout opening mic");
+        onBriefComplete();
+      }
+    }, 16000);
   }, [isHindi]);
 
   // Mode Selection Handler: Voice or Keyboard
@@ -211,6 +229,9 @@ export default function ExamSarthiHero() {
   useEffect(() => {
     // Eagerly pre-load browser voices on landing page mount
     fetchAvailableVoices().catch(() => {});
+
+    // Ensure mode is set to voice on initial launch so mic is not blocked
+    useAccessibilityStore.getState().setAccessibilityMode('voice');
 
     // Attempt automatic playback shortly after mount
     const timer = setTimeout(() => {
@@ -438,14 +459,20 @@ export default function ExamSarthiHero() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            onClick={() => playBrief(true)}
-            title="Click to hear launch overview"
+            onClick={() => {
+              unlockAudioContext();
+              requestMicPermission().catch(() => {});
+              voiceEngine.startAlwaysOnListening();
+            }}
+            title="Click to activate voice commands or hear launch overview"
             className="mt-5 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md cursor-pointer hover:border-[#ffed00] transition-colors"
           >
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className={cn("h-2 w-2 rounded-full", isListening ? "bg-emerald-400 animate-pulse" : "bg-amber-400 animate-pulse")} />
             <span>
               {statusMessage
                 ? (isHindi ? `सुना: "${statusMessage}"` : `Heard: "${statusMessage}"`)
+                : isListening
+                ? (isHindi ? "माइक चालू है: बोलें 'वॉइस' या 'कीबोर्ड'" : "Mic Active: Say 'Voice' or 'Keyboard'")
                 : (isHindi 
                     ? "बोलें: 'वॉइस' (V दबाएं) अथवा 'कीबोर्ड' (K दबाएं)" 
                     : "Say: 'Voice' (Press V) or 'Keyboard' (Press K)")}

@@ -293,7 +293,13 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onEr
         (window as any).__activeUtterance = utterance;
       }
 
-      utterance.onend = () => {
+      let ended = false;
+      let keepaliveTimer: NodeJS.Timeout | null = null;
+
+      const finishSpeech = () => {
+        if (ended) return;
+        ended = true;
+        if (keepaliveTimer) clearInterval(keepaliveTimer);
         isAnnouncingWelcome = false;
         activeUtteranceRef = null;
         if (typeof window !== "undefined") {
@@ -302,21 +308,39 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onEr
         if (onEnd) onEnd();
       };
 
+      utterance.onend = finishSpeech;
+
       utterance.onerror = (e) => {
         isAnnouncingWelcome = false;
         console.warn("[VoiceCompanion] Utterance error:", e);
-        activeUtteranceRef = null;
-        if (typeof window !== "undefined") {
-          (window as any).__activeUtterance = null;
-        }
         if (onError) onError(e);
-        else if (onEnd) onEnd();
+        finishSpeech();
       };
 
-      // Safeguard timeout to ensure isAnnouncingWelcome doesn't stay stuck forever
+      // Periodic keepalive for Chromium browsers so long speech utterances don't freeze at 14s
+      keepaliveTimer = setInterval(() => {
+        if (ended) {
+          if (keepaliveTimer) clearInterval(keepaliveTimer);
+          return;
+        }
+        try {
+          if (synth.speaking && !synth.paused) {
+            synth.pause();
+            setTimeout(() => {
+              if (!ended) synth.resume();
+            }, 60);
+          }
+        } catch (_) {}
+      }, 9000);
+
+      // Safe duration fallback: approx 14 chars/sec + 4s buffer
+      const safeDurationSec = Math.max(12, Math.ceil(spokenText.length / 14) + 4);
       setTimeout(() => {
-        isAnnouncingWelcome = false;
-      }, 15000);
+        if (!ended) {
+          console.log("[VoiceCompanion] Safe duration fallback triggering speech completion after", safeDurationSec, "seconds");
+          finishSpeech();
+        }
+      }, safeDurationSec * 1000);
 
       setTimeout(() => {
         try {
@@ -326,7 +350,7 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onEr
           isAnnouncingWelcome = false;
           console.warn("[VoiceCompanion] synth.speak error:", err);
           if (onError) onError(err);
-          else if (onEnd) onEnd();
+          finishSpeech();
         }
       }, 50);
     } catch (err) {
@@ -1407,7 +1431,8 @@ class VoiceNavigationEngine {
 
   public startAlwaysOnListening(): void {
     if (!isSpeechRecognitionSupported()) return;
-    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+    const isLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
+    if (!isLanding && useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
       this.isListeningExplicitly = false;
       return;
     }
@@ -1415,7 +1440,7 @@ class VoiceNavigationEngine {
     useAccessibilityStore.getState().setIsListeningCommands(true);
     const store = useAccessibilityStore.getState();
     const lang = store.language === "hi" ? "hi-IN" : "en-US";
-    globalStartListening(lang, (t) => this.processCommand(t));
+    globalStartListening(lang, (t) => this.processCommand(t), { explicitSession: isLanding });
   }
 
   public stopListening(): void {
