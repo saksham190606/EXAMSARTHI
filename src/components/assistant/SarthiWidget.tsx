@@ -299,7 +299,20 @@ export function SarthiWidget() {
       lower.includes('sepia');
 
     if (isColorCommand) {
-      if (lower.includes('deuteranopia') || lower.includes('protanopia') || lower.includes('red green') || lower.includes('लाल हरा')) {
+      // 1. Protanopia (Red-blind / Red-weak)
+      if (lower.includes('protanopia') || lower.includes('red weak') || lower.includes('red blind') || lower.includes('लाल अंधा') || lower.includes('लाल कमजोरी')) {
+        accessibilityStore.setColorTheme('protanopia');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'प्रोटानोपिया (लाल-कमजोरी सुरक्षित) पैलेट लागू किया गया।' 
+          : 'Protanopia red-weak accessible cyan palette applied.';
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      // 2. Deuteranopia (Green-weak / Red-Green)
+      if (lower.includes('deuteranopia') || lower.includes('red green') || lower.includes('green blind') || lower.includes('green weak') || lower.includes('लाल हरा')) {
         accessibilityStore.setColorTheme('deuteranopia');
         handleStateChange('SPEAKING');
         const resp = isHindi 
@@ -310,7 +323,8 @@ export function SarthiWidget() {
         return;
       }
 
-      if (lower.includes('tritanopia') || lower.includes('blue yellow') || lower.includes('नीला पीला')) {
+      // 3. Tritanopia (Blue-Yellow)
+      if (lower.includes('tritanopia') || lower.includes('blue yellow') || lower.includes('blue blind') || lower.includes('नीला पीला')) {
         accessibilityStore.setColorTheme('tritanopia');
         handleStateChange('SPEAKING');
         const resp = isHindi 
@@ -321,7 +335,8 @@ export function SarthiWidget() {
         return;
       }
 
-      if (lower.includes('monochrome') || lower.includes('grayscale') || lower.includes('black and white') || lower.includes('मोनोक्रोम')) {
+      // 4. Monochrome (Achromatopsia / Complete color blindness)
+      if (lower.includes('monochrome') || lower.includes('grayscale') || lower.includes('black and white') || lower.includes('achromatopsia') || lower.includes('मोनोक्रोम')) {
         accessibilityStore.setColorTheme('monochrome');
         handleStateChange('SPEAKING');
         const resp = isHindi 
@@ -332,7 +347,8 @@ export function SarthiWidget() {
         return;
       }
 
-      if (lower.includes('sepia') || lower.includes('warm') || lower.includes('एंटी-ग्लेयर') || lower.includes('सेपिया')) {
+      // 5. Sepia (Photophobia / Anti-glare / Eye fatigue)
+      if (lower.includes('sepia') || lower.includes('warm') || lower.includes('anti glare') || lower.includes('antiglare') || lower.includes('eye strain') || lower.includes('photophobia') || lower.includes('एंटी-ग्लेयर') || lower.includes('सेपिया')) {
         accessibilityStore.setColorTheme('sepia');
         handleStateChange('SPEAKING');
         const resp = isHindi 
@@ -343,7 +359,8 @@ export function SarthiWidget() {
         return;
       }
 
-      if (lower.includes('default') || lower.includes('reset') || lower.includes('normal') || lower.includes('standard') || lower.includes('मानक') || lower.includes('डिफ़ॉल्ट')) {
+      // 6. Default (Standard current UI theme)
+      if (lower.includes('default') || lower.includes('reset') || lower.includes('normal') || lower.includes('standard') || lower.includes('original') || lower.includes('मानक') || lower.includes('डिफ़ॉल्ट')) {
         accessibilityStore.setColorTheme('default');
         handleStateChange('SPEAKING');
         const resp = isHindi 
@@ -354,18 +371,29 @@ export function SarthiWidget() {
         return;
       }
 
-      // General color theme toggle/cycle
+      // 7. Recommendation / Guidance Request
+      if (lower.includes('recommend') || lower.includes('suggest') || lower.includes('help with color') || lower.includes('which theme') || lower.includes('problem with color') || lower.includes('सुझाव')) {
+        handleStateChange('SPEAKING');
+        const resp = isHindi
+          ? 'रंग दृष्टि सुझाव: लाल-हरे दोष के लिए ड्यूटरेनोपिया, लाल-कमजोरी के लिए प्रोटानोपिया, नीले-पीले दोष के लिए ट्रिटेनोपिया, पूर्ण रंग अंधेपन के लिए मोनोक्रोम, और आँखों के तनाव के लिए वार्म सेपिया कहें। मानक रंगों के लिए डिफ़ॉल्ट कहें।'
+          : 'Color vision recommendation: For green/red difficulty say "Deuteranopia", for red weakness say "Protanopia", for blue-yellow say "Tritanopia", for total color blindness say "Monochrome", or for eye strain say "Sepia". Say "Default" for our standard UI colors.';
+        setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      // 8. General color theme cycle
       const current = accessibilityStore.colorTheme;
-      const order: ('default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
-        'default', 'deuteranopia', 'tritanopia', 'monochrome', 'sepia'
+      const order: ('default' | 'deuteranopia' | 'protanopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
+        'default', 'deuteranopia', 'protanopia', 'tritanopia', 'monochrome', 'sepia'
       ];
       const nextIndex = (order.indexOf(current) + 1) % order.length;
       const nextTheme = order[nextIndex];
       accessibilityStore.setColorTheme(nextTheme);
       handleStateChange('SPEAKING');
       const resp = isHindi
-        ? `रंग थीम बदलकर ${nextTheme} की गई। आप 'ड्यूटरेनोपिया', 'ट्रिटेनोपिया', 'मोनोक्रोम', 'सेपिया', या 'डिफ़ॉल्ट' बोल सकते हैं।`
-        : `Color theme switched to ${nextTheme}. You can say 'Deuteranopia', 'Tritanopia', 'Monochrome', 'Sepia', or 'Default colors'.`;
+        ? `रंग थीम बदलकर ${nextTheme} की गई। आप 'ड्यूटरेनोपिया', 'प्रोटानोपिया', 'ट्रिटेनोपिया', 'मोनोक्रोम', 'सेपिया', या 'डिफ़ॉल्ट' बोल सकते हैं।`
+        : `Color theme switched to ${nextTheme}. You can say 'Deuteranopia', 'Protanopia', 'Tritanopia', 'Monochrome', 'Sepia', or 'Default colors'.`;
       setMessages((prev) => [...prev, { id: createSarthiMessageId('sarthi'), sender: 'sarthi', text: resp }]);
       speak(resp, 'Voice feedback');
       return;
@@ -541,9 +569,9 @@ export function SarthiWidget() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [accessibilityMode, user, isAuthOrLandingRoute]);
 
-  // Custom event listener to open Sarthi (e.g. from pressing 'S' navigation key)
+  // Custom event listener to open Sarthi (e.g. from pressing 'S' navigation key or Settings color button)
   useEffect(() => {
-    const handleOpenEvent = () => {
+    const handleOpenEvent = (e: Event) => {
       if (
         accessibilityMode !== 'keyboard' ||
         !user ||
@@ -555,10 +583,20 @@ export function SarthiWidget() {
         return;
       }
       handleStateChange('ACTIVATED');
+      const customEvent = e as CustomEvent<{ query?: string }>;
+      if (customEvent.detail?.query) {
+        setTimeout(() => {
+          processInput(customEvent.detail.query!);
+        }, 200);
+      }
     };
     window.addEventListener('examsarthi-open-sarthi', handleOpenEvent);
-    return () => window.removeEventListener('examsarthi-open-sarthi', handleOpenEvent);
-  }, [accessibilityMode, user, isAuthOrLandingRoute, handleStateChange]);
+    window.addEventListener('open_sarthi', handleOpenEvent);
+    return () => {
+      window.removeEventListener('examsarthi-open-sarthi', handleOpenEvent);
+      window.removeEventListener('open_sarthi', handleOpenEvent);
+    };
+  }, [accessibilityMode, user, isAuthOrLandingRoute, handleStateChange, processInput]);
 
   // STRICT REQUIREMENT: Only render Sarthi for keyboard navigation users!
   if (accessibilityMode !== 'keyboard') {

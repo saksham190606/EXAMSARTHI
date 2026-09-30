@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle, Play, Square, Sparkles, Palette } from 'lucide-react';
+import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle, Play, Square, Sparkles, Palette, RotateCcw, Bot, Keyboard } from 'lucide-react';
 import { useAccessibilityStore, TextSize, Contrast, ColorTheme, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
 import { speak } from "@/lib/accessibility/voice-companion";
 import { useTheme } from "next-themes";
@@ -40,8 +40,48 @@ export default function SettingsPage() {
     voiceSpeed, setVoiceSpeed,
     speechRate, setSpeechRate,
     selectedVoiceURI, setSelectedVoiceURI,
-    language, setLanguage
+    language, setLanguage,
+    accessibilityMode,
   } = useAccessibilityStore();
+
+  const isHindi = language === 'hi';
+  const isKeyboardMode = accessibilityMode === 'keyboard';
+
+  const handleThemeChange = (themeVal: ColorTheme) => {
+    setColorTheme(themeVal);
+    const names: Record<ColorTheme, { en: string; hi: string }> = {
+      default: { en: 'Default standard UI theme applied.', hi: 'मानक डिफ़ॉल्ट यूआई थीम बहाल की गई।' },
+      deuteranopia: { en: 'Deuteranopia red-green accessible palette applied.', hi: 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित) पैलेट लागू किया गया।' },
+      protanopia: { en: 'Protanopia red-weak accessible cyan palette applied.', hi: 'प्रोटानोपिया (लाल-कमजोरी सुरक्षित) पैलेट लागू किया गया।' },
+      tritanopia: { en: 'Tritanopia blue-yellow accessible palette applied.', hi: 'ट्रिटेनोपिया (नीला-पीला सुरक्षित) पैलेट लागू किया गया।' },
+      monochrome: { en: 'Monochrome high-contrast grayscale palette applied.', hi: 'मोनोक्रोम उच्च-कंट्रास्ट ग्रेस्केल पैलेट लागू किया गया।' },
+      sepia: { en: 'Warm sepia anti-glare palette applied.', hi: 'वार्म सेपिया एंटी-ग्लेयर पैलेट लागू किया गया।' },
+    };
+    const announcement = isHindi ? names[themeVal]?.hi : names[themeVal]?.en;
+    speak(announcement || 'Theme updated', { cancelPrevious: true });
+  };
+
+  useEffect(() => {
+    const handleNumberKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const map: Record<string, ColorTheme> = {
+        '1': 'default',
+        '2': 'deuteranopia',
+        '3': 'protanopia',
+        '4': 'tritanopia',
+        '5': 'monochrome',
+        '6': 'sepia',
+      };
+      if (map[e.key]) {
+        handleThemeChange(map[e.key]);
+      }
+    };
+    window.addEventListener('keydown', handleNumberKey);
+    return () => window.removeEventListener('keydown', handleNumberKey);
+  }, [language]);
   
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
@@ -343,104 +383,289 @@ export default function SettingsPage() {
             </div>
 
             {/* Color Blindness & Vision Palettes */}
-            <div className="space-y-3 pt-4 border-t border-border/60">
-              <div className="flex items-center gap-2">
-                <Palette className="h-4 w-4 text-primary" aria-hidden="true" />
-                <Label className="text-sm font-semibold">
-                  {language === 'hi' ? 'रंग दृष्टि और कंट्रास्ट पैलेट (Color Blindness Palettes)' : 'Color Vision & Accessibility Palettes'}
-                </Label>
+            <div className="space-y-4 pt-4 border-t border-border/60">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Palette className="h-5 w-5 text-primary" aria-hidden="true" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {isHindi ? 'रंग दृष्टि और इंटरफ़ेस थीम्स' : 'Color Vision & Interface Themes'}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {isHindi ? 'विभिन्न रंग दृष्टि आवश्यकताओं के लिए विशेष रूप से डिज़ाइन किए गए कंट्रास्ट पैलेट' : 'Curated accessible color combinations for color blindness & visual comfort'}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-2xs font-mono border-primary/40 bg-primary/10 text-primary">
+                  {isHindi ? 'सक्रिय थीम' : 'Active'}: {
+                    colorTheme === 'deuteranopia' ? (isHindi ? 'ड्यूटरेनोपिया' : 'Deuteranopia') :
+                    colorTheme === 'protanopia' ? (isHindi ? 'प्रोटानोपिया' : 'Protanopia') :
+                    colorTheme === 'tritanopia' ? (isHindi ? 'ट्रिटानोपिया' : 'Tritanopia') :
+                    colorTheme === 'monochrome' ? (isHindi ? 'मोनोक्रोम' : 'Monochrome') :
+                    colorTheme === 'sepia' ? (isHindi ? 'वार्म सेपिया' : 'Warm Sepia') :
+                    (isHindi ? 'मानक डिफ़ॉल्ट (मूल यूआई)' : 'Default (Standard UI)')
+                  }
+                </Badge>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {language === 'hi' 
-                  ? 'रंग दृष्टि दोष (Color Blindness) या आँखों के तनाव के लिए सुलभ रंग योजना चुनें। डिफ़ॉल्ट हमारी वर्तमान मानक थीम है।'
-                  : 'Tailored high-distinction color palettes for color vision deficiency (deuteranopia, protanopia, tritanopia), photophobia, and eye strain. Default is our present standard dark theme.'}
-              </p>
-              <RadioGroup 
-                value={colorTheme || 'default'} 
-                onValueChange={(val) => {
-                  const themeVal = val as ColorTheme;
-                  setColorTheme(themeVal);
-                  const names: Record<ColorTheme, string> = {
-                    default: language === 'hi' ? 'मानक डिफ़ॉल्ट थीम' : 'Default UI Theme',
-                    deuteranopia: language === 'hi' ? 'रेड-ग्रीन सुरक्षित कोबाल्ट थीम' : 'Red-Green Safe Cobalt Palette',
-                    tritanopia: language === 'hi' ? 'ब्लू-येलो सुरक्षित रोज़ सियान थीम' : 'Blue-Yellow Safe Rose-Cyan Palette',
-                    monochrome: language === 'hi' ? 'मोनोक्रोम ब्लैक एंड व्हाइट' : 'Monochrome High-Contrast Grayscale',
-                    sepia: language === 'hi' ? 'वार्म सेपिया एंटी-ग्लेयर' : 'Warm Sepia Anti-Glare Palette',
-                  };
-                  speak(names[themeVal] || 'Theme updated', { cancelPrevious: true });
-                }}
-                className="grid sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1"
+
+              {/* Sarthi Assistant & Keyboard Shortcuts Helper Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-[2px] border border-primary/20 bg-primary/5 text-xs text-foreground">
+                <div className="flex items-center gap-2">
+                  <Keyboard className="size-4 text-primary shrink-0" aria-hidden="true" />
+                  <span className="leading-relaxed">
+                    {isHindi
+                      ? 'कीबोर्ड मोड: किसी भी पेज पर "T" दबाकर थीम बदलें, या यहाँ 1 से 6 दबाएं। रंग सुझाव के लिए सारथी से पूछें।'
+                      : 'Keyboard Navigation: Press "T" anywhere across EXAMSARTHI to cycle palettes, or press keys 1–6 here. Ask Sarthi anytime for guidance.'}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      const query = isHindi 
+                        ? 'मुझे कलर ब्लाइंडनेस है, कौन सा थीम चुनूं?' 
+                        : 'I have color blindness, which color theme should I use?';
+                      window.dispatchEvent(new CustomEvent('examsarthi-open-sarthi', { detail: { query } }));
+                      window.dispatchEvent(new CustomEvent('open_sarthi', { detail: { query } }));
+                    }
+                  }}
+                  className="h-7 text-xs font-bold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+                >
+                  <Bot className="size-3.5" aria-hidden="true" />
+                  <span>{isHindi ? 'सारथी से रंग सुझाव लें' : 'Ask Sarthi for Color Advice'}</span>
+                </Button>
+              </div>
+
+              {/* Interactive Palette Cards Matrix */}
+              <div 
+                role="radiogroup" 
+                aria-label={isHindi ? "रंग थीम विकल्प" : "Color Theme Options"}
+                className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1"
               >
-                {/* 1. Default */}
-                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="default" id="settings-theme-default" className="mt-1" />
-                  <Label htmlFor="settings-theme-default" className="cursor-pointer font-medium space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span className="size-3 rounded-full bg-[#ffed00] border border-black/40" />
-                      <span>{language === 'hi' ? 'मानक (डिफ़ॉल्ट)' : 'Default (Standard)'}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {language === 'hi' ? 'हमारी वर्तमान डार्क एम्बर थीम' : 'Present sleek dark UI with amber accents'}
-                    </p>
-                  </Label>
-                </div>
+                {[
+                  {
+                    id: 'default' as ColorTheme,
+                    keyNum: '1',
+                    nameEn: 'Current UI Theme (Default)',
+                    nameHi: 'वर्तमान यूआई थीम (डिफ़ॉल्ट)',
+                    badgeEn: 'Default Standard',
+                    badgeHi: 'मानक डिफ़ॉल्ट',
+                    conditionEn: 'Standard Dark UI',
+                    conditionHi: 'मानक डार्क यूआई',
+                    descEn: 'Our signature sleek dark UI with vibrant gold-amber (#ffed00) accents. Preserved as the default interface colors.',
+                    descHi: 'वाइब्रेंट गोल्डन-एम्बर (#ffed00) के साथ हमारा मूल डार्क इंटरफ़ेस। डिफ़ॉल्ट रूप में हमेशा सक्रिय।',
+                    accentColor: '#ffed00',
+                    bgPreview: '#09090b',
+                    borderPreview: '#27272a',
+                    textColor: '#fafafa',
+                    pillText: 'Default Amber',
+                    pillTextCol: '#000000',
+                    swatches: ['#09090b', '#18181b', '#27272a', '#ffed00'],
+                  },
+                  {
+                    id: 'deuteranopia' as ColorTheme,
+                    keyNum: '2',
+                    nameEn: 'Deuteranopia Safe',
+                    nameHi: 'ड्यूटेरानोपिया सुरक्षित',
+                    badgeEn: 'Green-Weak / Red-Green Safe',
+                    badgeHi: 'हरा-कमजोरी / लाल-हरा सुरक्षित',
+                    conditionEn: 'Deuteranomaly & Deuteranopia',
+                    conditionHi: 'ड्यूटेरैनोमली व ड्यूटेरानोपिया',
+                    descEn: 'High-contrast cobalt blue (#38bdf8) and warm gold eliminate red-green ambiguity for the most common color vision deficiency.',
+                    descHi: 'लाल-हरे रंग के भ्रम को दूर करने के लिए हाई-कंट्रास्ट कोबाल्ट नीला और सुनहरा एम्बर।',
+                    accentColor: '#38bdf8',
+                    bgPreview: '#0b1329',
+                    borderPreview: '#1e3a8a',
+                    textColor: '#f0f9ff',
+                    pillText: 'Cobalt Blue',
+                    pillTextCol: '#000000',
+                    swatches: ['#030712', '#082f49', '#0284c7', '#38bdf8'],
+                  },
+                  {
+                    id: 'protanopia' as ColorTheme,
+                    keyNum: '3',
+                    nameEn: 'Protanopia Safe',
+                    nameHi: 'प्रोटानोपिया सुरक्षित',
+                    badgeEn: 'Red-Weak / Long-Wavelength Safe',
+                    badgeHi: 'लाल-कमजोरी सुरक्षित',
+                    conditionEn: 'Protanomaly & Protanopia',
+                    conditionHi: 'प्रोटैनोमली व प्रोटानोपिया',
+                    descEn: 'High-luminance electric cyan (#22d3ee) ensures red questions, alerts, and markers never appear dim or disappear into black.',
+                    descHi: 'चमकदार इलेक्ट्रिक सियान (#22d3ee) सुनिश्चित करता है कि लाल तत्व कभी काले या धुंधले न दिखें।',
+                    accentColor: '#22d3ee',
+                    bgPreview: '#081726',
+                    borderPreview: '#155e75',
+                    textColor: '#ecfeff',
+                    pillText: 'Electric Cyan',
+                    pillTextCol: '#000000',
+                    swatches: ['#020617', '#083344', '#0891b2', '#22d3ee'],
+                  },
+                  {
+                    id: 'tritanopia' as ColorTheme,
+                    keyNum: '4',
+                    nameEn: 'Tritanopia Safe',
+                    nameHi: 'ट्रिटानोपिया सुरक्षित',
+                    badgeEn: 'Blue-Yellow Safe',
+                    badgeHi: 'नीला-पीला सुरक्षित',
+                    conditionEn: 'Tritanomaly & Tritanopia',
+                    conditionHi: 'ट्रिटैनोमली व ट्रिटानोपिया',
+                    descEn: 'Vivid coral rose (#fb7185) paired with crisp teal allows immediate distinction without relying on blue-yellow spectrum.',
+                    descHi: 'विशिष्ट कोरल रोज़ (#fb7185) और सीफ़ोम टील, नीले और पीले रंग के दोष वाले परीक्षार्थियों के लिए पूर्ण सुरक्षित।',
+                    accentColor: '#fb7185',
+                    bgPreview: '#1f1017',
+                    borderPreview: '#881337',
+                    textColor: '#fff1f2',
+                    pillText: 'Coral Rose',
+                    pillTextCol: '#000000',
+                    swatches: ['#0f050b', '#4c0519', '#e11d48', '#fb7185'],
+                  },
+                  {
+                    id: 'monochrome' as ColorTheme,
+                    keyNum: '5',
+                    nameEn: 'Monochrome Grayscale',
+                    nameHi: 'मोनोक्रोम उच्च-कंट्रास्ट',
+                    badgeEn: 'Total Color Blindness (Achromatopsia)',
+                    badgeHi: 'पूर्ण रंग अंधापन (एक्रोमैटोप्सिया)',
+                    conditionEn: 'Achromatopsia & Extreme Sensitivity',
+                    conditionHi: 'एक्रोमैटोप्सिया व कंट्रास्ट ज़रूरतें',
+                    descEn: '100% grayscale with stark boundary contrast (#ffffff) and distinct shape signifiers for total color blindness.',
+                    descHi: 'पूर्ण रंग अंधापन के लिए अत्यधिक स्पष्टता, 100% ब्लैक एंड व्हाइट सीमा कंट्रास्ट और स्पष्ट आइकन संकेत।',
+                    accentColor: '#ffffff',
+                    bgPreview: '#000000',
+                    borderPreview: '#ffffff',
+                    textColor: '#ffffff',
+                    pillText: 'Pure White',
+                    pillTextCol: '#000000',
+                    swatches: ['#000000', '#27272a', '#a1a1aa', '#ffffff'],
+                  },
+                  {
+                    id: 'sepia' as ColorTheme,
+                    keyNum: '6',
+                    nameEn: 'Warm Sepia Anti-Glare',
+                    nameHi: 'वार्म सेपिया एंटी-ग्लेयर',
+                    badgeEn: 'Photophobia & Eye Strain Relief',
+                    badgeHi: 'फोटोफोबिया व आँखों का तनाव राहत',
+                    conditionEn: 'Photophobia & Visual Stress',
+                    conditionHi: 'फोटोफोबिया व आँखों की थकान',
+                    descEn: 'Soft golden amber (#e09f53) and espresso charcoal soothe light sensitivity, migraines, and prolonged exam fatigue.',
+                    descHi: 'मुलायम गोल्डन एम्बर और एस्प्रेसो चारकोल टोन कठोर नीली रोशनी को रोककर आँखों को लंबे समय तक तनावमुक्त रखते हैं।',
+                    accentColor: '#e09f53',
+                    bgPreview: '#1c1611',
+                    borderPreview: '#5c4532',
+                    textColor: '#f4e6d4',
+                    pillText: 'Warm Amber',
+                    pillTextCol: '#1c140c',
+                    swatches: ['#1c1611', '#281f18', '#8c531b', '#e09f53'],
+                  },
+                ].map((palette) => {
+                  const isSelected = (colorTheme || 'default') === palette.id;
+                  return (
+                    <div
+                      key={palette.id}
+                      role="radio"
+                      aria-checked={isSelected}
+                      tabIndex={0}
+                      onClick={() => handleThemeChange(palette.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleThemeChange(palette.id);
+                        }
+                      }}
+                      className={`relative flex flex-col justify-between p-3.5 rounded-[2px] border cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        isSelected 
+                          ? 'border-primary bg-primary/10 shadow-[0_0_14px_rgba(var(--primary),0.15)] ring-1 ring-primary' 
+                          : 'border-border/70 hover:border-border hover:bg-muted/30 bg-card/60'
+                      }`}
+                    >
+                      {/* Top Header Row with Swatches & Hotkey */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5" aria-hidden="true">
+                            {palette.swatches.map((colorHex, idx) => (
+                              <span 
+                                key={idx} 
+                                className="size-3.5 rounded-full border border-black/30 shadow-xs" 
+                                style={{ backgroundColor: colorHex }}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-muted border border-border text-muted-foreground">
+                              Key: {palette.keyNum}
+                            </kbd>
+                            {isSelected && (
+                              <Badge className="h-5 px-1.5 text-[10px] font-bold gap-1 bg-primary text-primary-foreground border-none">
+                                <CheckCircle2 className="size-3" aria-hidden="true" />
+                                <span>{isHindi ? 'सक्रिय' : 'Active'}</span>
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
 
-                {/* 2. Deuteranopia / Protanopia */}
-                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="deuteranopia" id="settings-theme-deuteranopia" className="mt-1" />
-                  <Label htmlFor="settings-theme-deuteranopia" className="cursor-pointer font-medium space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span className="size-3 rounded-full bg-blue-500 border border-black/40" />
-                      <span>{language === 'hi' ? 'रेड-ग्रीन सेफ' : 'Red-Green Safe'}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {language === 'hi' ? 'ड्यूटेरानोपिया/प्रोटानोपिया (कोबाल्ट व एम्बर)' : 'Cobalt Blue & Gold for Deuteranopia/Protanopia'}
-                    </p>
-                  </Label>
-                </div>
+                        {/* Title and Condition Badge */}
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-foreground">
+                            {isHindi ? palette.nameHi : palette.nameEn}
+                          </h4>
+                          <span className="inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground border border-border/40">
+                            {isHindi ? palette.badgeHi : palette.badgeEn}
+                          </span>
+                        </div>
 
-                {/* 3. Tritanopia */}
-                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="tritanopia" id="settings-theme-tritanopia" className="mt-1" />
-                  <Label htmlFor="settings-theme-tritanopia" className="cursor-pointer font-medium space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span className="size-3 rounded-full bg-rose-500 border border-black/40" />
-                      <span>{language === 'hi' ? 'ब्लू-येलो सेफ' : 'Blue-Yellow Safe'}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {language === 'hi' ? 'ट्रिटानोपिया (क्रिमसन रोज़ व सियान)' : 'Crimson Rose & Cyan for Tritanopia'}
-                    </p>
-                  </Label>
-                </div>
+                        {/* Description */}
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          {isHindi ? palette.descHi : palette.descEn}
+                        </p>
+                      </div>
 
-                {/* 4. Monochrome */}
-                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="monochrome" id="settings-theme-monochrome" className="mt-1" />
-                  <Label htmlFor="settings-theme-monochrome" className="cursor-pointer font-medium space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span className="size-3 rounded-full bg-white border border-black" />
-                      <span>{language === 'hi' ? 'मोनोक्रोम' : 'Monochrome'}</span>
+                      {/* Bottom Live Micro-Preview */}
+                      <div 
+                        className="mt-3 p-2 rounded-[2px] border text-[11px] flex items-center justify-between gap-2"
+                        style={{ 
+                          backgroundColor: palette.bgPreview, 
+                          borderColor: palette.borderPreview,
+                          color: palette.textColor 
+                        }}
+                        aria-hidden="true"
+                      >
+                        <span className="text-[10px] font-medium opacity-90 truncate">
+                          {isHindi ? palette.conditionHi : palette.conditionEn}
+                        </span>
+                        <span 
+                          className="px-2 py-0.5 rounded-[2px] text-[10px] font-bold shrink-0"
+                          style={{ 
+                            backgroundColor: palette.accentColor, 
+                            color: palette.pillTextCol 
+                          }}
+                        >
+                          {palette.pillText}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {language === 'hi' ? 'शुद्ध ब्लैक एंड व्हाइट ग्रे-स्केल' : 'Pure high-contrast black & white grayscale'}
-                    </p>
-                  </Label>
-                </div>
+                  );
+                })}
+              </div>
 
-                {/* 5. Soft Sepia */}
-                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
-                  <RadioGroupItem value="sepia" id="settings-theme-sepia" className="mt-1" />
-                  <Label htmlFor="settings-theme-sepia" className="cursor-pointer font-medium space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span className="size-3 rounded-full bg-amber-700 border border-black/40" />
-                      <span>{language === 'hi' ? 'वार्म सेपिया' : 'Warm Sepia'}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug">
-                      {language === 'hi' ? 'एंटी-ग्लेयर आँखों के तनाव से राहत' : 'Anti-glare reduced eye strain & photophobia'}
-                    </p>
-                  </Label>
-                </div>
-              </RadioGroup>
+              {/* Bottom Quick Reset Controls */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleThemeChange('default')}
+                  disabled={(colorTheme || 'default') === 'default'}
+                  className="h-8 text-xs font-bold gap-1.5 border-border"
+                >
+                  <RotateCcw className="size-3.5" aria-hidden="true" />
+                  <span>{isHindi ? 'डिफ़ॉल्ट यूआई थीम बहाल करें' : 'Restore Default UI Theme'}</span>
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  {isHindi ? 'वर्तमान यूआई हमेशा मानक डिफ़ॉल्ट रहेगा।' : 'Current UI remains active default across all sessions.'}
+                </p>
+              </div>
             </div>
 
           </CardContent>

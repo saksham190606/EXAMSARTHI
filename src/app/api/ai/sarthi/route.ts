@@ -77,6 +77,32 @@ function resolveSarthiLocally(transcript: string, language: string): SarthiActio
     };
   }
 
+  // Accessibility: Color Themes & Color Blindness
+  if (/\b(color\s*theme|colour\s*theme|color\s*blind|colour\s*blind|deuteranopia|protanopia|tritanopia|monochrome|sepia|रंग\s*थीम|कलर\s*ब्लाइंड)\b/i.test(t)) {
+    let theme = 'default';
+    if (/deuteranopia|red\s*green|green\s*blind|लाल\s*हरा/i.test(t)) theme = 'deuteranopia';
+    else if (/protanopia|red\s*weak|red\s*blind|लाल/i.test(t)) theme = 'protanopia';
+    else if (/tritanopia|blue\s*yellow|नीला\s*पीला/i.test(t)) theme = 'tritanopia';
+    else if (/monochrome|grayscale|black\s*(?:and|&)\s*white|मोनोक्रोम/i.test(t)) theme = 'monochrome';
+    else if (/sepia|warm|anti\s*glare|eye\s*strain|सेपिया/i.test(t)) theme = 'sepia';
+    else if (/default|reset|normal|standard|डिफ़ॉल्ट|मानक/i.test(t)) theme = 'default';
+
+    const themeNames: Record<string, { hi: string; en: string }> = {
+      default: { hi: 'मानक डिफ़ॉल्ट थीम बहाल की गई।', en: 'Standard default dark amber theme restored.' },
+      deuteranopia: { hi: 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित) पैलेट लागू किया गया।', en: 'Deuteranopia red-green accessible color palette applied.' },
+      protanopia: { hi: 'प्रोटानोपिया (लाल-कमजोरी सुरक्षित) पैलेट लागू किया गया।', en: 'Protanopia red-weak accessible cyan palette applied.' },
+      tritanopia: { hi: 'ट्रिटेनोपिया (नीला-पीला सुरक्षित) पैलेट लागू किया गया।', en: 'Tritanopia blue-yellow accessible color palette applied.' },
+      monochrome: { hi: 'मोनोक्रोम उच्च-कंट्रास्ट पैलेट लागू किया गया।', en: 'Monochrome high-contrast grayscale palette applied.' },
+      sepia: { hi: 'वार्म सेपिया कम्फर्ट पैलेट लागू किया गया।', en: 'Warm sepia eye-comfort palette applied.' },
+    };
+
+    return {
+      action: 'SET_COLOR_THEME',
+      payload: { theme },
+      spokenResponse: themeNames[theme] ? (isHi ? themeNames[theme].hi : themeNames[theme].en) : `Color theme set to ${theme}.`,
+    };
+  }
+
   return null;
 }
 
@@ -174,6 +200,7 @@ Whitelisted Actions (action field):
 23. CLOSE_SARTHI - Close the Sarthi assistant.
 24. HELP_CAPABILITIES - Summarize what Sarthi can do.
 25. GENERAL_RESPONSE - Provide a context-aware conversational answer or explain actions available in the current route if asked "What can I do here?".
+26. SET_COLOR_THEME - Change color palette for accessibility / color vision deficiency. Payload: { theme: 'default' | 'deuteranopia' | 'protanopia' | 'tritanopia' | 'monochrome' | 'sepia' }
 
 IMPORTANT RULES:
 - You MUST return a JSON object with at least two fields: "action" and "spokenResponse".

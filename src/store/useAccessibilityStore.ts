@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type TextSize = 'default' | 'large' | 'xlarge';
 export type Contrast = 'default' | 'high';
-export type ColorTheme = 'default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia';
+export type ColorTheme = 'default' | 'deuteranopia' | 'protanopia' | 'tritanopia' | 'monochrome' | 'sepia';
 export type VoiceSpeed = 'slow' | 'normal' | 'fast';
 export type Language = 'en' | 'hi';
 export type AccessibilityMode = 'voice' | 'keyboard';

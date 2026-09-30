@@ -361,7 +361,7 @@ html.reduced-motion select {
 
 /* Accessibility: Color Blindness & Vision Palettes */
 
-/* 1. Deuteranopia & Protanopia (Red-Green Safe — High-Contrast Cobalt Blue & Golden Amber) */
+/* 1. Deuteranopia (Green-Weak / Red-Green Safe — High-Contrast Cobalt Blue & Golden Amber) */
 html.theme-deuteranopia {
   --primary: #2563eb;
   --primary-foreground: #ffffff;
@@ -373,6 +373,20 @@ html.dark.theme-deuteranopia {
   --primary-foreground: #000000;
   --primary-deep: #0284c7;
   --ring: #38bdf8;
+}
+
+/* 2. Protanopia (Red-Weak / Long-Wavelength Safe — Vivid Electric Cyan & Radiant Amber) */
+html.theme-protanopia {
+  --primary: #0891b2;
+  --primary-foreground: #ffffff;
+  --primary-deep: #0e7490;
+  --ring: #06b6d4;
+}
+html.dark.theme-protanopia {
+  --primary: #22d3ee;
+  --primary-foreground: #000000;
+  --primary-deep: #0891b2;
+  --ring: #22d3ee;
 }
 
 /* 2. Tritanopia (Blue-Yellow Safe — High-Contrast Crimson Rose & Vivid Cyan) */

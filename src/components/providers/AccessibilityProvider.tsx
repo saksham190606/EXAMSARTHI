@@ -48,7 +48,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     }
 
     // Handle Color Blindness / Vision Themes
-    html.classList.remove('theme-deuteranopia', 'theme-tritanopia', 'theme-monochrome', 'theme-sepia')
+    html.classList.remove('theme-deuteranopia', 'theme-protanopia', 'theme-tritanopia', 'theme-monochrome', 'theme-sepia')
     if (colorTheme && colorTheme !== 'default') {
       html.classList.add(`theme-${colorTheme}`)
     }
@@ -330,8 +330,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       if (key === 't' || (e.altKey && key === 't')) {
         e.preventDefault();
         const currentTheme = useAccessibilityStore.getState().colorTheme;
-        const order: ('default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
-          'default', 'deuteranopia', 'tritanopia', 'monochrome', 'sepia'
+        const order: ('default' | 'deuteranopia' | 'protanopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
+          'default', 'deuteranopia', 'protanopia', 'tritanopia', 'monochrome', 'sepia'
         ];
         const nextIndex = (order.indexOf(currentTheme) + 1) % order.length;
         const next = order[nextIndex];
@@ -339,6 +339,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         const themeLabels: Record<string, { hi: string; en: string }> = {
           default: { hi: 'मानक डिफ़ॉल्ट थीम', en: 'Default standard dark amber theme' },
           deuteranopia: { hi: 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित)', en: 'Deuteranopia red-green safe palette' },
+          protanopia: { hi: 'प्रोटानोपिया (लाल-कमजोरी सुरक्षित)', en: 'Protanopia red-weak safe cyan palette' },
           tritanopia: { hi: 'ट्रिटेनोपिया (नीला-पीला सुरक्षित)', en: 'Tritanopia blue-yellow safe palette' },
           monochrome: { hi: 'मोनोक्रोम उच्च-कंट्रास्ट', en: 'Monochrome high-contrast grayscale palette' },
           sepia: { hi: 'वार्म सेपिया कम्फर्ट', en: 'Warm sepia eye-comfort palette' },
