@@ -261,6 +261,18 @@ function ActiveExamSession({
     };
   }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
 
+  // When exam session begins or question changes, ensure question is scrolled into view
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      const questionEl = document.getElementById('active-question-display') || document.getElementById('active-question-card');
+      if (questionEl) {
+        questionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [currentQuestion?.id]);
+
   // Keep a brief loading state while the engine changes the active question.
   const [isLoading, setIsLoading] = useState(false);
   const currentIndex = state.currentQuestionIndex;
@@ -711,7 +723,7 @@ function ActiveExamSession({
         <div className="lg:col-span-8 flex flex-col space-y-6 w-full">
           
           {/* Main Question Card - Primary Visual Focus */}
-          <Card className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50">
+          <Card id="active-question-card" className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50 scroll-mt-24">
             {/* 4. Physical "Tap to Enable Voice" Unlock Banner */}
             {!isAudioUnlocked && (
               <button

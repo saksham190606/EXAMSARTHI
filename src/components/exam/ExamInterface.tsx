@@ -166,6 +166,18 @@ export function ExamInterface({
     };
   }, [actions, activeQuestion, toggleVoiceMode, currentIndex, validQuestions.length]);
 
+  // When exam session begins or question changes, ensure question is scrolled into view
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      const questionEl = document.getElementById('active-question-display') || document.getElementById('active-question-card');
+      if (questionEl) {
+        questionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [activeQuestion?.id]);
+
   // Strict Render Guard: Prevent stranded infinite loading screens
   if (!validQuestions || validQuestions.length === 0 || !validQuestions[currentIndex] || !activeQuestion || isLoading) {
     if (isLoading) {
@@ -260,7 +272,7 @@ export function ExamInterface({
       )}
 
       {/* Main Question Card with Voice Assistive Panel & Physical Unlock Banner */}
-      <Card className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50">
+      <Card id="active-question-card" className="border-2 border-border/90 bg-card rounded-none overflow-hidden ring-1 ring-border/50 scroll-mt-24">
         {/* 4. Physical "Tap to Enable Voice" Unlock Banner */}
         {!isAudioUnlocked && (
           <button

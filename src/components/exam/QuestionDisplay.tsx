@@ -49,7 +49,7 @@ export function QuestionDisplay({
   const effectiveAnswer = userAnswer !== undefined ? userAnswer : selectedOptionId;
 
   return (
-    <div className="space-y-6">
+    <div id="active-question-display" className="space-y-6 scroll-mt-24">
       {/* Question Context Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-4">
         <div className="flex items-center gap-2">

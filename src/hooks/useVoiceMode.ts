@@ -286,6 +286,14 @@ export function useVoiceMode({
     setStatus('Speaking');
     setVoiceStatus('[ 🔇 Mic Paused (Speaking) ]');
 
+    // Scroll to the active question so it is visible on screen while being read out
+    if (typeof window !== 'undefined') {
+      const questionEl = document.getElementById('active-question-display') || document.getElementById('active-question-card');
+      if (questionEl) {
+        questionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
     // Wait until speaking completely finishes before starting the mic listener!
     speakQuestion(textToRead, speechLang, () => {
       if (isActiveRef.current && !userManuallyMutedRef.current) {
@@ -741,6 +749,12 @@ export function useVoiceMode({
   }, [engineIsSupported]);
 
   const unlockAudio = useCallback(async () => {
+    if (typeof window !== 'undefined') {
+      const questionEl = document.getElementById('active-question-display') || document.getElementById('active-question-card');
+      if (questionEl) {
+        questionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
     await handleManualMicActivation();
     readCurrentQuestion();
   }, [handleManualMicActivation, readCurrentQuestion]);
