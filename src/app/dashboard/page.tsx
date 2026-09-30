@@ -41,6 +41,8 @@ import {
 import { cn } from "@/lib/utils"
 import { useTranslation } from "@/lib/i18n"
 import { PersonalizedWelcome } from "@/features/personalized-welcome"
+import { useAccessibilityStore } from "@/store/useAccessibilityStore"
+import { forceSpeak, unlockAudioContext, voiceEngine } from "@/lib/accessibility/voice-companion"
 
 function formatTimestamp(timestamp: string | number | null | undefined): string {
   if (!timestamp) return "Recent attempt"
@@ -71,6 +73,55 @@ export default function DashboardPage() {
     user?.email?.split("@")[0] ||
     "Candidate"
 
+  // Automated Dashboard Welcome and Voice Command Guidance
+  const hasSpokenWelcomeRef = React.useRef(false);
+  useEffect(() => {
+    if (hasSpokenWelcomeRef.current) return;
+
+    const triggerAnnouncement = () => {
+      if (hasSpokenWelcomeRef.current) return;
+      hasSpokenWelcomeRef.current = true;
+
+      const isHindi = useAccessibilityStore.getState().language === 'hi';
+      const welcomeAnnouncement = isHindi
+        ? `एग्जामसारथी डैशबोर्ड में आपका स्वागत है, ${candidateName}। आप 'प्रैक्टिस', 'परीक्षा', 'परिणाम' या 'सेटिंग्स' बोल सकते हैं।`
+        : `Welcome to ExamSarthi Dashboard, ${candidateName}. You can say 'Practice', 'Exams', 'Results', or 'Settings'.`;
+
+      unlockAudioContext();
+      setTimeout(() => {
+        forceSpeak(
+          welcomeAnnouncement,
+          () => {
+            voiceEngine.startAlwaysOnListening();
+          },
+          isHindi ? 'hi-IN' : 'en-US'
+        );
+      }, 350);
+    };
+
+    if (!user && candidateName === 'Candidate') {
+      const fallbackTimer = setTimeout(() => {
+        triggerAnnouncement();
+      }, 800);
+      return () => clearTimeout(fallbackTimer);
+    }
+
+    triggerAnnouncement();
+
+    const handleInteraction = () => {
+      unlockAudioContext();
+      voiceEngine.startAlwaysOnListening();
+    };
+
+    window.addEventListener('click', handleInteraction, { once: true, passive: true });
+    window.addEventListener('keydown', handleInteraction, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+    };
+  }, [candidateName, user]);
+
   const loadAnalytics = React.useCallback(async () => {
     setIsLoaded(false)
     setFetchError(null)
@@ -87,6 +138,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadAnalytics()
+
+    const handlePerformanceUpdate = () => {
+      loadAnalytics()
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('examsarthi_performance_updated', handlePerformanceUpdate)
+      window.addEventListener('focus', handlePerformanceUpdate)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('examsarthi_performance_updated', handlePerformanceUpdate)
+        window.removeEventListener('focus', handlePerformanceUpdate)
+      }
+    }
   }, [user?.id, loadAnalytics])
 
   const completedCount = analytics?.completedAttemptsCount ?? 0

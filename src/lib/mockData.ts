@@ -45,6 +45,15 @@ export const AvailableExams: Exam[] = [
     difficulty: "Intermediate",
     description: "Paper II civil services simulation covering Logical Reasoning, Basic Numeracy, and English Comprehension.",
   },
+  {
+    id: "e4",
+    title: "UGC NET Paper 1 Mock",
+    subject: "Teaching & Research Aptitude",
+    questions: 10,
+    duration: 15,
+    difficulty: "Intermediate",
+    description: "General Paper on Teaching & Research Aptitude covering Reasoning, Comprehension, ICT, and Higher Education.",
+  },
 ];
 
 export const PracticeSets: Exam[] = [
@@ -71,7 +80,7 @@ export const PracticeSets: Exam[] = [
   {
     id: "p3",
     title: "Logical Reasoning & Coding",
-    subject: "Reasoning",
+    subject: "Logical Reasoning",
     topic: "Logic & Deduction",
     questions: 8,
     duration: 10,
@@ -101,7 +110,7 @@ export const PracticeSets: Exam[] = [
   {
     id: "p6",
     title: "Diagram & Visual Interpretation (Vision AI)",
-    subject: "Multi-Format Showcase",
+    subject: "Diagram & Visual",
     topic: "Visual Interpretation",
     questions: 4,
     duration: 10,

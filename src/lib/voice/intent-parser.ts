@@ -212,9 +212,11 @@ const INTENT_METADATA: Record<
   },
 };
 
+import { matchExamTokens, matchExamVoiceRoute } from './exam-router';
+
 export const DASHBOARD_KEYWORDS = ["dashboard", "home", "main screen", "profile", "डैशबोर्ड", "होम", "मुख्य पृष्ठ"];
-export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
 export const PRACTICE_KEYWORDS = ["practice", "learn", "study", "prepare", "प्रैक्टिस", "अभ्यास", "पढ़ाई"];
+export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
 export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "सेटिंग्स", "विकल्प"];
 export const RESULTS_KEYWORDS = ["result", "results", "score", "scores", "marks", "score card", "scorecard", "परिणाम", "नतीजे", "रिजल्ट", "स्कोर"];
 export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
@@ -222,8 +224,9 @@ export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "�
 export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'RESULTS' | 'LOGIN' | 'UNKNOWN' => {
   const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
   if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
-  if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
+  // Check PRACTICE before EXAMS so "practice exam" is treated as PRACTICE rather than generic exams!
   if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
+  if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
   if (RESULTS_KEYWORDS.some(k => clean.includes(k))) return 'RESULTS';
   if (SETTINGS_KEYWORDS.some(k => clean.includes(k))) return 'SETTINGS';
   if (LOGIN_KEYWORDS.some(k => clean.includes(k))) return 'LOGIN';
@@ -247,9 +250,26 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  // 1. Language Switching
+  // 1. Specific Exam or Practice Set Match (Highest Priority: Checked FIRST!)
+  // Ensures phrases like "open upsc exam", "practice math", "open reasoning practice", "अंग्रेजी प्रैक्टिस"
+  // are routed directly to their respective exam/practice set rather than generic pages or language switches.
+  const specificExam = matchExamTokens(rawText) || (matchExamVoiceRoute(rawText) ? { route: matchExamVoiceRoute(rawText)!, examName: matchExamVoiceRoute(rawText)!.title } : null);
+  if (specificExam) {
+    return {
+      intent: 'START_EXAM',
+      confidence: 0.99,
+      rawText,
+      normalizedText: norm,
+      source: 'local_rule',
+      targetPath: `/exam?set=${specificExam.route.param}`,
+      announcementEn: `Opening ${specificExam.examName || specificExam.route.title}`,
+      announcementHi: `${specificExam.examName || specificExam.route.title} खोला जा रहा है`,
+    };
+  }
+
+  // 1.1 Language Switching (Strict: only when user explicitly asks to switch language)
   if (
-    /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein|hindi\s+me|hindi\s+chune|hindi\s+chuno|^hindi$|हिंदी\s+में\s+बदलें|हिंदी\s+चुनें|हिंदी\s+करो|हिंदी)/i.test(norm)
+    /(?:switch\s+to\s+hindi|change\s+to\s+hindi|hindi\s+please|hindi\s+mein|hindi\s+me|hindi\s+chune|hindi\s+chuno|^hindi$|हिंदी\s+में\s+बदलें|हिंदी\s+चुनें|हिंदी\s+करो|^हिंदी$)/i.test(norm)
   ) {
     return {
       intent: 'SWITCH_TO_HINDI',
@@ -262,7 +282,7 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
   }
 
   if (
-    /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|english\s+chune|angrezi\s+chune|angrezi\s+mein|^english$|^angrezi$|अंग्रेजी\s+में\s+बदलें|अंग्रेज़ी\s+में\s+बदलें|अंग्रेजी\s+चुनें|अंग्रेज़ी\s+चुनें|अंग्रेजी)/i.test(norm)
+    /(?:switch\s+to\s+english|change\s+to\s+english|english\s+please|english\s+chune|angrezi\s+chune|angrezi\s+mein|^english$|^angrezi$|अंग्रेजी\s+में\s+बदलें|अंग्रेज़ी\s+में\s+बदलें|अंग्रेजी\s+चुनें|अंग्रेज़ी\s+चुनें|^अंग्रेजी$|^अंग्रेज़ी$)/i.test(norm)
   ) {
     return {
       intent: 'SWITCH_TO_ENGLISH',

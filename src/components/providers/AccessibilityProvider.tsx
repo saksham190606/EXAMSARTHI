@@ -8,7 +8,10 @@ import {
   voiceEngine,
   stopSpeech,
   speak,
+  forceSpeak,
   unlockAudioContext,
+  WELCOME_TOUR_TEXT_EN,
+  WELCOME_TOUR_TEXT_HI,
 } from '@/lib/accessibility/voice-companion'
 import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser'
 import { useVoiceEngine } from '@/lib/voice/useVoiceEngine'
@@ -99,13 +102,18 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
           setShowKeyWarning(false);
         }, 3200);
 
-        playVoiceFeedbackChime();
         const isHi = useAccessibilityStore.getState().language === 'hi';
-        speak(
-          isHi 
-            ? "कीबोर्ड केवल लॉगिन के समय सक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
-            : "Keyboard is enabled only for logging in. This platform is voice operated. Please speak your command."
-        );
+        const isLanding = currentPath === '/' || currentPath === '' || currentPath.endsWith(':3000/');
+        if (isLanding) {
+          forceSpeak(isHi ? WELCOME_TOUR_TEXT_HI : WELCOME_TOUR_TEXT_EN, undefined, isHi ? 'hi-IN' : 'en-US');
+        } else {
+          playVoiceFeedbackChime();
+          speak(
+            isHi 
+              ? "कीबोर्ड केवल लॉगिन के समय सक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
+              : "Keyboard is enabled only for logging in. This platform is voice operated. Please speak your command."
+          );
+        }
       }
     };
 
@@ -136,14 +144,20 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     // Global Talk-Back Engine for element focus
     const cleanupFocus = initFocusTalkBack();
 
-    // Start continuous always-on voice recognition immediately
+    // Start continuous always-on voice recognition immediately (except on landing page where it opens after brief)
     unlockAudioContext();
-    voiceEngine.startAlwaysOnListening();
+    const isLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
+    if (!isLanding) {
+      voiceEngine.startAlwaysOnListening();
+    }
 
     // Browser interaction listener to guarantee mic activation if autoplay policy restricted initial start
     const handleUserGesture = () => {
       unlockAudioContext();
-      voiceEngine.startAlwaysOnListening();
+      const onLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
+      if (!onLanding) {
+        voiceEngine.startAlwaysOnListening();
+      }
     };
 
     window.addEventListener('pointerdown', handleUserGesture, { passive: true });
@@ -156,6 +170,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('click', handleUserGesture);
     };
   }, [router]);
+
+  const isLandingRoute = pathname === '/' || !pathname || pathname === '';
 
   return (
     <>
@@ -171,11 +187,13 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
           <ShieldAlert className="h-5 w-5 shrink-0 animate-bounce" />
           <div className="text-sm">
             <span className="font-bold">
-              {language === 'hi' ? 'कीबोर्ड अक्षम है (100% वॉइस मोड):' : 'Keyboard Disabled (100% Voice Mode):'}
+              {language === 'hi'
+                ? (isLandingRoute ? 'एग्जामसारथी में आपका स्वागत है:' : 'कीबोर्ड अक्षम है (100% वॉइस मोड):')
+                : (isLandingRoute ? 'Welcome to ExamSarthi:' : 'Keyboard Disabled (100% Voice Mode):')}
             </span>{' '}
             {language === 'hi'
-              ? "डैशबोर्ड, प्रैक्टिस, परीक्षा, परिणाम या सेटिंग्स बोलें।"
-              : "Speak 'Dashboard', 'Practice', 'Exams', 'Results', or 'Settings'."}
+              ? (isLandingRoute ? "लॉगिन करने के लिए 'लॉगिन' बोलें।" : "डैशबोर्ड, प्रैक्टिस, परीक्षा, परिणाम या सेटिंग्स बोलें।")
+              : (isLandingRoute ? "Say 'Login' to sign in to your account." : "Speak 'Dashboard', 'Practice', 'Exams', 'Results', or 'Settings'.")}
           </div>
         </div>
       )}

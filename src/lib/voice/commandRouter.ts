@@ -1,4 +1,4 @@
-export type VoiceContextName = 'global-nav' | 'exam' | 'review' | 'practice' | 'hub';
+export type VoiceContextName = 'global-nav' | 'exam' | 'review' | 'practice' | 'hub' | 'results';
 
 export type CommandType =
   | 'next'
@@ -325,6 +325,7 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
   if (!normalized) return base;
 
   const inExam = typeof window !== 'undefined' && window.location.pathname.startsWith('/exam');
+  const inResults = (typeof window !== 'undefined' && window.location.pathname.startsWith('/results')) || context === 'results';
   if (context === 'global-nav' && inExam && (['next', 'previous', 'select-option', 'clear-answer', 'flag-unflag', 'submit', 'confirm', 'cancel'] as CommandType[]).includes(base.type)) {
     return { ...base, handled: false, message: 'exam command ignored by global-nav context' };
   }
@@ -514,9 +515,96 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     'रेलवे': '/exam?set=rrb-mock-1',
     'आरआरबी': '/exam?set=rrb-mock-1',
 
+    'open ugc': '/exam?set=ugc-mock-1',
+    'open ugc net': '/exam?set=ugc-mock-1',
+    'open net': '/exam?set=ugc-mock-1',
+    'open net exam': '/exam?set=ugc-mock-1',
+    'start ugc': '/exam?set=ugc-mock-1',
+    'start ugc net': '/exam?set=ugc-mock-1',
+    'start net': '/exam?set=ugc-mock-1',
+    'start net exam': '/exam?set=ugc-mock-1',
+    'take ugc': '/exam?set=ugc-mock-1',
+    'take ugc net': '/exam?set=ugc-mock-1',
+    'ugc': '/exam?set=ugc-mock-1',
+    'ugc net': '/exam?set=ugc-mock-1',
+    'ugc exam': '/exam?set=ugc-mock-1',
+    'net exam': '/exam?set=ugc-mock-1',
+    'यूजीसी': '/exam?set=ugc-mock-1',
+    'नेट': '/exam?set=ugc-mock-1',
+    'यूजीसी नेट': '/exam?set=ugc-mock-1',
+    'नेट परीक्षा': '/exam?set=ugc-mock-1',
+
     'vision ai': '/exam?set=p6',
     'diagram exam': '/exam?set=p6',
     'diagram test': '/exam?set=p6',
+    'open diagram': '/exam?set=p6',
+    'open vision ai': '/exam?set=p6',
+    'vision ai exam': '/exam?set=p6',
+    'diagram practice': '/exam?set=p6',
+    'चित्र': '/exam?set=p6',
+    'डायग्राम': '/exam?set=p6',
+
+    // Specific Practice Sets: Math / Quant (p1)
+    'open math practice': '/exam?set=p1',
+    'open maths practice': '/exam?set=p1',
+    'practice math': '/exam?set=p1',
+    'practice maths': '/exam?set=p1',
+    'open math': '/exam?set=p1',
+    'open maths': '/exam?set=p1',
+    'open quant': '/exam?set=p1',
+    'open quantitative': '/exam?set=p1',
+    'open quantitative aptitude': '/exam?set=p1',
+    'quant practice': '/exam?set=p1',
+    'math practice': '/exam?set=p1',
+    'maths practice': '/exam?set=p1',
+    'math exam': '/exam?set=p1',
+    'quant exam': '/exam?set=p1',
+    'percentages': '/exam?set=p1',
+    'arithmetic': '/exam?set=p1',
+    'गणित': '/exam?set=p1',
+    'मैथ्स': '/exam?set=p1',
+    'क्वांट': '/exam?set=p1',
+
+    // Specific Practice Sets: Logical Reasoning (p3)
+    'open reasoning practice': '/exam?set=p3',
+    'practice reasoning': '/exam?set=p3',
+    'open reasoning': '/exam?set=p3',
+    'open logical reasoning': '/exam?set=p3',
+    'reasoning practice': '/exam?set=p3',
+    'reasoning exam': '/exam?set=p3',
+    'logic practice': '/exam?set=p3',
+    'open logic': '/exam?set=p3',
+    'रीजनिंग': '/exam?set=p3',
+    'तर्कशक्ति': '/exam?set=p3',
+    'तर्क': '/exam?set=p3',
+
+    // Specific Practice Sets: English Grammar & Comprehension (p4)
+    'open english practice': '/exam?set=p4',
+    'practice english': '/exam?set=p4',
+    'open english': '/exam?set=p4',
+    'open grammar': '/exam?set=p4',
+    'english practice': '/exam?set=p4',
+    'grammar practice': '/exam?set=p4',
+    'english exam': '/exam?set=p4',
+    'अंग्रेजी': '/exam?set=p4',
+    'इंग्लिश': '/exam?set=p4',
+
+    // Specific Practice Sets: Multi-Format Showcase (p5)
+    'open showcase': '/exam?set=p5',
+    'open showcase practice': '/exam?set=p5',
+    'open multi format': '/exam?set=p5',
+    'open multi format practice': '/exam?set=p5',
+    'showcase practice': '/exam?set=p5',
+    'multi format showcase': '/exam?set=p5',
+    'मल्टी फॉर्मेट': '/exam?set=p5',
+
+    // Generic Practice Exam Commands (route to Practice Hub)
+    'open practice exam': '/practice',
+    'take practice exam': '/practice',
+    'start practice exam': '/practice',
+    'practice exam': '/practice',
+    'practice test': '/practice',
+    'start practice test': '/practice',
 
     // Section 4: Results
     'results': '/results',
@@ -584,18 +672,43 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
       matchesAnyWholeWord(normalized, [phrase]) ||
       (phrase.split(' ').length > 1 && normalized.includes(phrase))
     ) {
+      if (inResults && path.startsWith('/exam?set=')) {
+        const hasExplicitLaunchVerb = /(?:start|take|launch|begin|kholo|shuru|खोल|शुरू)/i.test(normalized);
+        if (!hasExplicitLaunchVerb) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('examsarthi_select_result_by_name', {
+                detail: { raw, normalized, phrase, path },
+              })
+            );
+          }
+          return {
+            ...base,
+            type: 'unknown',
+            handled: true,
+            confidence: 0.95,
+            message: 'Handled by results exam switcher',
+          };
+        }
+      }
+
       const isGk = path.includes('gk');
       const detectedIntent = isGk ? 'NAVIGATE_PRACTICE_GK' : 'NAVIGATE_ROUTE';
       const readback = isGk
-        ? 'Navigating to Practice, General Knowledge and Geography'
+        ? 'Opening General Knowledge and Geography practice'
         : (path === '/dashboard' ? 'Navigating to Dashboard' :
-           path === '/practice' ? 'Navigating to Practice' :
-           path === '/exam' ? 'Navigating to Exams Hub' :
+           path === '/practice' ? 'Opening Practice section' :
+           path === '/exam' ? 'Opening Exams Hub' :
+           path.includes('p1') ? 'Opening Quantitative Aptitude and Mathematics practice' :
+           path.includes('p2') ? 'Opening General Knowledge and Geography practice' :
+           path.includes('p3') ? 'Opening Logical Reasoning and Coding practice' :
+           path.includes('p4') ? 'Opening English Grammar and Comprehension practice' :
+           path.includes('p5') ? 'Opening Multi-Format Showcase practice' :
+           path.includes('p6') ? 'Opening Vision AI and Diagram practice' :
            path.includes('upsc') ? 'Opening UPSC examination portal' :
            path.includes('cgl') ? 'Opening SSC CGL examination portal' :
            path.includes('ibps') ? 'Opening Bank PO examination portal' :
            path.includes('rrb') ? 'Opening Railway examination portal' :
-           path.includes('p6') ? 'Opening Vision AI examination portal' :
            path === '/results' ? 'Navigating to Results' :
            path === '/settings' ? 'Navigating to Settings' :
            `Navigating to ${path}`);

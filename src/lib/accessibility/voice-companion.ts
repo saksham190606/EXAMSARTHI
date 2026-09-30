@@ -13,6 +13,7 @@ import { parseSpokenIntent, playVoiceFeedbackChime } from "@/lib/voice/intent-pa
 import { startListening as globalStartListening, stopListening as globalStopListening } from "@/lib/voice/useVoiceEngine";
 import { hasActiveContext, routeVoiceCommand } from "@/lib/voice/commandRouter";
 import { matchExamTokens, matchExamVoiceRoute } from "@/lib/voice/exam-router";
+import { isExamSessionActive } from "@/lib/assistant/sarthiExamLock";
 
 /**
  * Formats text for natural speech synthesis pronunciation.
@@ -27,12 +28,10 @@ export function formatSpeechPronunciation(text: string | null | undefined): stri
 }
 
 export const WELCOME_TOUR_TEXT_EN =
-  "Welcome to Exam Saarthi. This platform is 100% voice operated and the microphone is continuously listening. " +
-  "Speak commands anytime to navigate between Dashboard, Practice, Exams, Results, and Settings.";
+  "Welcome to Exam Saarthi, India's accessible examination and practice platform for visually impaired candidates. Would you like to log in to your account? Please say 'Login'.";
 
 export const WELCOME_TOUR_TEXT_HI =
-  "एग्जाम सारथी में आपका स्वागत है। यह प्लेटफॉर्म पूरी तरह से वॉइस संचालित है और माइक्रोफ़ोन लगातार सुन रहा है। " +
-  "डैशबोर्ड, प्रैक्टिस, परीक्षा, परिणाम और सेटिंग्स में जाने के लिए कभी भी बोलें।";
+  "एग्जामसारथी में आपका स्वागत है। दृष्टिबाधित अभ्यर्थियों के लिए भारत का सुलभ परीक्षा और अभ्यास मंच। क्या आप लॉगिन करना चाहते हैं? कृपया 'लॉगिन' बोलें।";
 
 export const WELCOME_TOUR_TEXT = WELCOME_TOUR_TEXT_EN;
 
@@ -246,7 +245,7 @@ export function getNaturalFemaleVoice(langPref?: string): SpeechSynthesisVoice |
 /**
  * Bulletproof Speech Helper that prevents stalled queues and waits for asynchronous voice loading in Chromium browsers.
  */
-export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
+export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onError?: (err: any) => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
   // 1. Prime hardware audio
@@ -272,6 +271,7 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
 
   const play = () => {
     try {
+      isAnnouncingWelcome = true;
       const store = useAccessibilityStore.getState();
       const rawTargetLang = lang || (store.language === "hi" ? "hi-IN" : "en-US");
       const targetLang = (rawTargetLang === "hi" || rawTargetLang.toLowerCase().startsWith("hi")) ? "hi-IN" : rawTargetLang;
@@ -294,6 +294,7 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
       }
 
       utterance.onend = () => {
+        isAnnouncingWelcome = false;
         activeUtteranceRef = null;
         if (typeof window !== "undefined") {
           (window as any).__activeUtterance = null;
@@ -302,26 +303,37 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string) {
       };
 
       utterance.onerror = (e) => {
+        isAnnouncingWelcome = false;
         console.warn("[VoiceCompanion] Utterance error:", e);
         activeUtteranceRef = null;
         if (typeof window !== "undefined") {
           (window as any).__activeUtterance = null;
         }
-        if (onEnd) onEnd();
+        if (onError) onError(e);
+        else if (onEnd) onEnd();
       };
+
+      // Safeguard timeout to ensure isAnnouncingWelcome doesn't stay stuck forever
+      setTimeout(() => {
+        isAnnouncingWelcome = false;
+      }, 15000);
 
       setTimeout(() => {
         try {
           synth.resume();
           synth.speak(utterance);
         } catch (err) {
+          isAnnouncingWelcome = false;
           console.warn("[VoiceCompanion] synth.speak error:", err);
-          if (onEnd) onEnd();
+          if (onError) onError(err);
+          else if (onEnd) onEnd();
         }
       }, 50);
     } catch (err) {
+      isAnnouncingWelcome = false;
       console.warn("[VoiceCompanion] forceSpeak play error:", err);
-      if (onEnd) onEnd();
+      if (onError) onError(err);
+      else if (onEnd) onEnd();
     }
   };
 
@@ -1392,24 +1404,158 @@ class VoiceNavigationEngine {
     globalStartListening(lang, (t) => this.processCommand(t));
   }
 
+  public stopListening(): void {
+    this.isListeningExplicitly = false;
+    useAccessibilityStore.getState().setIsListeningCommands(false);
+    globalStopListening();
+  }
+
+  public stop(): void {
+    this.stopListening();
+  }
+
   public async processCommand(rawInput: string) {
     if (!rawInput || !rawInput.trim()) return;
+
+    // Isolate login page: login page has its own dedicated voice state machine.
+    // Never run global companion commands or speak the "You can say Dashboard..." fallback on login page.
+    if (typeof window !== "undefined" && window.location.pathname.startsWith('/login')) {
+      return;
+    }
 
     const input = rawInput.trim();
     const isHi = useAccessibilityStore.getState().language === "hi";
 
+    // Isolate landing page: On the landing page, the voice assistant expects the user to say "Login".
+    // If the candidate says "Login", navigate to /login.
+    // If anything else is heard (noise/words), ask them back to say "Login" — NEVER speak dashboard commands!
+    const isLanding = typeof window !== "undefined" && (window.location.pathname === '/' || window.location.pathname === '');
+    if (isLanding) {
+      const lower = input.toLowerCase();
+      const isLogin =
+        lower.includes('login') ||
+        lower.includes('log in') ||
+        lower.includes('sign in') ||
+        lower.includes('लॉगिन') ||
+        lower.includes('साइन इन') ||
+        lower.includes('signin');
+
+      if (isLogin) {
+        const announcement = isHi ? "लॉगिन पृष्ठ खोला जा रहा है" : "Opening login page";
+        this.navigate('/login', announcement);
+        return;
+      }
+
+      // If candidate said something different from login on landing page, prompt back to say 'Login'
+      const promptAgain = isHi
+        ? "कृपया लॉगिन करने के लिए 'लॉगिन' बोलें।"
+        : "Please say 'Login' to sign in to your account.";
+
+      this.stopListening();
+      speak(promptAgain, {
+        lang: isHi ? 'hi-IN' : 'en-US',
+        onEnd: () => {
+          unlockAudioContext();
+          this.startAlwaysOnListening();
+        }
+      });
+      return;
+    }
+
+    // Isolate Results page: If candidate is on /results, and speaks an exam name or ordinal
+    // without an explicit launch/nav command, dispatch analysis selection to the Results page
+    const isResultsPage = typeof window !== "undefined" && window.location.pathname.startsWith('/results');
+    if (isResultsPage) {
+      const lower = input.toLowerCase();
+      const isExplicitLaunch =
+        lower.startsWith('start') ||
+        lower.startsWith('take') ||
+        lower.startsWith('launch') ||
+        lower.startsWith('begin') ||
+        lower.includes('शुरू') ||
+        lower.includes('start exam') ||
+        lower.includes('start practice');
+
+      const isNavIntent =
+        lower.includes('dashboard') ||
+        lower.includes('डैशबोर्ड') ||
+        lower.includes('practice') ||
+        lower.includes('अभ्यास') ||
+        lower.includes('setting') ||
+        lower.includes('logout') ||
+        lower.includes('sign out');
+
+      if (!isExplicitLaunch && !isNavIntent) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent('examsarthi_select_result_by_name', {
+              detail: { query: input, isHi }
+            })
+          );
+        }
+        return;
+      }
+    }
+
     // 1. Process through AI-powered Natural Speech Intent Engine (local rule + fuzzy + Gemini fallback)
     const recognized = await parseSpokenIntent(rawInput, isHi ? "hi" : "en");
+    const lowerInput = input.toLowerCase();
 
-    // Specific exam portal launch commands (e.g. "upsc", "cgl", "ssc", "bank po", "bank ipo", "railway", "vision ai")
+    // 0. Active Exam Security Lockdown
+    // Strictly prevent navigating away from an ongoing examination or practice session before submission.
+    if (isExamSessionActive()) {
+      const isSwitchLanguage = recognized.intent === "SWITCH_TO_HINDI" || recognized.intent === "SWITCH_TO_ENGLISH";
+      if (!isSwitchLanguage) {
+        const examMatchEarly = matchExamTokens(input) || (matchExamVoiceRoute(input) ? { route: matchExamVoiceRoute(input)!, examName: matchExamVoiceRoute(input)!.title } : null);
+        const wantsToLeave =
+          Boolean(examMatchEarly) ||
+          Boolean(recognized.targetPath) ||
+          ["NAVIGATE_DASHBOARD", "NAVIGATE_PRACTICE", "NAVIGATE_PRACTICE_GK", "NAVIGATE_EXAMS", "NAVIGATE_RESULTS", "NAVIGATE_SETTINGS", "NAVIGATE_LOGIN"].includes(recognized.intent) ||
+          lowerInput.includes('practice') ||
+          lowerInput.includes('dashboard') ||
+          lowerInput.includes('डैशबोर्ड') ||
+          lowerInput.includes('अभ्यास');
+
+        if (wantsToLeave) {
+          const lockMsgEn = "Navigation is locked during an active examination. Please submit your exam before leaving.";
+          const lockMsgHi = "सक्रिय परीक्षा के दौरान नेविगेशन लॉक है। कृपया बाहर निकलने से पहले अपनी परीक्षा सबमिट करें।";
+          speak(isHi ? lockMsgHi : lockMsgEn, { lang: isHi ? 'hi-IN' : 'en-US' });
+          return;
+        }
+      }
+    }
+
+    // Specific exam portal & practice set launch commands (e.g. UPSC, SSC, Banking, Railway, Quant, Reasoning, English, GK, Vision AI)
     const examMatch = matchExamTokens(input) || (matchExamVoiceRoute(input) ? { route: matchExamVoiceRoute(input)!, examName: matchExamVoiceRoute(input)!.title } : null);
     if (examMatch) {
       playVoiceFeedbackChime();
       const targetUrl = `/exam?set=${examMatch.route.param}`;
+      const isPractice = examMatch.route.param.startsWith('p') && examMatch.route.param !== 'p6';
       const announcement = isHi 
-        ? `${examMatch.examName} परीक्षा पोर्टल खोला जा रहा है`
-        : `Opening ${examMatch.examName} examination portal`;
+        ? (isPractice ? `${examMatch.examName} अभ्यास सत्र खोला जा रहा है` : `${examMatch.examName} परीक्षा पोर्टल खोला जा रहा है`)
+        : (isPractice ? `Opening ${examMatch.examName} practice session` : `Opening ${examMatch.examName} examination portal`);
       this.navigate(targetUrl, announcement);
+      return;
+    }
+
+    // Direct practice exam phrase disambiguation (ensures "practice exam" always goes to practice, not generic mock exams)
+    if (
+      lowerInput.includes('practice exam') ||
+      lowerInput.includes('practice test') ||
+      lowerInput.includes('start practice') ||
+      lowerInput.includes('begin practice') ||
+      lowerInput.includes('take practice') ||
+      lowerInput.includes('अभ्यास परीक्षा') ||
+      lowerInput.includes('प्रैक्टिस टेस्ट')
+    ) {
+      playVoiceFeedbackChime();
+      this.navigate('/practice', isHi ? 'प्रैक्टिस सत्र खोला जा रहा है' : 'Opening Practice section');
+      return;
+    }
+
+    if (recognized.targetPath && recognized.targetPath.startsWith('/exam?set=')) {
+      playVoiceFeedbackChime();
+      this.navigate(recognized.targetPath, isHi ? recognized.announcementHi : recognized.announcementEn);
       return;
     }
 
@@ -1426,7 +1572,7 @@ class VoiceNavigationEngine {
       "SWITCH_TO_ENGLISH"
     ].includes(recognized.intent);
 
-    if (!isGlobalNavIntent && hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
+    if (!isGlobalNavIntent && hasActiveContext(['exam', 'review', 'hub', 'practice', 'results'])) {
       return;
     }
 
@@ -1877,6 +2023,10 @@ export function initGestureTrigger(): () => void {
 
     if (hasAnnouncedInSession) {
       window.removeEventListener("keydown", handleFirstGesture, true);
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.location.pathname.startsWith('/login')) {
       return;
     }
 

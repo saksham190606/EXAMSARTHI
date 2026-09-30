@@ -20,6 +20,62 @@ interface AuthContextType {
   updateProfile: (updates: { full_name?: string | null }) => Promise<{ error: Error | null; data: CandidateProfile | null }>;
 }
 
+export function isDemoCredentials(loginId: string, pass: string): boolean {
+  if (!loginId || !pass) return false;
+  const cleanId = loginId.toLowerCase().trim().replace(/[@\s._-]/g, '');
+  const cleanPass = pass.toLowerCase().trim().replace(/\s+/g, '');
+
+  const idMatches =
+    cleanId.includes('priyansh') ||
+    cleanId === 'demo' ||
+    cleanId === 'candidate' ||
+    cleanId === 'student';
+
+  const passMatches =
+    cleanPass === '12345' ||
+    cleanPass === 'onetwothreefourfive' ||
+    cleanPass === '123456';
+
+  return idMatches && passMatches;
+}
+
+export function createDemoUser(): User {
+  return {
+    id: 'demo-priyansh-01',
+    app_metadata: { provider: 'demo' },
+    user_metadata: { full_name: 'Priyansh Gupta' },
+    aud: 'authenticated',
+    confirmation_sent_at: '',
+    confirmed_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    email: 'priyansh01@examsarthi.in',
+    phone: '',
+    role: 'authenticated',
+    updated_at: new Date().toISOString(),
+  } as unknown as User;
+}
+
+export function createDemoSession(user: User): Session {
+  return {
+    access_token: 'demo-access-token-priyansh',
+    token_type: 'bearer',
+    expires_in: 3600 * 24 * 30,
+    expires_at: Math.floor(Date.now() / 1000) + 3600 * 24 * 30,
+    refresh_token: 'demo-refresh-token',
+    user,
+  } as unknown as Session;
+}
+
+export function createDemoProfile(userId: string): CandidateProfile {
+  return {
+    id: userId,
+    full_name: 'Priyansh Gupta',
+    avatar_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -87,6 +143,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
+    // Check if demo user is stored in localStorage or cookie
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('examsarthi_demo_auth');
+        const hasDemoCookie = document.cookie.includes('examsarthi_demo_auth=1');
+        if (stored || hasDemoCookie) {
+          const parsed = stored ? JSON.parse(stored) : null;
+          const demoUser = parsed?.user || createDemoUser();
+          const demoSession = parsed?.session || createDemoSession(demoUser);
+          const demoProfile = parsed?.profile || createDemoProfile(demoUser.id);
+          setUser(demoUser);
+          setSession(demoSession);
+          setProfile(demoProfile);
+          setLoading(false);
+          document.cookie = 'examsarthi_demo_auth=1; path=/; max-age=2592000; SameSite=Lax';
+          return;
+        }
+      } catch (_) {}
+    }
+
     if (!supabase) {
       setLoading(false);
       return;
@@ -138,6 +214,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase, syncProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
+    // Demo credentials bypass (priyansh01 / 12345)
+    if (isDemoCredentials(email, password)) {
+      const demoUser = createDemoUser();
+      const demoSession = createDemoSession(demoUser);
+      const demoProfile = createDemoProfile(demoUser.id);
+
+      setUser(demoUser);
+      setSession(demoSession);
+      setProfile(demoProfile);
+      setLoading(false);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('examsarthi_demo_auth', JSON.stringify({
+            user: demoUser,
+            session: demoSession,
+            profile: demoProfile,
+          }));
+          document.cookie = 'examsarthi_demo_auth=1; path=/; max-age=2592000; SameSite=Lax';
+        } catch (_) {}
+      }
+
+      return { data: { user: demoUser, session: demoSession }, error: null };
+    }
+
     if (!supabase) {
       return { error: new AuthError('Supabase is not configured.') as any, data: null };
     }
@@ -183,6 +284,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setSession(null);
     setUser(null);
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('examsarthi_demo_auth');
+        document.cookie = 'examsarthi_demo_auth=; path=/; max-age=0; SameSite=Lax';
+      } catch (_) {}
+    }
 
     if (!supabase) {
       return { error: null };

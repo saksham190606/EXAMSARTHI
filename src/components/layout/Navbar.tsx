@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
+import { useExamLock } from '@/lib/assistant/sarthiExamLock';
 
 interface NavItem {
   id: string;
@@ -33,6 +34,29 @@ export function NavigationTabs({ className }: { className?: string }) {
   const pathname = usePathname();
   const reducedMotion = useAccessibilityStore((state) => state.reducedMotion);
   const language = useAccessibilityStore((state) => state.language);
+  const isLocked = useExamLock();
+
+  if (isLocked) {
+    return (
+      <div 
+        className={cn(
+          'flex items-center gap-2.5 px-3.5 py-1.5 rounded-[46px] bg-red-950/80 border border-red-500/60 shadow-[0_0_16px_rgba(239,68,68,0.25)] select-none text-white',
+          className
+        )}
+        role="status"
+        aria-live="polite"
+      >
+        <span className="relative flex size-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+          <span className="relative inline-flex rounded-full size-2 bg-red-500" />
+        </span>
+        <span className="text-xs font-bold text-red-200 font-mono tracking-wide flex items-center gap-1.5">
+          <span aria-hidden="true">🔒</span>
+          <span>{language === 'hi' ? 'सक्रिय सत्र · नेविगेशन लॉक है' : 'Active Session · Navigation Locked'}</span>
+        </span>
+      </div>
+    );
+  }
 
   // Check active state, treating root '/' as Dashboard
   const isItemActive = (href: string) => {

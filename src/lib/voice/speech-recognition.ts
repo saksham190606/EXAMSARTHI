@@ -258,7 +258,7 @@ export function extractTranscriptsFromEvent(event: any): string[] {
 export function injectExamGrammar(recognition: any): boolean {
   if (typeof window === "undefined" || !recognition) return false;
   try {
-    const grammar = '#JSGF V1.0; grammar examCommands; public <command> = a | b | c | d | 1 | 2 | 3 | 4 | true | false | next | previous | pause | resume | repeat | review | flag | clear | submit ;';
+    const grammar = '#JSGF V1.0; grammar examCommands; public <command> = a | b | c | d | 1 | 2 | 3 | 4 | 5 | 12345 | start | repeat | back | true | false | next | previous | pause | resume | review | flag | clear | submit ;';
     const SpeechGrammarList = (window as any).SpeechGrammarList || (window as any).webkitSpeechGrammarList;
     if (SpeechGrammarList) {
       const speechRecognitionList = new SpeechGrammarList();

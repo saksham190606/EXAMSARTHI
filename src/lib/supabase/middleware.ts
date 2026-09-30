@@ -48,6 +48,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isDemoAuth = request.cookies.get('examsarthi_demo_auth')?.value === '1';
+  const hasUser = Boolean(user || isDemoAuth);
+
   const pathname = request.nextUrl.pathname;
 
   // Protected routes specified in Phase 7E-1
@@ -57,7 +60,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   // If unauthenticated and accessing a protected route, redirect to /login
-  if (isProtected && !user) {
+  if (isProtected && !hasUser) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/login';
     const redirectTarget = `${pathname}${request.nextUrl.search}`;
@@ -71,7 +74,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // If already authenticated and accessing login or signup, redirect to dashboard or safe redirectTo
-  if (user && (pathname === '/login' || pathname === '/signup')) {
+  if (hasUser && (pathname === '/login' || pathname === '/signup')) {
     const rawRedirect = request.nextUrl.searchParams.get('redirectTo') || '/dashboard';
     const safeRedirect = (rawRedirect.startsWith('/') && !rawRedirect.startsWith('//'))
       ? rawRedirect

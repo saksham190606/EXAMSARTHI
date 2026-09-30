@@ -2,14 +2,27 @@ import { ExamResults } from '@/lib/resultsUtils';
 import { Question, ExamAnswers, isQuestionAnswered, evaluateAnswer } from '@/lib/questionEvaluation';
 import { PerformanceProfile, Recommendation, SubjectPerformanceProfile, TopicMetrics } from './types';
 
+import { resolveExamTitle, resolveExamSubject } from './history';
+
 export const WEAK_THRESHOLD = 70;
 export const PRIORITY_THRESHOLD = 50;
 export const STRONG_THRESHOLD = 80;
 
+export interface AnalyzePerformanceOptions {
+  id?: string;
+  examId?: string;
+  examTitle?: string;
+  subject?: string;
+  category?: string;
+  timeUsedSeconds?: number;
+  timestamp?: number;
+}
+
 export function analyzePerformance(
   result: ExamResults,
   questions: Question[],
-  rawAnswers: ExamAnswers | Record<string, any>
+  rawAnswers: ExamAnswers | Record<string, any>,
+  options?: AnalyzePerformanceOptions
 ): PerformanceProfile {
   const subjectMap = new Map<string, SubjectPerformanceProfile>();
 
@@ -70,14 +83,42 @@ export function analyzePerformance(
     return sub;
   });
 
+  // Aggregate flattened topic metrics
+  const allTopicMetrics: TopicMetrics[] = [];
+  subjects.forEach((sub) => {
+    sub.topics.forEach((t) => {
+      allTopicMetrics.push({
+        ...t,
+        subject: sub.subject,
+      });
+    });
+  });
+
+  const timestamp = options?.timestamp || Date.now();
+  const examId = options?.examId || 'mock';
+  const resolvedTitle = options?.examTitle || resolveExamTitle(examId);
+  const resolvedSubject = options?.subject || subjects[0]?.subject || resolveExamSubject(examId);
+  const id = options?.id || `attempt-${examId}-${timestamp}`;
+  const timeUsedSeconds = typeof options?.timeUsedSeconds === 'number'
+    ? options.timeUsedSeconds
+    : (typeof result.timeUsed === 'number' ? result.timeUsed : 0);
+
   return {
-    examId: Date.now().toString(),
-    timestamp: Date.now(),
+    id,
+    examId,
+    examTitle: resolvedTitle,
+    subject: resolvedSubject,
+    category: options?.category,
+    timestamp,
     totalQuestions: result.totalQuestions,
     attempted: result.attempted,
     correct: result.correct,
+    incorrect: typeof result.incorrect === 'number' ? result.incorrect : Math.max(0, result.attempted - result.correct),
+    score: typeof result.score === 'number' ? result.score : result.correct,
     accuracy: result.accuracy,
+    timeUsedSeconds,
     subjects,
+    topicMetrics: allTopicMetrics,
   };
 }
 

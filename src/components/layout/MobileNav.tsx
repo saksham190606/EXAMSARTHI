@@ -18,11 +18,11 @@ import {
 import { useTranslation } from "@/lib/i18n"
 import { useAuth } from "@/hooks/useAuth"
 
-export function MobileNav() {
+export function MobileNav({ isLocked = false }: { isLocked?: boolean }) {
   const [open, setOpen] = React.useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const { user, profile, signOut } = useAuth()
   const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email
 
@@ -35,6 +35,7 @@ export function MobileNav() {
   ]
 
   const handleSignOut = async () => {
+    if (isLocked) return
     setOpen(false)
     await signOut()
     router.push('/login')
@@ -62,20 +63,34 @@ export function MobileNav() {
           </SheetDescription>
         </SheetHeader>
         <nav aria-label="Mobile navigation" className="flex flex-col gap-2 mt-8">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className={`text-base font-bold tracking-[0.144px] px-3 py-2.5 rounded-[2px] transition-colors ${
-                pathname === item.href 
-                  ? "bg-surface-soft dark:bg-surface-deep text-foreground border-l-2 border-primary" 
-                  : "text-neutral-700 dark:text-neutral-300 hover:text-foreground hover:bg-surface-soft"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {isLocked ? (
+            <div className="p-4 rounded-none bg-red-950/40 border border-red-500/40 text-red-300 text-sm space-y-2">
+              <p className="font-bold flex items-center gap-2 text-red-400">
+                <span>🔒</span>
+                <span>{language === 'hi' ? 'सक्रिय परीक्षा सत्र' : 'Active Examination Session'}</span>
+              </p>
+              <p className="text-xs text-red-200/80 leading-relaxed">
+                {language === 'hi'
+                  ? 'सुरक्षा नियमों के अनुसार सक्रिय परीक्षा के दौरान नेविगेशन लॉक है। बाहर जाने के लिए कृपया पहले परीक्षा सबमिट करें।'
+                  : 'Navigation outside the active examination is strictly locked. Please submit your exam before exiting.'}
+              </p>
+            </div>
+          ) : (
+            navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={`text-base font-bold tracking-[0.144px] px-3 py-2.5 rounded-[2px] transition-colors ${
+                  pathname === item.href 
+                    ? "bg-surface-soft dark:bg-surface-deep text-foreground border-l-2 border-primary" 
+                    : "text-neutral-700 dark:text-neutral-300 hover:text-foreground hover:bg-surface-soft"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))
+          )}
 
           <div className="border-t border-hairline dark:border-white/16 pt-6 mt-4">
             {user ? (

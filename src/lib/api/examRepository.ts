@@ -25,6 +25,7 @@ import {
   SafePracticeShowcaseQuestions
 } from '@/lib/questions/safeQuestionBank';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
+import { resolveExamTitle, resolveExamSubject } from '@/lib/personalization/history';
 
 export interface RemoteExamSummary {
   id: string;
@@ -308,6 +309,20 @@ export async function resolveCandidateQuestions(params: {
   examId?: string | null;
 }): Promise<QuestionLoadResult> {
   const { setId, examId } = params;
+
+  const isMockExam = setId && (
+    setId.includes('mock') || 
+    setId.includes('upsc') || 
+    setId.includes('cgl') || 
+    setId.includes('ibps') || 
+    setId.includes('rrb') || 
+    setId.includes('bank') || 
+    ['e1', 'e2', 'e3'].includes(setId)
+  );
+
+  if (isMockExam) {
+    return getRemoteQuestionsForExam(setId);
+  }
 
   if (setId) {
     return getRemoteQuestionsForPracticeSet(setId);
@@ -654,15 +669,6 @@ export interface CandidateDashboardAnalytics {
   }>;
 }
 
-function resolveExamTitle(examId: string, remoteExamTitle?: string | null): string {
-  if (remoteExamTitle) return remoteExamTitle;
-  const pSet = PracticeSets.find(p => p.id === examId);
-  if (pSet) return pSet.title;
-  const exam = AvailableExams.find(e => e.id === examId);
-  if (exam) return exam.title;
-  return `Examination ${examId.toUpperCase()}`;
-}
-
 function getSubjectSlug(subject: string): string {
   const s = subject.toLowerCase();
   if (s.includes('general') || s.includes('gk')) return 'gk';
@@ -707,69 +713,101 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
   try {
     const supabase = createClient();
     let user: any = null;
-    let attempts: any[] = [];
+    let remoteAttempts: any[] = [];
 
     if (supabase) {
-      const { data: userData, error: authError } = await supabase.auth.getUser();
-      user = userData?.user;
+      try {
+        const { data: userData, error: authError } = await supabase.auth.getUser();
+        user = userData?.user;
 
-      if (!authError && user) {
-        // Fetch ONLY completed attempts for this candidate under RLS
-        const { data: remoteAttempts, error } = await supabase
-          .from('exam_attempts')
-          .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at, exams(id, title, subject, category)')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .order('submitted_at', { ascending: false });
+        if (!authError && user) {
+          // Fetch ONLY completed attempts for this candidate under RLS
+          const { data: fetched, error } = await supabase
+            .from('exam_attempts')
+            .select('id, user_id, exam_id, status, score, accuracy, total_questions, attempted_count, correct_count, incorrect_count, time_used_seconds, summary_metrics, started_at, submitted_at, exams(id, title, subject, category)')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .order('submitted_at', { ascending: false });
 
-        if (!error && remoteAttempts) {
-          attempts = remoteAttempts;
+          if (!error && fetched) {
+            remoteAttempts = fetched;
+          }
         }
+      } catch (authErr) {
+        console.warn('[ExamRepository] Auth check notice:', authErr);
       }
     }
 
-    // Fallback to local offline mock history if remote attempts are unavailable
-    if (attempts.length === 0 && typeof window !== 'undefined') {
+    // Load local performance history
+    let localHistory: any[] = [];
+    if (typeof window !== 'undefined') {
       try {
         const { getPerformanceHistory } = await import('@/lib/personalization/history');
-        const localHistory = getPerformanceHistory();
-        if (localHistory && localHistory.length > 0) {
-          attempts = localHistory.map((h, i) => ({
-            id: `local-mock-${i}`,
-            user_id: user?.id || 'local-user',
-            exam_id: h.examId || 'mock',
-            status: 'completed',
-            score: h.correct,
-            accuracy: h.accuracy,
-            total_questions: h.totalQuestions,
-            attempted_count: h.attempted,
-            correct_count: h.correct,
-            incorrect_count: h.attempted - h.correct,
-            time_used_seconds: 0,
-            summary_metrics: {
-              subjectMetrics: h.subjects?.map(s => ({
-                subject: s.subject,
-                totalQuestions: s.totalQuestions,
-                attempted: s.attempted,
-                correct: s.correct,
-                incorrect: s.incorrect,
-                accuracy: s.accuracy,
-              })) || []
-            },
-            started_at: new Date(h.timestamp).toISOString(),
-            submitted_at: new Date(h.timestamp).toISOString(),
-            exams: {
-              id: h.examId || 'mock',
-              title: 'Offline Mock Practice',
-              subject: h.subjects?.[0]?.subject || 'General',
-              category: 'Practice',
-            }
-          }));
-        }
+        localHistory = getPerformanceHistory();
       } catch (err) {
         console.warn('[ExamRepository] Failed to load local history fallback:', err);
       }
     }
+
+    // Merge remote attempts and local history seamlessly without duplication
+    const attempts: any[] = [...remoteAttempts];
+    const remoteAttemptIds = new Set(remoteAttempts.map((a: any) => String(a.id)));
+
+    for (const h of localHistory) {
+      if (h.id && remoteAttemptIds.has(String(h.id))) {
+        continue; // Already included via remote attempt
+      }
+      // Check if duplicate of any remote attempt by examId and close timestamp (within 15s)
+      const isDup = remoteAttempts.some((ra: any) => {
+        const raTime = new Date(ra.submitted_at || ra.started_at).getTime();
+        return ra.exam_id === h.examId && Math.abs(raTime - h.timestamp) < 15000;
+      });
+      if (isDup) continue;
+
+      const resolvedTitle = resolveExamTitle(h.examId, h.examTitle);
+      const resolvedSubj = resolveExamSubject(h.examId, h.subject || h.subjects?.[0]?.subject);
+
+      attempts.push({
+        id: h.id || `local-${h.examId}-${h.timestamp}`,
+        user_id: user?.id || 'candidate-user',
+        exam_id: h.examId || 'mock',
+        status: 'completed',
+        score: typeof h.score === 'number' ? h.score : h.correct,
+        accuracy: h.accuracy,
+        total_questions: h.totalQuestions,
+        attempted_count: h.attempted,
+        correct_count: h.correct,
+        incorrect_count: typeof h.incorrect === 'number' ? h.incorrect : (h.attempted - h.correct),
+        time_used_seconds: h.timeUsedSeconds || 0,
+        summary_metrics: {
+          subjectMetrics: h.subjects?.map((s: any) => ({
+            subject: s.subject,
+            totalQuestions: s.totalQuestions,
+            attempted: s.attempted,
+            correct: s.correct,
+            incorrect: s.incorrect,
+            accuracy: s.accuracy,
+            topics: s.topics || [],
+          })) || [],
+          topicMetrics: h.topicMetrics || [],
+        },
+        started_at: new Date(h.timestamp - ((h.timeUsedSeconds || 0) * 1000)).toISOString(),
+        submitted_at: new Date(h.timestamp).toISOString(),
+        exams: {
+          id: h.examId || 'mock',
+          title: resolvedTitle,
+          subject: resolvedSubj,
+          category: h.category || 'Practice',
+        }
+      });
+    }
+
+    // Sort all attempts chronologically descending (latest first)
+    attempts.sort((a, b) => {
+      const timeA = new Date(a.submitted_at || a.started_at).getTime();
+      const timeB = new Date(b.submitted_at || b.started_at).getTime();
+      return timeB - timeA;
+    });
 
     if (attempts.length === 0) {
       return emptyAnalytics;
@@ -901,7 +939,23 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
     // Synthesize data-driven recommendations
     const recommendations: CandidateDashboardAnalytics['recommendations'] = [];
 
-    // 1. Weak subjects (accuracy < 70)
+    // 1. Weak topics (accuracy < 70)
+    const weakTopics = topicMetrics.filter(t => t.attempted > 0 && t.accuracy < 70);
+    for (const wt of weakTopics) {
+      const slugSub = getSubjectSlug(wt.subject);
+      const slugTop = wt.topic.toLowerCase().replace(/\s+/g, '-');
+      const isCritical = wt.accuracy < 50;
+      recommendations.push({
+        id: `weak-topic-${wt.topic}`,
+        priority: isCritical ? 'CRITICAL' : 'HIGH',
+        title: `${wt.subject}: ${wt.topic}`,
+        description: `Your accuracy in ${wt.topic} is currently ${wt.accuracy}% (${wt.correct}/${wt.attempted} correct). Targeted practice is recommended.`,
+        actionLabel: `Practice ${wt.topic}`,
+        actionUrl: `/practice?subject=${slugSub}&topic=${slugTop}`,
+      });
+    }
+
+    // 2. Weak subjects (accuracy < 70)
     const weakSubjects = subjectMetrics.filter(s => s.attempted > 0 && s.accuracy < 70);
     for (const ws of weakSubjects) {
       const slug = getSubjectSlug(ws.subject);
@@ -916,7 +970,7 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
       });
     }
 
-    // 2. Strong subjects (accuracy >= 80)
+    // 3. Strong subjects (accuracy >= 80)
     const strongSubjects = subjectMetrics.filter(s => s.attempted > 0 && s.accuracy >= 80);
     for (const ss of strongSubjects) {
       const slug = getSubjectSlug(ss.subject);
@@ -930,7 +984,7 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
       });
     }
 
-    // 3. Overall trend indicator
+    // 4. Overall trend indicator
     if (trendDiff !== null && trendDiff >= 5) {
       recommendations.push({
         id: 'trend-improving',
@@ -953,6 +1007,15 @@ export async function getCandidateDashboardAnalytics(): Promise<CandidateDashboa
         actionUrl: '/practice',
       });
     }
+
+    const priorityWeight: Record<string, number> = {
+      CRITICAL: 4,
+      HIGH: 3,
+      MEDIUM: 2,
+      MAINTAIN: 1,
+      GENERAL: 0,
+    };
+    recommendations.sort((a, b) => (priorityWeight[b.priority] ?? 0) - (priorityWeight[a.priority] ?? 0));
 
     return {
       completedAttemptsCount,

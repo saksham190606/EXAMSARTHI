@@ -17,6 +17,7 @@ interface SubmitDialogProps {
   totalQuestions: number;
   answeredCount: number;
   onConfirmSubmit: () => void;
+  isPracticeMode?: boolean;
 }
 
 export function SubmitDialog({ 
@@ -24,9 +25,10 @@ export function SubmitDialog({
   onOpenChange, 
   totalQuestions, 
   answeredCount, 
-  onConfirmSubmit 
+  onConfirmSubmit,
+  isPracticeMode = false
 }: SubmitDialogProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const unansweredCount = totalQuestions - answeredCount;
 
   return (
@@ -34,10 +36,14 @@ export function SubmitDialog({
       <DialogContent className="sm:max-w-[440px] p-6 space-y-4">
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-2xl font-bold tracking-tight text-foreground">
-            {t('examSubmissionConfirmation')}
+            {isPracticeMode 
+              ? (language === 'hi' ? 'अभ्यास सत्र सबमिट करें' : 'Submit Practice Session')
+              : t('examSubmissionConfirmation')}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            {t('submissionWarning')}
+            {isPracticeMode
+              ? (language === 'hi' ? 'अपने उत्तरों की समीक्षा करें और अभ्यास समाप्त करें।' : 'Review your answers and submit your practice set for immediate solutions.')
+              : t('submissionWarning')}
           </DialogDescription>
         </DialogHeader>
 
@@ -72,7 +78,10 @@ export function SubmitDialog({
           </div>
 
           <div className="p-3 rounded-none bg-muted/30 border border-border/50 text-xs text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">Note:</span> {t('irreversibleNotice')}
+            <span className="font-semibold text-foreground">Note:</span>{' '}
+            {isPracticeMode
+              ? (language === 'hi' ? 'सबमिशन के तुरंत बाद विस्तृत व्याख्या और समाधान उपलब्ध होंगे।' : 'Detailed question walkthroughs and explanations are available immediately.')
+              : t('irreversibleNotice')}
           </div>
         </div>
 
@@ -83,7 +92,9 @@ export function SubmitDialog({
             className="font-bold"
           >
             <ArrowLeft className="mr-2 size-4" aria-hidden="true" />
-            {t('returnToExam')}
+            {isPracticeMode 
+              ? (language === 'hi' ? 'अभ्यास पर वापस जाएं' : 'Return to Practice')
+              : t('returnToExam')}
           </Button>
           <Button 
             onClick={() => {
@@ -93,7 +104,9 @@ export function SubmitDialog({
             className="font-bold "
           >
             <Send className="mr-2 size-4" aria-hidden="true" />
-            {t('confirmAndSubmit')}
+            {isPracticeMode 
+              ? (language === 'hi' ? 'अभ्यास सबमिट करें' : 'Submit Practice')
+              : t('confirmAndSubmit')}
           </Button>
         </DialogFooter>
       </DialogContent>

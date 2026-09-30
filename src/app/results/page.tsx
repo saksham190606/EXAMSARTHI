@@ -45,9 +45,21 @@ const AITutorCard = dynamic(() => import('@/components/results/AITutorCard'), {
 });
 
 import { analyzePerformance, generateRecommendations } from '@/lib/personalization/engine';
-import { getPerformanceHistory, savePerformanceProfile } from '@/lib/personalization/history';
+import { 
+  getPerformanceHistory, 
+  savePerformanceProfile, 
+  enrichPerformanceProfile,
+  resolveExamTitle, 
+  resolveExamSubject,
+  formatDateForSpeech
+} from '@/lib/personalization/history';
 import { PerformanceProfile, Recommendation } from '@/lib/personalization/types';
 import { useTranslation } from '@/lib/i18n';
+import { forceSpeak, unlockAudioContext, voiceEngine } from '@/lib/accessibility/voice-companion';
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { subscribe } from '@/lib/voice/useVoiceEngine';
+import { registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
+import { cn } from '@/lib/utils';
 
 interface WeakTopicItem {
   subject: string;
@@ -58,6 +70,95 @@ interface WeakTopicItem {
   correct: number;
   incorrect: number;
   actionUrl: string;
+}
+
+function findMatchingHistoryItem(transcript: string, items: PerformanceProfile[]): PerformanceProfile | null {
+  if (!transcript || !items || items.length === 0) return null;
+  const clean = transcript.toLowerCase().trim();
+
+  // 1. Ordinal matching (English & Hindi)
+  const isFirst = /(?:first|latest|recent|most recent|pehla|pahla|पहला|पहली|पहला वाला|नया)/i.test(clean);
+  if (isFirst && items.length > 0) return items[0];
+
+  const isSecond = /(?:second|previous|dusra|doosra|दूसरा|दूसरी|दूसरा वाला)/i.test(clean);
+  if (isSecond && items.length > 1) return items[1];
+
+  const isThird = /(?:third|teesra|तीसरा|तीसरी)/i.test(clean);
+  if (isThird && items.length > 2) return items[2];
+
+  // 2. Exam name and topic token matching
+  for (const item of items) {
+    const title = (item.examTitle || resolveExamTitle(item.examId)).toLowerCase();
+    const id = (item.examId || '').toLowerCase();
+    const subject = (item.subject || '').toLowerCase();
+
+    // Direct title inclusion
+    if (clean.includes(title) || title.includes(clean)) {
+      return item;
+    }
+
+    // Match individual distinctive words (> 3 chars)
+    const titleWords = title.split(/\s+/).filter(w => w.length > 3 && !['mock', 'exam', 'drill', 'tier', 'test'].includes(w));
+    if (titleWords.some(w => clean.includes(w))) {
+      return item;
+    }
+
+    // UPSC CSAT
+    if ((clean.includes('upsc') || clean.includes('csat') || clean.includes('यूपीएससी')) &&
+        (title.includes('upsc') || id.includes('upsc') || id.includes('csat') || id === 'e3')) {
+      return item;
+    }
+
+    // SSC CGL
+    if ((clean.includes('ssc') || clean.includes('cgl') || clean.includes('एसएससी') || clean.includes('सीजीएल')) &&
+        (title.includes('ssc') || title.includes('cgl') || id.includes('cgl') || id.includes('ssc') || id === 'e1')) {
+      return item;
+    }
+
+    // Bank PO / IBPS
+    if ((clean.includes('bank') || clean.includes('banking') || clean.includes('po') || clean.includes('ibps') || clean.includes('बैंक')) &&
+        (title.includes('bank') || id.includes('ibps') || id === 'e2')) {
+      return item;
+    }
+
+    // Railway / RRB
+    if ((clean.includes('railway') || clean.includes('rrb') || clean.includes('रेलवे')) &&
+        (title.includes('railway') || id.includes('rrb'))) {
+      return item;
+    }
+
+    // Quantitative Aptitude / Mathematics / Quant / Math
+    if ((clean.includes('quant') || clean.includes('math') || clean.includes('maths') || clean.includes('arithmetic') || clean.includes('गणित') || clean.includes('मैथ्स') || clean.includes('क्वांट')) &&
+        (title.includes('quant') || title.includes('math') || subject.includes('quant') || subject.includes('math') || id.includes('p1'))) {
+      return item;
+    }
+
+    // Reasoning
+    if ((clean.includes('reasoning') || clean.includes('logical') || clean.includes('रीज़निंग') || clean.includes('तर्कशक्ति')) &&
+        (title.includes('reasoning') || subject.includes('reason') || id.includes('p3'))) {
+      return item;
+    }
+
+    // General Knowledge / Geography / GK
+    if ((clean.includes('gk') || clean.includes('geography') || clean.includes('general knowledge') || clean.includes('जीके') || clean.includes('भूगोल')) &&
+        (title.includes('gk') || title.includes('geography') || subject.includes('gk') || subject.includes('general') || id.includes('p2'))) {
+      return item;
+    }
+
+    // English
+    if ((clean.includes('english') || clean.includes('grammar') || clean.includes('comprehension') || clean.includes('अंग्रेजी') || clean.includes('इंग्लिश')) &&
+        (title.includes('english') || subject.includes('english') || id.includes('p4'))) {
+      return item;
+    }
+
+    // Vision AI / Diagram
+    if ((clean.includes('vision') || clean.includes('diagram') || clean.includes('चित्र') || clean.includes('डायग्राम')) &&
+        (title.includes('vision') || title.includes('diagram') || id.includes('p6'))) {
+      return item;
+    }
+  }
+
+  return null;
 }
 
 export default function ResultsPage() {
@@ -90,6 +191,11 @@ function ResultsContent() {
   const [reviewQuestions, setReviewQuestions] = useState<QuestionReviewItem[]>([]);
   const [loadingReview, setLoadingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [historyList, setHistoryList] = useState<PerformanceProfile[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const hasSpokenOverviewRef = React.useRef<boolean>(false);
+  const language = useAccessibilityStore((s) => s.language);
+  const isHindi = language === 'hi';
   const { t } = useTranslation();
 
   const fetchQuestionReview = React.useCallback((targetAttemptId: string) => {
@@ -119,6 +225,121 @@ function ResultsContent() {
         setLoadingReview(false);
       });
   }, []);
+
+  const loadProfileAsActiveResult = React.useCallback((targetProfile: PerformanceProfile) => {
+    if (!targetProfile) return;
+    const enriched = enrichPerformanceProfile(targetProfile);
+
+    const totalQ = enriched.totalQuestions || 0;
+    const correct = enriched.correct || 0;
+    const attempted = enriched.attempted || 0;
+    const incorrect = typeof enriched.incorrect === 'number' ? enriched.incorrect : Math.max(0, attempted - correct);
+    const unanswered = Math.max(0, totalQ - attempted);
+    const score = typeof enriched.score === 'number' ? enriched.score : correct;
+    const accuracy = enriched.accuracy || (totalQ > 0 ? Math.round((correct / totalQ) * 100) : 0);
+    const timeUsed = enriched.timeUsedSeconds || 0;
+
+    const subjectMetrics = (enriched.subjects && enriched.subjects.length > 0)
+      ? enriched.subjects.map((s) => ({
+          subject: s.subject || 'General Assessment',
+          totalQuestions: s.totalQuestions || 0,
+          attempted: s.attempted || 0,
+          correct: s.correct || 0,
+          incorrect: s.incorrect || 0,
+          accuracy: s.accuracy || 0,
+        }))
+      : [{
+          subject: enriched.subject || 'General Assessment',
+          totalQuestions: totalQ,
+          attempted,
+          correct,
+          incorrect,
+          accuracy,
+        }];
+
+    const weakAreas = enriched.subjects
+      ? enriched.subjects.filter((s) => s.accuracy < 70).map((s) => s.subject)
+      : [];
+
+    const calculatedResults: ExamResults = {
+      totalQuestions: totalQ,
+      attempted,
+      correct,
+      incorrect,
+      unanswered,
+      score,
+      accuracy,
+      percentage: accuracy,
+      timeUsed,
+      subjectMetrics,
+      weakAreas,
+    };
+
+    setResults(calculatedResults);
+    setProfile(enriched);
+    setSelectedHistoryId(enriched.id || null);
+    setIsOfficialRemote(Boolean(enriched.id && !enriched.id.startsWith('local-') && enriched.id.length > 20));
+
+    // Rebuild reviewQuestions if not present
+    if (Array.isArray(enriched.reviewQuestions) && enriched.reviewQuestions.length > 0) {
+      setReviewQuestions(enriched.reviewQuestions);
+    } else {
+      const examQuestions = getSafeQuestionsForContext({
+        setId: enriched.examId,
+        examId: enriched.examId,
+      });
+
+      if (examQuestions.length > 0) {
+        const built = examQuestions.map((q, idx) => {
+          const masterQ = (QuestionMap as any)[q.id] || (q as any);
+          const anyQ = q as any;
+          const rawCorrect = masterQ.correctAnswerId || masterQ.correctAnswerIds || masterQ.correctAnswer || anyQ.correctAnswerId || 'N/A';
+          const userAns = enriched.answers?.[q.id];
+          const isCorr = evaluateAnswer(masterQ, userAns);
+          const options = masterQ.options || anyQ.options || [];
+
+          let userDisplay = userAns ? String(userAns) : 'Not Answered';
+          if (options.length > 0 && userAns) {
+            const opt = options.find((o: any) => o.id === userAns);
+            if (opt) userDisplay = opt.text;
+          }
+
+          let correctDisplay = String(rawCorrect);
+          if (options.length > 0 && masterQ.correctAnswerId) {
+            const opt = options.find((o: any) => o.id === masterQ.correctAnswerId);
+            if (opt) correctDisplay = opt.text;
+          }
+
+          return {
+            questionId: q.id,
+            orderIndex: idx + 1,
+            text: q.text,
+            type: q.type || 'multiple-choice',
+            subject: q.subject || 'General Assessment',
+            userAnswer: userDisplay,
+            correctAnswer: correctDisplay,
+            isCorrect: isCorr,
+            isAnswered: Boolean(userAns),
+            explanation: masterQ.explanation || anyQ.explanation || `The correct answer is ${correctDisplay}.`,
+            options: options,
+          };
+        });
+        setReviewQuestions(built);
+      } else if (enriched.id && !enriched.id.startsWith('local-') && enriched.id.length > 20) {
+        fetchQuestionReview(enriched.id);
+      }
+    }
+
+    const allHistory = getPerformanceHistory();
+    const otherProfiles = allHistory.filter((h) => h.id !== enriched.id);
+    setRecommendations(generateRecommendations(enriched, otherProfiles));
+
+    if (otherProfiles.length > 0) {
+      setPreviousAttempt(otherProfiles[0]);
+    } else {
+      setPreviousAttempt(null);
+    }
+  }, [fetchQuestionReview]);
 
   // 1. If attemptId is present, load the official persisted attempt from Supabase
   useEffect(() => {
@@ -226,17 +447,30 @@ function ResultsContent() {
             };
           });
 
+          const remoteTitle = attempt.exams?.title || resolveExamTitle(attempt.exam_id);
+          const remoteSubject = attempt.exams?.subject || resolveExamSubject(attempt.exam_id, remoteSubjectPerformances[0]?.subject);
+          const remoteTimeUsed = typeof attempt.time_used_seconds === 'number' ? attempt.time_used_seconds : timeUsed;
+
           const remoteProfile: PerformanceProfile = {
+            id: attempt.id,
             examId: attempt.exam_id,
+            examTitle: remoteTitle,
+            subject: remoteSubject,
             timestamp: new Date(attempt.submitted_at || Date.now()).getTime(),
             totalQuestions: totalQ,
             attempted,
             correct,
+            incorrect: Math.max(0, attempted - correct),
+            score: typeof attempt.score === 'number' ? attempt.score : correct,
             accuracy,
-            subjects: remoteSubjectPerformances
+            timeUsedSeconds: remoteTimeUsed,
+            subjects: remoteSubjectPerformances,
+            topicMetrics: Array.isArray(topicMetricsArr) ? topicMetricsArr : [],
           };
 
           setProfile(remoteProfile);
+          // Persist remote attempt to local performance history for unified analytics
+          savePerformanceProfile(remoteProfile);
 
           // Fetch remote previous completed attempt for trend comparison
           getPreviousCompletedAttempt(attempt.id, attempt.submitted_at).then((prev) => {
@@ -244,12 +478,18 @@ function ResultsContent() {
               const prevSummary = prev.summary_metrics || {};
               const prevSubMetrics = Array.isArray(prevSummary.subjectMetrics) ? prevSummary.subjectMetrics : [];
               const prevProfile: PerformanceProfile = {
+                id: prev.id,
                 examId: prev.exam_id,
+                examTitle: prev.exams?.title || resolveExamTitle(prev.exam_id),
+                subject: prev.exams?.subject || resolveExamSubject(prev.exam_id, prevSubMetrics[0]?.subject),
                 timestamp: new Date(prev.submitted_at || Date.now()).getTime(),
                 totalQuestions: prev.total_questions || 0,
                 attempted: prev.attempted_count ?? 0,
                 correct: prev.correct_count ?? 0,
+                incorrect: (prev.attempted_count ?? 0) - (prev.correct_count ?? 0),
+                score: typeof prev.score === 'number' ? prev.score : (prev.correct_count ?? 0),
                 accuracy: typeof prev.accuracy === 'number' ? prev.accuracy : 0,
+                timeUsedSeconds: prev.time_used_seconds || 0,
                 subjects: prevSubMetrics.map((s: any) => ({
                   subject: s.subject || 'General Assessment',
                   score: s.correct ?? 0,
@@ -264,14 +504,16 @@ function ResultsContent() {
               setPreviousAttempt(prevProfile);
             } else {
               // Fall back to local history
-              const history = getPerformanceHistory();
+              const history = getPerformanceHistory().filter(h => h.id !== remoteProfile.id);
               if (history.length > 0) setPreviousAttempt(history[0]);
             }
           }).catch(() => {
-            const history = getPerformanceHistory();
+            const history = getPerformanceHistory().filter(h => h.id !== remoteProfile.id);
             if (history.length > 0) setPreviousAttempt(history[0]);
           });
-          setRecommendations(generateRecommendations(remoteProfile, getPerformanceHistory()));
+
+          const previousProfiles = getPerformanceHistory().filter(h => h.id !== remoteProfile.id);
+          setRecommendations(generateRecommendations(remoteProfile, previousProfiles));
         } else {
           console.warn('[ResultsPage] Could not load remote attempt:', error);
           setAttemptError(error || 'Failed to locate examination attempt');
@@ -291,20 +533,43 @@ function ResultsContent() {
     };
   }, [attemptId, fetchQuestionReview]);
 
+  // Sync local persistent history on mount and when updated
+  useEffect(() => {
+    const list = getPerformanceHistory();
+    setHistoryList(list);
+    const handleUpdate = () => {
+      setHistoryList(getPerformanceHistory());
+    };
+    window.addEventListener('examsarthi_performance_updated', handleUpdate);
+    return () => window.removeEventListener('examsarthi_performance_updated', handleUpdate);
+  }, []);
+
   // 2. Safe local fallback if offline, unauthenticated, or server unreachable
   useEffect(() => {
     if (attemptId) return;
 
+    let hasLocalSession = false;
     try {
       const stored = sessionStorage.getItem('examResultState');
       if (stored) {
         const parsed = JSON.parse(stored);
         setFinalState(parsed);
+        hasLocalSession = true;
       }
     } catch (e) {
       console.warn('[ResultsPage] Failed to parse local exam state:', e);
     }
-  }, [attemptId]);
+
+    // If no active session in sessionStorage, load the most recent completed exam from history!
+    if (!hasLocalSession) {
+      const history = getPerformanceHistory();
+      if (history.length > 0) {
+        const latest = history[0];
+        setSelectedHistoryId(latest.id || null);
+        loadProfileAsActiveResult(latest);
+      }
+    }
+  }, [attemptId, loadProfileAsActiveResult]);
 
   useEffect(() => {
     if (!finalState) return;
@@ -324,8 +589,9 @@ function ResultsContent() {
     setResults(calculated);
 
     // Populate reviewQuestions for local fallback if not already set from remote attempt
+    let calculatedReviewQuestions: QuestionReviewItem[] = [];
     if (!attemptId && examQuestions.length > 0) {
-      setReviewQuestions(examQuestions.map((q, idx) => {
+      calculatedReviewQuestions = examQuestions.map((q, idx) => {
         const masterQ = (QuestionMap as any)[q.id] || (q as any);
         const anyQ = q as any;
         const rawCorrect = masterQ.correctAnswerId || masterQ.correctAnswerIds || masterQ.correctAnswer || anyQ.correctAnswerId || 'N/A';
@@ -361,30 +627,166 @@ function ResultsContent() {
           explanation: masterQ.explanation || anyQ.explanation || `The correct answer is ${correctDisplay}.`,
           options: options
         };
-      }));
+      });
+      setReviewQuestions(calculatedReviewQuestions);
     }
 
     // Personalization & History Pipeline
-    const newProfile = analyzePerformance(calculated, examQuestions, stateToProcess.answers);
+    const chosenExamId = (finalState as any).setId || (finalState as any).examId || 'mock';
+    const chosenExamTitle = (finalState as any).examTitle || resolveExamTitle(chosenExamId);
+    const chosenSubject = (finalState as any).subject || examQuestions[0]?.subject || resolveExamSubject(chosenExamId);
+    const chosenTimeUsed = typeof (finalState as any).timeUsedSeconds === 'number'
+      ? (finalState as any).timeUsedSeconds
+      : (typeof calculated.timeUsed === 'number' ? calculated.timeUsed : 0);
+    const chosenTimestamp = (finalState as any).timestamp || Date.now();
+    const chosenAttemptId = (finalState as any).attemptId || `local-${chosenExamId}-${chosenTimestamp}`;
+
+    const newProfile = analyzePerformance(calculated, examQuestions, stateToProcess.answers, {
+      id: chosenAttemptId,
+      examId: chosenExamId,
+      examTitle: chosenExamTitle,
+      subject: chosenSubject,
+      timeUsedSeconds: chosenTimeUsed,
+      timestamp: chosenTimestamp,
+    });
+    newProfile.answers = stateToProcess.answers;
+    newProfile.reviewQuestions = calculatedReviewQuestions;
     setProfile(newProfile);
+    setSelectedHistoryId(newProfile.id || null);
+
+    // Save profile to persistent history with deduplication
+    savePerformanceProfile(newProfile);
+    setHistoryList(getPerformanceHistory());
 
     const history = getPerformanceHistory();
+    const previousProfiles = history.filter(
+      (h) => (h.id && h.id !== newProfile.id) || (h.timestamp < newProfile.timestamp - 2000)
+    );
+
     // Record the immediate previous attempt if one exists
-    if (history.length > 0) {
-      setPreviousAttempt(history[0]);
+    if (previousProfiles.length > 0) {
+      setPreviousAttempt(previousProfiles[0]);
     } else {
       setPreviousAttempt(null);
     }
-
-    // Save profile to history if not duplicate within 5s
-    if (history.length === 0 || history[0].timestamp < newProfile.timestamp - 5000) {
-      savePerformanceProfile(newProfile);
-    }
     
-    const recs = generateRecommendations(newProfile, history);
+    const recs = generateRecommendations(newProfile, previousProfiles);
     setRecommendations(recs);
 
   }, [finalState, attemptId]);
+
+  // Automated voice guidance: speaks details of candidate's past latest 2 results upon navigating to /results
+  useEffect(() => {
+    if (hasSpokenOverviewRef.current) return;
+    if (loadingAttempt) return;
+
+    const history = getPerformanceHistory();
+    if (history.length === 0 && !results) return;
+
+    hasSpokenOverviewRef.current = true;
+
+    const attempts = history.slice(0, 2);
+    let speech = '';
+
+    if (attempts.length >= 2) {
+      const r1 = attempts[0];
+      const r2 = attempts[1];
+      const d1 = formatDateForSpeech(r1.timestamp, isHindi);
+      const d2 = formatDateForSpeech(r2.timestamp, isHindi);
+      const t1 = r1.examTitle || resolveExamTitle(r1.examId);
+      const t2 = r2.examTitle || resolveExamTitle(r2.examId);
+      const s1 = typeof r1.score === 'number' ? r1.score : r1.correct;
+      const tot1 = r1.totalQuestions;
+      const s2 = typeof r2.score === 'number' ? r2.score : r2.correct;
+      const tot2 = r2.totalQuestions;
+
+      speech = isHindi
+        ? `यहाँ आपके पिछले 2 परीक्षा परिणाम हैं। पहला, ${d1.prefix} ${t1} में, आपने ${tot1} में से ${s1} अंक प्राप्त किए। दूसरा, ${d2.prefix} ${t2} में, आपने ${tot2} में से ${s2} अंक प्राप्त किए। यदि आप इनमें से किसी का भी विश्लेषण देखना चाहते हैं, तो उस परीक्षा का नाम कहें।`
+        : `Here are your latest 2 exam results. First, ${d1.prefix} for ${t1}, you scored ${s1} out of ${tot1} marks. Second, ${d2.prefix} for ${t2}, you scored ${s2} out of ${tot2} marks. If you want any analysis of any of them, say the exam name.`;
+    } else if (attempts.length === 1) {
+      const r1 = attempts[0];
+      const d1 = formatDateForSpeech(r1.timestamp, isHindi);
+      const t1 = r1.examTitle || resolveExamTitle(r1.examId);
+      const s1 = typeof r1.score === 'number' ? r1.score : r1.correct;
+      const tot1 = r1.totalQuestions;
+
+      speech = isHindi
+        ? `यहाँ आपका पिछला परीक्षा परिणाम है। ${d1.prefix} ${t1} में, आपने ${tot1} में से ${s1} अंक प्राप्त किए। यदि आप इसका विस्तृत विश्लेषण देखना चाहते हैं, तो परीक्षा का नाम कहें।`
+        : `Here is your latest exam result. ${d1.prefix} for ${t1}, you scored ${s1} out of ${tot1} marks. If you want analysis of this exam, say the exam name.`;
+    } else if (results) {
+      const currentTitle = profile?.examTitle || t('examName');
+      const s1 = results.score;
+      const tot1 = results.totalQuestions;
+      speech = isHindi
+        ? `यहाँ आपका परिणाम है। ${currentTitle} में आपने ${tot1} में से ${s1} अंक प्राप्त किए। यदि आप इसका विश्लेषण देखना चाहते हैं, तो परीक्षा का नाम कहें।`
+        : `Here is your exam result. For ${currentTitle}, you scored ${s1} out of ${tot1} marks. If you want analysis of this exam, say the exam name.`;
+    }
+
+    if (speech) {
+      unlockAudioContext();
+      forceSpeak(
+        speech,
+        () => {
+          voiceEngine.startAlwaysOnListening();
+        },
+        isHindi ? 'hi-IN' : 'en-US'
+      );
+    }
+  }, [loadingAttempt, results, isHindi, profile?.examTitle, t]);
+
+  // Voice selection listener: candidate speaks exam name or ordinal to inspect that attempt throughout
+  const handleVoiceExamSelection = React.useCallback((transcript: string) => {
+    if (!transcript) return;
+    const history = getPerformanceHistory();
+    if (history.length === 0) return;
+
+    const matched = findMatchingHistoryItem(transcript, history);
+    if (matched) {
+      setSelectedHistoryId(matched.id || null);
+      loadProfileAsActiveResult(matched);
+
+      const confirmMsg = isHindi
+        ? `${matched.examTitle || 'परीक्षा'} का विस्तृत विश्लेषण दिखाया जा रहा है।`
+        : `Showing detailed analysis for ${matched.examTitle || 'exam'}.`;
+
+      unlockAudioContext();
+      forceSpeak(
+        confirmMsg,
+        () => {
+          voiceEngine.startAlwaysOnListening();
+        },
+        isHindi ? 'hi-IN' : 'en-US'
+      );
+    }
+  }, [isHindi, loadProfileAsActiveResult]);
+
+  useEffect(() => {
+    // 1. Subscribe to speech recognition transcripts
+    const unsubscribeSpeech = subscribe((text: string) => {
+      handleVoiceExamSelection(text);
+    });
+
+    // 2. Register context in commandRouter so 'results' is active
+    registerVoiceContext('results', (text: string) => {
+      handleVoiceExamSelection(text);
+    });
+
+    // 3. Listen to custom event dispatched by commandRouter
+    const handleCustomSelect = (e: any) => {
+      const detail = e.detail;
+      const text = detail?.raw || detail?.normalized || detail?.phrase || '';
+      if (text) {
+        handleVoiceExamSelection(text);
+      }
+    };
+    window.addEventListener('examsarthi_select_result_by_name', handleCustomSelect);
+
+    return () => {
+      unsubscribeSpeech();
+      unregisterVoiceContext('results');
+      window.removeEventListener('examsarthi_select_result_by_name', handleCustomSelect);
+    };
+  }, [handleVoiceExamSelection]);
 
 
 
@@ -528,7 +930,7 @@ function ResultsContent() {
         e.title.toLowerCase().replace(/\s+/g, '-').includes(String(remoteAttempt?.exam_id || (finalState as any)?.examId).toLowerCase())
       ) 
     : null;
-  const activeTitle = activePracticeSet?.title || activeExam?.title || t('examName');
+  const activeTitle = profile?.examTitle || activePracticeSet?.title || activeExam?.title || resolveExamTitle(remoteAttempt?.exam_id || finalState?.setId || profile?.examId) || t('examName');
 
   return (
     <div className="min-h-screen bg-background text-foreground py-6 sm:py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full space-y-8">
@@ -547,6 +949,61 @@ function ResultsContent() {
           <span>{t('evalSession')}</span>
         </Badge>
       </nav>
+
+      {/* Past Exam History Switcher Bar */}
+      {historyList.length > 0 && (
+        <section aria-label="Past Exam History" className="rounded-lg border border-border/70 bg-card/60 p-3 sm:p-4 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {isHindi ? 'पिछले परीक्षा परिणाम' : 'Past Exam Results'} ({historyList.length})
+              </span>
+            </div>
+            <p className="text-2xs text-muted-foreground">
+              {isHindi ? 'किसी भी परीक्षा का नाम बोलें या चुनें' : 'Speak or select any exam to view detailed analysis'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5" role="tablist">
+            {historyList.slice(0, 6).map((item, idx) => {
+              const isSelected = selectedHistoryId === item.id || (!selectedHistoryId && idx === 0);
+              const dateInfo = formatDateForSpeech(item.timestamp, isHindi);
+              const scoreVal = typeof item.score === 'number' ? item.score : item.correct;
+              const title = item.examTitle || resolveExamTitle(item.examId);
+
+              return (
+                <button
+                  key={item.id || `history-${idx}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setSelectedHistoryId(item.id || null);
+                    loadProfileAsActiveResult(item);
+                  }}
+                  className={cn(
+                    "flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium border transition-all text-left cursor-pointer",
+                    isSelected
+                      ? "bg-primary/15 border-primary text-foreground shadow-sm ring-1 ring-primary/40 font-semibold"
+                      : "bg-muted/30 border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  )}
+                >
+                  <span className="truncate max-w-[150px] sm:max-w-[200px]" title={title}>
+                    {title}
+                  </span>
+                  <Badge variant={isSelected ? "default" : "secondary"} className="text-2xs px-1.5 py-0 font-mono">
+                    {scoreVal}/{item.totalQuestions}
+                  </Badge>
+                  <span className="text-2xs text-muted-foreground whitespace-nowrap">
+                    {dateInfo.dateStr}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* AI Tutor Summary Card */}
       {examData && (

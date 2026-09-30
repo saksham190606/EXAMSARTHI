@@ -29,6 +29,8 @@ import { Language, useAccessibilityStore } from "@/store/useAccessibilityStore"
 import { useTranslation } from "@/lib/i18n"
 import { useAuth } from "@/hooks/useAuth"
 import { voiceEngine } from "@/lib/accessibility/voice-companion"
+import { useExamLock, isExamSessionActive } from "@/lib/assistant/sarthiExamLock"
+import { speakText } from "@/lib/voice/useVoiceEngine"
 
 import { NavigationTabs } from "@/components/layout/Navbar"
 import { cn } from "@/lib/utils"
@@ -39,10 +41,15 @@ export function Header() {
   const { t, language, setLanguage } = useTranslation()
   const { user, profile, loading, signOut } = useAuth()
   const isListeningCommands = useAccessibilityStore((s) => s.isListeningCommands)
+  const isLocked = useExamLock()
 
   const candidateName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Candidate'
   const candidateInitial = candidateName.charAt(0).toUpperCase()
   const handleSignOut = async () => {
+    if (isLocked) {
+      speakText(language === 'hi' ? 'सक्रिय परीक्षा के दौरान साइन आउट वर्जित है। कृपया पहले परीक्षा सबमिट करें।' : 'Sign out is disabled during an active exam. Please submit your exam first.');
+      return;
+    }
     await signOut()
     router.push('/login')
     router.refresh()
@@ -52,6 +59,15 @@ export function Header() {
     const handleVoiceNav = (e: Event) => {
       const event = e as CustomEvent;
       if (event.detail?.intent === 'NAVIGATE') {
+        if (isExamSessionActive()) {
+          console.warn('[Header] Blocked voice navigation during active exam session.');
+          speakText(
+            language === 'hi' 
+              ? 'सक्रिय परीक्षा के दौरान नेविगेशन लॉक है। कृपया पहले परीक्षा सबमिट करें।' 
+              : 'Navigation is locked during an active examination. Please submit your exam first.'
+          );
+          return;
+        }
         const target = event.detail.target;
         if (target === 'DASHBOARD') router.push('/dashboard');
         else if (target === 'PRACTICE') router.push('/practice');
@@ -59,21 +75,32 @@ export function Header() {
         else if (target === 'EXAMS') router.push('/exam');
         else if (target === 'SETTINGS') router.push('/settings');
         else if (target === 'RESULTS') router.push('/results');
+        else if (target === 'LOGIN') router.push('/login');
         else if (typeof target === 'string' && target.startsWith('/')) router.push(target);
       }
     };
     window.addEventListener('ai_voice_command', handleVoiceNav);
     return () => window.removeEventListener('ai_voice_command', handleVoiceNav);
-  }, [router]);
+  }, [router, language]);
 
   return (
     <header className="sticky top-0 z-50 w-full h-[60px] border-b border-white/16 bg-black/80 backdrop-blur-md text-white">
       <div className="container flex h-full items-center justify-between mx-auto px-4 sm:px-8">
         
         <div className="flex items-center gap-6">
-          <MobileNav />
+          <MobileNav isLocked={isLocked} />
           <Link 
             href="/" 
+            onClick={(e) => {
+              if (isLocked) {
+                e.preventDefault();
+                speakText(
+                  language === 'hi' 
+                    ? 'सक्रिय परीक्षा के दौरान बाहर जाना वर्जित है। कृपया पहले परीक्षा सबमिट करें।' 
+                    : 'Navigation outside the exam is locked. Please submit your exam first.'
+                );
+              }
+            }}
             className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffed00] focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-[2px] motion-safe:active:scale-[0.97] motion-reduce:transform-none transition-transform duration-150"
           >
             {/* Modern flat-line rhombus diamond logo */}

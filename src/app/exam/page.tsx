@@ -16,8 +16,11 @@ import {
 } from '@/lib/api/examRepository';
 import { getSafeQuestionsForContext } from '@/lib/questions/safeQuestionBank';
 import { AvailableExams, PracticeSets } from '@/lib/mockData';
+import { resolveExamTitle, resolveExamSubject } from '@/lib/personalization/history';
 import { useExamEngine } from '@/lib/useExamEngine';
-import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
+import { stopSpeaking, speakText } from '@/lib/voice/useVoiceEngine';
+import { setExamSessionActive } from '@/lib/assistant/sarthiExamLock';
+import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import { LoaderOne } from '@/components/ui/loader-one';
@@ -36,6 +39,7 @@ import { ExamMicStatusBar } from '@/components/exam/ExamMicStatusBar';
 import { ExamVoiceDebugVisualizer } from '@/components/exam/ExamVoiceDebugVisualizer';
 import { useTranslation } from '@/lib/i18n';
 import { ExamSelectionHub } from '@/components/exam/ExamSelectionHub';
+import { ExamInstructionScreen } from '@/components/exam/ExamInstructionScreen';
 
 export { ExamSelectionHub };
 
@@ -72,12 +76,21 @@ function ActiveExamSession({
   const rawDuration = (activeConfig as any)?.duration ?? (activeConfig as any)?.duration_minutes;
   const examDuration = typeof rawDuration === 'number' && rawDuration > 0 ? rawDuration * 60 : 900;
   const { t, language } = useTranslation();
+  const isPracticeMode = Boolean(setId);
   const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
   const [isSectionAdvanceDialogOpen, setIsSectionAdvanceDialogOpen] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
+
+  // Mount/unmount security lockdown tracking
+  useEffect(() => {
+    setExamSessionActive(true);
+    return () => {
+      setExamSessionActive(false);
+    };
+  }, []);
 
   // Initialize official remote attempt when in remote mode
   useEffect(() => {
@@ -93,7 +106,7 @@ function ActiveExamSession({
         })
         .catch((err) => {
           console.warn('[ExamPage] Remote attempt initialization notice:', err);
-          if (isSubscribed) setAttemptError("Couldn't start an official attempt; sign in / retry");
+          if (isSubscribed && !setId) setAttemptError("Couldn't start an official attempt; sign in / retry");
         });
     }
 
@@ -106,6 +119,7 @@ function ActiveExamSession({
     questions,
     examDuration,
     async (finalState) => {
+      setExamSessionActive(false);
       stopSpeaking();
       setIsSubmitting(true);
       setSubmitError(null);
@@ -164,12 +178,23 @@ function ActiveExamSession({
 
       // 2. Safe local fallback if offline, unauthenticated, or server unreachable
       if (typeof window !== 'undefined') {
+        const attemptTimestamp = Date.now();
+        const timeUsedSeconds = Math.max(0, examDuration - (finalState.timeRemaining || 0));
+        const resolvedTargetId = examId || setId || 'mock';
+        const resolvedTitle = activeConfig?.title || resolveExamTitle(resolvedTargetId);
+        const resolvedSubject = activeConfig?.subject || resolveExamSubject(resolvedTargetId);
+
         const stateToSave = {
           ...finalState,
+          attemptId: attemptId || `local-${resolvedTargetId}-${attemptTimestamp}`,
+          timestamp: attemptTimestamp,
           flagged: Array.from(finalState.flagged),
           setId: setId || undefined,
           examId: examId || undefined,
-          isRemote: false,
+          examTitle: resolvedTitle,
+          subject: resolvedSubject,
+          timeUsedSeconds,
+          isRemote: Boolean(attemptId),
           questionIds: questions.map(q => q.id),
           sections: finalState.sections || undefined,
           activeSection: finalState.activeSection || undefined,
@@ -248,18 +273,38 @@ function ActiveExamSession({
       }
     };
 
+    const handlePopState = () => {
+      if (!state.isSubmitted && !isSubmitting) {
+        window.history.pushState(null, '', window.location.href);
+        const liveRegion = document.getElementById('exam-live-region');
+        if (liveRegion) {
+          liveRegion.textContent = language === 'hi' 
+            ? 'सुरक्षा सूचना: परीक्षा सक्रिय है। बाहर निकलने से पहले कृपया परीक्षा सबमिट करें।'
+            : 'Security Notice: Examination is active. Please submit your exam before exiting.';
+        }
+        speakText(
+          language === 'hi'
+            ? 'सुरक्षा सूचना: परीक्षा सक्रिय है। बाहर निकलने से पहले कृपया परीक्षा सबमिट करें।'
+            : 'Navigation is locked during an active examination. Please submit your exam first.'
+        );
+      }
+    };
+
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers]);
+  }, [state.isSubmitted, isSubmitting, attemptId, currentQuestion, state.answers, language]);
 
   // When exam session begins or question changes, ensure question is scrolled into view
   useEffect(() => {
@@ -510,18 +555,22 @@ function ActiveExamSession({
           className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
           role="status"
           aria-live="assertive"
-          aria-label="Submitting and evaluating examination"
+          aria-label={isPracticeMode ? "Evaluating practice session answers" : "Submitting and evaluating examination"}
         >
           <div className="bg-card border border-border rounded-[2px] p-6 sm:p-8 max-w-md w-full text-center space-y-4">
             <div className="mx-auto py-2 flex items-center justify-center">
-              <LoaderOne label="Server-grading examination..." size="lg" />
+              <LoaderOne label={isPracticeMode ? "Evaluating practice answers..." : "Server-grading examination..."} size="lg" />
             </div>
             <div className="space-y-1.5">
               <h2 className="text-xl font-bold text-foreground">
-                Grading Examination...
+                {isPracticeMode 
+                  ? (language === 'hi' ? 'अभ्यास उत्तरों का मूल्यांकन हो रहा है...' : 'Evaluating Practice Answers...')
+                  : (language === 'hi' ? 'परीक्षा का मूल्यांकन हो रहा है...' : 'Grading Examination...')}
               </h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Evaluating answers securely on the server and persisting official scoring metrics. Please do not close or refresh this tab.
+                {isPracticeMode
+                  ? (language === 'hi' ? 'उत्तरों का मूल्यांकन किया जा रहा है और विस्तृत समाधान तैयार हो रहे हैं।' : 'Evaluating your practice responses and preparing your comprehensive review walkthrough. Please do not close this tab.')
+                  : (language === 'hi' ? 'सर्वर पर उत्तरों का सुरक्षित मूल्यांकन किया जा रहा है। कृपया इस टैब को बंद न करें।' : 'Evaluating answers securely on the server and persisting official scoring metrics. Please do not close or refresh this tab.')}
               </p>
             </div>
           </div>
@@ -564,6 +613,7 @@ function ActiveExamSession({
         onOpenChange={setIsSubmitDialogOpen}
         totalQuestions={totalQuestions}
         answeredCount={answeredCount}
+        isPracticeMode={isPracticeMode}
         onConfirmSubmit={() => {
           stopSpeaking();
           actions.submitExam();
@@ -594,12 +644,26 @@ function ActiveExamSession({
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="font-heading text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                {activeConfig ? activeConfig.title : t('examName')}
+                {activeConfig ? activeConfig.title : (isPracticeMode ? (language === 'hi' ? 'अभ्यास सत्र' : 'Practice Session') : t('examName'))}
               </h1>
               {activeConfig && (
-                <Badge variant="outline" className="text-xs font-bold text-muted-foreground border-border/80">
-                  {activeConfig.subject}
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs font-bold",
+                    isPracticeMode 
+                      ? "border-emerald-500/50 text-emerald-400 bg-emerald-950/20" 
+                      : "text-muted-foreground border-border/80"
+                  )}
+                >
+                  {isPracticeMode ? (language === 'hi' ? 'अभ्यास सेट' : 'Practice Set') : activeConfig.subject}
                 </Badge>
+              )}
+              {isPracticeMode && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[46px] text-xs font-bold text-emerald-300 bg-emerald-900/30 border border-emerald-500/30">
+                  <CheckCircle2 className="size-3" aria-hidden="true" />
+                  <span>{language === 'hi' ? 'अभ्यास मोड' : 'Practice Mode'}</span>
+                </span>
               )}
               {hasSections && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[46px] text-xs font-bold text-primary bg-primary/10 border border-primary/20">
@@ -610,8 +674,8 @@ function ActiveExamSession({
             </div>
             <p className="text-xs md:text-sm text-muted-foreground">
               {activeConfig
-                ? `${activeConfig.description} · ${setId ? 'Practice Mode' : 'Full Exam Simulation'} (${activeConfig.difficulty})`
-                : 'SSC CGL Tier 1 Practice · General Competitive Pattern'}
+                ? `${activeConfig.description} · ${isPracticeMode ? (language === 'hi' ? 'अभ्यास सत्र' : 'Practice Session') : (language === 'hi' ? 'पूर्ण परीक्षा सिमुलेशन' : 'Full Exam Simulation')} (${activeConfig.difficulty})`
+                : 'General Competitive Pattern'}
             </p>
           </div>
 
@@ -642,7 +706,7 @@ function ActiveExamSession({
               onClick={() => setIsSubmitDialogOpen(true)}
               className="hidden md:flex font-bold h-10 px-4 "
             >
-              <span>{t('submitExam')}</span>
+              <span>{isPracticeMode ? (language === 'hi' ? 'अभ्यास सबमिट करें' : 'Submit Practice') : t('submitExam')}</span>
               <Send className="ml-2 size-4" aria-hidden="true" />
             </Button>
           </div>
@@ -837,7 +901,7 @@ function ActiveExamSession({
                 onClick={() => setIsSubmitDialogOpen(true)}
                 className="md:hidden h-12 px-4 font-bold "
               >
-                <span>{t('submit')}</span>
+                <span>{isPracticeMode ? (language === 'hi' ? 'अभ्यास सबमिट करें' : 'Submit Practice') : t('submit')}</span>
                 <Send className="ml-1.5 size-4" aria-hidden="true" />
               </Button>
             </div>
@@ -911,6 +975,7 @@ interface ExamSessionLoaderProps {
 }
 
 function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
+  const router = useRouter();
   // Parse target session parameters
   let setId: string | null = null;
   let examId: string | null = null;
@@ -923,6 +988,8 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
       examId = 'e3';
     } else if (s.includes('ibps') || s.includes('bank') || s === 'e2') {
       examId = 'e2';
+    } else if (s.includes('ugc') || s.includes('net') || s === 'e4') {
+      examId = 'e4';
     } else if (s.includes('cgl') || s.includes('ssc') || s.includes('rrb') || s === 'e1') {
       examId = 'e1';
     } else {
@@ -941,6 +1008,7 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
 
   const activeConfig = practiceSet || selectedExam;
 
+  const [hasStartedExam, setHasStartedExam] = useState(false);
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<CandidateQuestion[]>([]);
   const [sections, setSections] = useState<ExamSectionConfig[] | null>(null);
@@ -1068,6 +1136,34 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (!hasStartedExam) {
+    const resolvedTitle = activeConfig?.title || resolveExamTitle(examId || setId);
+    const rawDuration = (activeConfig as any)?.duration ?? (activeConfig as any)?.duration_minutes;
+    const resolvedDuration = typeof rawDuration === 'number' && rawDuration > 0 ? rawDuration : 15;
+    const resolvedAuthority = (activeConfig as any)?.authority || (
+      examId === 'e4' || String(examId || setId).includes('ugc') ? 'University Grants Commission (NTA)' :
+      examId === 'e1' || String(examId || setId).includes('cgl') || String(examId || setId).includes('ssc') ? 'Staff Selection Commission' :
+      examId === 'e3' || String(examId || setId).includes('upsc') ? 'Union Public Service Commission' :
+      examId === 'e2' || String(examId || setId).includes('bank') ? 'Institute of Banking Personnel Selection' :
+      'Examsarthi Scribe Portal'
+    );
+    const resolvedSubject = activeConfig?.subject || resolveExamSubject(examId || setId);
+
+    return (
+      <ExamInstructionScreen
+        examTitle={resolvedTitle}
+        authority={resolvedAuthority}
+        durationMinutes={resolvedDuration}
+        questionsCount={questions.length}
+        totalMarks={questions.length * 2}
+        subject={resolvedSubject}
+        sections={sections}
+        onStartExam={() => setHasStartedExam(true)}
+        onGoBack={() => router.push('/exam')}
+      />
     );
   }
 

@@ -664,6 +664,152 @@ export const SafePracticeDiagramQuestions: CandidateQuestion[] = [
   SafeQuestionMap["eng-diagram-1"],    // Industrial Recycling Flowchart
 ].filter(Boolean);
 
+/**
+ * UGC NET Paper 1 Mock (e4) - 10 questions (Teaching & Research Aptitude, ICT, Higher Education)
+ */
+export const SafeUgcNetMockQuestions: CandidateQuestion[] = [
+  {
+    id: "ugc-1",
+    type: "single-choice",
+    text: "Which of the following is considered the highest level of cognitive learning according to Bloom's revised taxonomy?",
+    options: [
+      { id: "uo-1", text: "Analyzing" },
+      { id: "uo-2", text: "Evaluating" },
+      { id: "uo-3", text: "Creating" },
+      { id: "uo-4", text: "Applying" },
+    ],
+    subject: "Teaching Aptitude",
+    topic: "Levels of Teaching & Bloom Taxonomy",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-2",
+    type: "single-choice",
+    text: "A researcher investigates the effect of peer-tutoring on the academic performance of secondary school students. What type of research design is this?",
+    options: [
+      { id: "uo-5", text: "Historical Research" },
+      { id: "uo-6", text: "Experimental Research" },
+      { id: "uo-7", text: "Philosophical Research" },
+      { id: "uo-8", text: "Ex-post Facto Research" },
+    ],
+    subject: "Research Aptitude",
+    topic: "Methods of Research",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-3",
+    type: "single-choice",
+    text: "Which of the following barriers to effective classroom communication is primarily psychological in origin?",
+    options: [
+      { id: "uo-9", text: "Defective auditory equipment" },
+      { id: "uo-10", text: "Preconceived biases and closed-mindedness" },
+      { id: "uo-11", text: "Distance between speaker and listener" },
+      { id: "uo-12", text: "High ambient acoustic noise" },
+    ],
+    subject: "Communication",
+    topic: "Barriers to Communication",
+    difficulty: "Beginner",
+  },
+  {
+    id: "ugc-4",
+    type: "single-choice",
+    text: "What does the educational acronym 'MOOC' expand to in the context of modern distance learning?",
+    options: [
+      { id: "uo-13", text: "Massive Open Online Course" },
+      { id: "uo-14", text: "Modern Open Online Curriculum" },
+      { id: "uo-15", text: "Multi-institutional Online Open Class" },
+      { id: "uo-16", text: "Modular Online Objective Course" },
+    ],
+    subject: "Information & Communication Technology",
+    topic: "Digital Initiatives in Higher Education",
+    difficulty: "Beginner",
+  },
+  {
+    id: "ugc-5",
+    type: "single-choice",
+    text: "Which ancient seat of learning in India was renowned internationally as a Buddhist monastic university and was located in present-day Bihar?",
+    options: [
+      { id: "uo-17", text: "Taxila" },
+      { id: "uo-18", text: "Nalanda" },
+      { id: "uo-19", text: "Valabhi" },
+      { id: "uo-20", text: "Vikramashila" },
+    ],
+    subject: "Higher Education System",
+    topic: "Institutions of Higher Learning in Ancient India",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-6",
+    type: "single-choice",
+    text: "In a certain coding system, if 'TEACH' is encoded as 'VGCEJ', how will the word 'STUDY' be encoded using the same pattern?",
+    options: [
+      { id: "uo-21", text: "UVWFZ" },
+      { id: "uo-22", text: "UVWEA" },
+      { id: "uo-23", text: "UWWFA" },
+      { id: "uo-24", text: "TVWFA" },
+    ],
+    subject: "Logical Reasoning",
+    topic: "Letter Coding & Series",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-7",
+    type: "single-choice",
+    text: "Which landmark international treaty, adopted in 1987, is dedicated to protecting the ozone layer by phasing out the production of chlorofluorocarbons (CFCs)?",
+    options: [
+      { id: "uo-25", text: "Kyoto Protocol" },
+      { id: "uo-26", text: "Paris Agreement" },
+      { id: "uo-27", text: "Montreal Protocol" },
+      { id: "uo-28", text: "Basel Convention" },
+    ],
+    subject: "People, Development & Environment",
+    topic: "Environmental Treaties",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-8",
+    type: "single-choice",
+    text: "If the arithmetic average of five consecutive positive odd numbers is 27, what is the value of the largest of these five numbers?",
+    options: [
+      { id: "uo-29", text: "29" },
+      { id: "uo-30", text: "31" },
+      { id: "uo-31", text: "33" },
+      { id: "uo-32", text: "35" },
+    ],
+    subject: "Mathematical Reasoning",
+    topic: "Averages & Number Properties",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-9",
+    type: "single-choice",
+    text: "Which initiative launched by the Ministry of Education, Government of India, provides a group of 34 DTH channels devoted to telecasting high-quality educational programs 24x7?",
+    options: [
+      { id: "uo-33", text: "DIKSHA" },
+      { id: "uo-34", text: "SWAYAM PRABHA" },
+      { id: "uo-35", text: "e-PG Pathshala" },
+      { id: "uo-36", text: "National Digital Library (NDL)" },
+    ],
+    subject: "Higher Education System",
+    topic: "Government ICT Schemes",
+    difficulty: "Intermediate",
+  },
+  {
+    id: "ugc-10",
+    type: "single-choice",
+    text: "In ethical academic research and publication, what is the practice of using another author's work, ideas, or language without proper attribution called?",
+    options: [
+      { id: "uo-37", text: "Falsification" },
+      { id: "uo-38", text: "Fabrication" },
+      { id: "uo-39", text: "Plagiarism" },
+      { id: "uo-40", text: "Peer Review" },
+    ],
+    subject: "Research Aptitude",
+    topic: "Research Ethics & Integrity",
+    difficulty: "Beginner",
+  },
+];
+
 export interface SafeExamContextParams {
   setId?: string | null;
   examId?: string | null;
@@ -671,28 +817,40 @@ export interface SafeExamContextParams {
 
 export function getSafeQuestionsForContext(params: SafeExamContextParams): CandidateQuestion[] {
   const { setId, examId } = params;
+  const target = (setId || examId || '').toLowerCase().trim();
 
-  if (setId) {
-    const s = setId.toLowerCase().trim();
-    if (s === "p6" || s.includes("diagram") || s.includes("visual") || s.includes("vision")) return SafePracticeDiagramQuestions;
-    if (s === "p1" || s.includes("quant")) return SafePracticeQuantQuestions;
-    if (s === "p2" || s.includes("gk") || s.includes("general")) return SafePracticeGKQuestions;
-    if (s === "p3" || s.includes("reason")) return SafePracticeReasoningQuestions;
-    if (s === "p4" || s.includes("english")) return SafePracticeEnglishQuestions;
-    if (s === "p5" || s.includes("showcase") || s.includes("multi")) return SafePracticeShowcaseQuestions;
+  // Practice sets
+  if (target === "p6" || target.includes("diagram") || target.includes("visual") || target.includes("vision")) {
+    return SafePracticeDiagramQuestions;
+  }
+  if (target === "p1" || target.includes("quant") || target.includes("arithmetic") || target.includes("percent") || target.includes("math")) {
+    return SafePracticeQuantQuestions;
+  }
+  if (target === "p2" || target.includes("gk") || target.includes("general") || target.includes("geography")) {
+    return SafePracticeGKQuestions;
+  }
+  if (target === "p3" || target.includes("reason") || target.includes("logic")) {
+    return SafePracticeReasoningQuestions;
+  }
+  if (target === "p4" || target.includes("english") || target.includes("grammar")) {
+    return SafePracticeEnglishQuestions;
+  }
+  if (target === "p5" || target.includes("showcase") || target.includes("multi")) {
+    return SafePracticeShowcaseQuestions;
   }
 
-  if (examId) {
-    const e = examId.toLowerCase().trim();
-    if (e === "e2" || e.includes("bank") || e.includes("ibps") || e.includes("sbi")) {
-      return SafeBankingPrelimsMockQuestions;
-    }
-    if (e === "e3" || e.includes("csat") || e.includes("upsc")) {
-      return SafeUpscCsatMockQuestions;
-    }
-    if (e === "e1" || e.includes("ssc") || e.includes("cgl")) {
-      return SafeSscCglMockQuestions;
-    }
+  // Mock exams
+  if (target === "e4" || target.includes("ugc") || target.includes("net")) {
+    return SafeUgcNetMockQuestions;
+  }
+  if (target === "e2" || target.includes("bank") || target.includes("ibps") || target.includes("sbi")) {
+    return SafeBankingPrelimsMockQuestions;
+  }
+  if (target === "e3" || target.includes("csat") || target.includes("upsc")) {
+    return SafeUpscCsatMockQuestions;
+  }
+  if (target === "e1" || target.includes("ssc") || target.includes("cgl") || target.includes("rrb") || target.includes("railway")) {
+    return SafeSscCglMockQuestions;
   }
 
   return SafeSscCglMockQuestions;

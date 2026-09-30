@@ -20,6 +20,7 @@ import { registerVoiceContext, routeVoiceCommand, unregisterVoiceContext } from 
 import { useAccessibilityStore } from "@/store/useAccessibilityStore"
 
 import { PracticeSets } from "@/lib/mockData"
+import { matchExamTokens, matchExamVoiceRoute } from "@/lib/voice/exam-router"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -48,9 +49,10 @@ import { useTranslation } from "@/lib/i18n"
 const SUBJECT_CATEGORIES = [
   { id: "all", label: "All Subjects" },
   { id: "quant", label: "Quantitative Aptitude" },
-  { id: "reasoning", label: "Reasoning" },
+  { id: "reasoning", label: "Logical Reasoning" },
   { id: "english", label: "English" },
   { id: "gk", label: "General Knowledge" },
+  { id: "diagrams", label: "Diagram & Visual" },
   { id: "showcase", label: "Multi-Format Showcase" },
 ]
 
@@ -151,7 +153,23 @@ function PracticeContent() {
   }, [])
 
   React.useEffect(() => {
-    return fetchAnalytics()
+    const cleanup = fetchAnalytics()
+
+    const handleUpdate = () => {
+      fetchAnalytics()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('examsarthi_performance_updated', handleUpdate)
+      window.addEventListener('focus', handleUpdate)
+    }
+
+    return () => {
+      cleanup?.()
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('examsarthi_performance_updated', handleUpdate)
+        window.removeEventListener('focus', handleUpdate)
+      }
+    }
   }, [fetchAnalytics])
 
   // 2. Safe Fallback in the Filtering Logic:
@@ -160,8 +178,9 @@ function PracticeContent() {
     const subjectMap: Record<string, string> = {
       quant: "Quantitative Aptitude",
       gk: "General Knowledge",
-      reasoning: "Reasoning",
+      reasoning: "Logical Reasoning",
       english: "English",
+      diagrams: "Diagram & Visual",
       showcase: "Multi-Format Showcase",
     }
     const resolvedSubject = subjectMap[subjectFilter] || subjectFilter
@@ -172,7 +191,8 @@ function PracticeContent() {
       set.subject === subjectFilter ||
       set.subject.toLowerCase() === subjectFilter.toLowerCase() ||
       set.subject.toLowerCase() === resolvedSubject.toLowerCase() ||
-      set.subject.toLowerCase().includes(subjectFilter.toLowerCase())
+      set.subject.toLowerCase().includes(subjectFilter.toLowerCase()) ||
+      resolvedSubject.toLowerCase().includes(set.subject.toLowerCase())
 
     const currentTopic = topicFilter.toLowerCase().trim()
     const setTopic = ((set as any).topic || set.title || "").toLowerCase()
@@ -226,152 +246,152 @@ function PracticeContent() {
     const now = Date.now()
     if (now - lastCommandTimeRef.current < 1500) return
 
-    const text = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim()
+    const text = rawTranscript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s+/g, " ").trim()
+    const hasActionWord = /\b(start|launch|take|open|begin|run|play|शुरू|खोलो|खोलें|प्रारंभ|चलाओ)\b/i.test(text)
+    const isConfirmWord = /\b(yes|confirm|ok|okay|हाँ|हां)\b/i.test(text)
 
-    const routed = routeVoiceCommand(rawTranscript, 'practice')
-    if (routed.handled) {
-      lastCommandTimeRef.current = now
-      if (routed.type === 'route' && routed.path) {
-        console.log('Voice transcript:', rawTranscript)
-        console.log('Normalized command:', text)
-        console.log('Detected intent:', routed.path.includes('gk') ? 'NAVIGATE_PRACTICE_GK' : 'NAVIGATE_ROUTE')
-        console.log('Action:', 'navigate')
-        console.log('Navigation route:', routed.path)
-
-        if (routed.path === '/practice?subject=gk') {
-          handleSubjectSelect("General Knowledge")
-          speakText(isHindi ? "सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है" : "Starting General Knowledge and Geography practice")
-          triggerPracticeLaunch('gk-geography')
-          return
-        }
-        if (routed.path === '/practice') {
-          handleSubjectSelect("All Subjects")
-          speakText(isHindi ? "सभी विषय दिखाए जा रहे हैं" : "Showing all practice subjects")
-          return
-        }
-        router.push(routed.path)
+    // A. If user didn't say an action word (or explicitly said filter/select/subject), treat as SUBJECT FILTER
+    if (!hasActionWord) {
+      // 1. Quantitative Aptitude Filter
+      if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "percentages", "arithmetic", "क्वांट", "गणित", "मैथ्स"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("quant")
+        speakText(isHindi ? "क्वांटिटेटिव एप्टीट्यूड चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by Quantitative Aptitude. Say Start to begin practice.")
         return
       }
-      if (routed.type === 'next' || routed.type === 'previous' || routed.type === 'repeat-question' || routed.type === 'clear-answer' || routed.type === 'flag-unflag' || routed.type === 'submit') {
-        const message = routed.readback || 'Command processed'
-        if (routed.type === 'next' || routed.type === 'previous') {
-          speakText(message)
-        } else {
-          speakText(message)
-        }
+
+      // 2. Logical Reasoning Filter
+      if (["reasoning", "logical", "logic", "coding", "रीजनिंग", "तर्क", "तर्कशक्ति"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("reasoning")
+        speakText(isHindi ? "लॉजिकल रीजनिंग चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by Logical Reasoning. Say Start to begin practice.")
+        return
       }
-      if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
-        const subjectMap = {
-          0: 'Quantitative Aptitude',
-          1: 'Reasoning',
-          2: 'English',
-          3: 'General Knowledge',
-        } as const
-        const selected = subjectMap[routed.optionIndex as keyof typeof subjectMap]
-        if (selected) {
-          handleSubjectSelect(selected)
-          speakText(`Filtering by ${selected}`)
-          return
-        }
+
+      // 3. English Filter
+      if (["english", "grammar", "verbal", "language", "comprehension", "अंग्रेजी", "अंग्रेज़ी", "इंग्लिश", "व्याकरण"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("english")
+        speakText(isHindi ? "अंग्रेजी विषय चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by English. Say Start to begin practice.")
+        return
       }
-      if (routed.type === 'confirm' && filteredSetsRef.current.length === 1) {
+
+      // 4. General Knowledge Filter
+      if (["gk", "general knowledge", "geography", "constitution", "जीके", "सामान्य ज्ञान", "भूगोल"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("gk")
+        speakText(isHindi ? "सामान्य ज्ञान विषय चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by General Knowledge. Say Start to begin practice.")
+        return
+      }
+
+      // 5. Diagram & Visual Filter
+      if (["vision", "diagram", "diagrams", "visual", "डायग्राम", "विज़न", "चित्र"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("diagrams")
+        speakText(isHindi ? "डायग्राम और विज़न विषय चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by Diagram and Visual. Say Start to begin practice.")
+        return
+      }
+
+      // 6. Multi-Format Showcase Filter
+      if (["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("showcase")
+        speakText(isHindi ? "मल्टी-फॉर्मेट विषय चुना गया। अभ्यास शुरू करने के लिए स्टार्ट कहें।" : "Filtered by Multi-Format Showcase. Say Start to begin practice.")
+        return
+      }
+
+      // 7. Clear / All Subjects Filter
+      if (["all", "all subjects", "everything", "clear", "clear filter", "reset", "सभी", "सब", "सारे"].some(k => text.includes(k))) {
+        lastCommandTimeRef.current = now
+        handleSubjectSelect("all")
+        speakText(isHindi ? "सभी अभ्यास विषय दिखाए जा रहे हैं।" : "Showing all practice subjects.")
+        return
+      }
+
+      // Confirmation ("yes", "confirm") to start current filtered set
+      if (isConfirmWord && filteredSetsRef.current.length > 0) {
+        lastCommandTimeRef.current = now
         const set = filteredSetsRef.current[0]
-        speakText(`Starting ${set.title}`)
+        speakText(isHindi ? `${set.title} अभ्यास शुरू किया जा रहा है` : `Starting ${set.title} practice`)
         triggerPracticeLaunch(set.id)
         return
       }
+    }
+
+    // B. Explicit Launch Commands (user said action word like start, begin, open, take, or confirm)
+    if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "percentages", "arithmetic", "क्वांट", "गणित", "मैथ्स"].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now
+      speakText(isHindi ? "गणित और क्वांटिटेटिव एप्टीट्यूड अभ्यास शुरू किया जा रहा है" : "Starting Quantitative Aptitude practice session")
+      triggerPracticeLaunch('p1')
       return
     }
 
-    // GK & Geography specific phrases checked FIRST before generic GK
-    if ([
-      "open practice gk and geography",
-      "open practice gk geography",
-      "open gk and geography",
-      "go to practice gk",
-      "open geography practice",
-      "open gk geography",
-      "gk and geography",
-      "gk geography",
-      "geography practice",
-      "geography",
-      "भूगोल",
-      "सामान्य ज्ञान और भूगोल",
-      "जीके और भूगोल"
-    ].some(k => text.includes(k))) {
+    if (["gk", "general knowledge", "geography", "constitution", "जीके", "सामान्य ज्ञान", "भूगोल"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
-      console.log('Voice transcript:', rawTranscript)
-      console.log('Normalized command:', text)
-      console.log('Detected intent:', 'NAVIGATE_PRACTICE_GK')
-      console.log('Action:', 'navigate')
-      console.log('Navigation route:', '/practice?subject=gk')
-      handleSubjectSelect("General Knowledge")
-      speakText(isHindi ? "सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है" : "Starting General Knowledge and Geography practice")
-      triggerPracticeLaunch('gk-geography')
+      speakText(isHindi ? "सामान्य ज्ञान और भूगोल अभ्यास शुरू किया जा रहा है" : "Starting General Knowledge and Geography practice session")
+      triggerPracticeLaunch('p2')
       return
     }
 
-    if (["open practice", "practice page", "अभ्यास", "प्रैक्टिस"].some(k => text === k || text === `go to ${k}`)) {
+    if (["reasoning", "logical", "logic", "coding", "रीजनिंग", "तर्क", "तर्कशक्ति"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
-      console.log('Voice transcript:', rawTranscript)
-      console.log('Normalized command:', text)
-      console.log('Detected intent:', 'NAVIGATE_PRACTICE')
-      console.log('Action:', 'navigate')
-      console.log('Navigation route:', '/practice')
-      handleSubjectSelect("All Subjects")
-      speakText(isHindi ? "सभी विषय दिखाए जा रहे हैं" : "Showing all practice subjects")
+      speakText(isHindi ? "लॉजिकल रीजनिंग अभ्यास शुरू किया जा रहा है" : "Starting Logical Reasoning practice session")
+      triggerPracticeLaunch('p3')
       return
     }
 
-    if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"].some(k => text.includes(k))) {
+    if (["english", "grammar", "verbal", "language", "comprehension", "अंग्रेजी", "अंग्रेज़ी", "इंग्लिश", "व्याकरण"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
-      handleSubjectSelect("Quantitative Aptitude")
-      speakText("Filtering by Quantitative Aptitude")
+      speakText(isHindi ? "अंग्रेजी व्याकरण अभ्यास शुरू किया जा रहा है" : "Starting English Grammar practice session")
+      triggerPracticeLaunch('p4')
       return
     }
-    if (["reasoning", "logical", "logic", "रीजनिंग", "तर्क"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now
-      handleSubjectSelect("Reasoning")
-      speakText("Filtering by Reasoning")
-      return
-    }
-    if (["english", "grammar", "verbal", "language", "अंग्रेजी", "इंग्लिश"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now
-      handleSubjectSelect("English")
-      speakText("Filtering by English")
-      return
-    }
-    if (["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now
-      console.log('Voice transcript:', rawTranscript)
-      console.log('Normalized command:', text)
-      console.log('Detected intent:', 'NAVIGATE_PRACTICE_GK')
-      console.log('Action:', 'filter')
-      console.log('Navigation route:', '/practice?subject=gk')
-      handleSubjectSelect("General Knowledge")
-      speakText("Filtering by General Knowledge")
-      return
-    }
+
     if (["multi", "multi format", "showcase", "मल्टी", "मल्टी फॉर्मेट"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
-      handleSubjectSelect("Multi-Format Showcase")
-      speakText("Filtering by Multi-Format Showcase")
+      speakText(isHindi ? "मल्टी-फॉर्मेट अभ्यास शुरू किया जा रहा है" : "Starting Multi-Format Showcase practice session")
+      triggerPracticeLaunch('p5')
       return
     }
-    if (["all", "all subjects", "everything", "clear filter", "सभी", "सब"].some(k => text.includes(k))) {
+
+    if (["vision", "diagram", "diagrams", "visual", "डायग्राम", "विज़न", "चित्र"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
-      handleSubjectSelect("All Subjects")
-      speakText("Showing all subjects")
+      speakText(isHindi ? "डायग्राम और विज़न अभ्यास शुरू किया जा रहा है" : "Starting Diagram and Vision AI practice session")
+      triggerPracticeLaunch('p6')
       return
     }
-    if (["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"].some(k => text.includes(k))) {
-      const sets = filteredSetsRef.current
-      if (sets.length === 1) {
-        lastCommandTimeRef.current = now
-        speakText(`Starting ${sets[0].title}`)
-        triggerPracticeLaunch(sets[0].id)
-        return
+
+    // Full Mock Exam launch if explicitly requested (e.g. "open SSC CGL", "take UPSC Prelims")
+    const examMatch = matchExamTokens(rawTranscript)
+    if (examMatch && !examMatch.route.param.startsWith('p')) {
+      lastCommandTimeRef.current = now
+      speakText(isHindi ? `${examMatch.examName} परीक्षा खोली जा रही है` : `Opening ${examMatch.examName} examination portal`)
+      triggerPracticeLaunch(examMatch.route.param)
+      return
+    }
+
+    // Ordinal selection (e.g. "first practice", "set 2", "option 1")
+    const routed = routeVoiceCommand(rawTranscript, 'practice')
+    if (routed.handled) {
+      lastCommandTimeRef.current = now
+      if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
+        const availableSets = filteredSetsRef.current.length > 0 ? filteredSetsRef.current : PracticeSets
+        const chosen = availableSets[routed.optionIndex] || PracticeSets[routed.optionIndex]
+        if (chosen) {
+          speakText(isHindi ? `${chosen.title} अभ्यास शुरू किया जा रहा है` : `Starting ${chosen.title}`)
+          triggerPracticeLaunch(chosen.id)
+          return
+        }
       }
+    }
+
+    // Generic "start", "start practice", "begin" launches top filtered set
+    if (hasActionWord) {
+      lastCommandTimeRef.current = now
+      const target = filteredSetsRef.current.length > 0 ? filteredSetsRef.current[0] : PracticeSets[0]
+      speakText(isHindi ? `${target.title} अभ्यास शुरू किया जा रहा है` : `Starting ${target.title} practice`)
+      triggerPracticeLaunch(target.id)
+      return
     }
   }, [handleSubjectSelect, isHindi, router, triggerPracticeLaunch])
 

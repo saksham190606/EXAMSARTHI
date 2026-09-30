@@ -5,6 +5,7 @@ export interface TopicMetrics {
   correct: number;
   incorrect: number;
   accuracy: number; // percentage
+  subject?: string;
 }
 
 export interface SubjectPerformanceProfile {
@@ -14,17 +15,28 @@ export interface SubjectPerformanceProfile {
   correct: number;
   incorrect: number;
   accuracy: number; // percentage
+  score?: number;
   topics: TopicMetrics[];
 }
 
 export interface PerformanceProfile {
+  id?: string;
   examId: string;
+  examTitle?: string;
+  subject?: string;
+  category?: string;
   timestamp: number;
   totalQuestions: number;
   attempted: number;
   correct: number;
+  incorrect?: number;
+  score?: number;
   accuracy: number;
+  timeUsedSeconds?: number;
   subjects: SubjectPerformanceProfile[];
+  topicMetrics?: TopicMetrics[];
+  answers?: Record<string, any>;
+  reviewQuestions?: any[];
 }
 
 export type RecommendationPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'MAINTAIN' | 'GENERAL';

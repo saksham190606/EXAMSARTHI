@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import { voiceEngine } from '@/lib/accessibility/voice-companion';
+import { voiceEngine, speak, forceSpeak, unlockAudioContext } from '@/lib/accessibility/voice-companion';
 import { subscribe } from '@/lib/voice/useVoiceEngine';
 import { cn } from '@/lib/utils';
 
@@ -95,6 +96,7 @@ export function ExamTickerBar() {
 }
 
 export default function ExamSarthiHero() {
+  const router = useRouter();
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
@@ -102,15 +104,112 @@ export default function ExamSarthiHero() {
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
 
+  const hasSpokenBriefSuccessfullyRef = useRef(false);
+  const isSpeakingBriefRef = useRef(false);
+  const isNavigatingToLoginRef = useRef(false);
+
   const toggleListening = useCallback(() => {
     voiceEngine.toggle();
   }, []);
 
+  // 1. Initial Voice Assistant Brief on Landing Page
+  const playBrief = useCallback((force: boolean = false) => {
+    if (!force && hasSpokenBriefSuccessfullyRef.current) return;
+    if (isSpeakingBriefRef.current) return;
+
+    // Strictly stop microphone while the launch brief is playing so it doesn't listen to itself
+    voiceEngine.stop();
+    useAccessibilityStore.getState().setIsListeningCommands(false);
+
+    const briefText = isHindi
+      ? "एग्जामसारथी में आपका स्वागत है। दृष्टिबाधित अभ्यर्थियों के लिए भारत का सुलभ परीक्षा और अभ्यास मंच। क्या आप लॉगिन करना चाहते हैं? कृपया 'लॉगिन' बोलें।"
+      : "Welcome to ExamSarthi, India's accessible examination and practice platform for visually impaired candidates. Would you like to log in to your account? Please say 'Login'.";
+
+    unlockAudioContext();
+    isSpeakingBriefRef.current = true;
+
+    forceSpeak(
+      briefText,
+      () => {
+        isSpeakingBriefRef.current = false;
+        hasSpokenBriefSuccessfullyRef.current = true;
+        // ONLY AFTER completing the launch brief: open the mic for user to say "Login"!
+        unlockAudioContext();
+        setTimeout(() => {
+          voiceEngine.startAlwaysOnListening();
+        }, 200);
+      },
+      isHindi ? 'hi-IN' : 'en-US',
+      (err) => {
+        console.warn("[ExamSarthiHero] Brief speech deferred until user gesture:", err);
+        isSpeakingBriefRef.current = false;
+      }
+    );
+  }, [isHindi]);
+
   useEffect(() => {
+    // Attempt automatic playback shortly after mount
+    const timer = setTimeout(() => {
+      playBrief(false);
+    }, 400);
+
+    // Guaranteed trigger on ANY first user gesture (touch, click, key) if browser blocked autoplay
+    const handleGesture = () => {
+      unlockAudioContext();
+      if (!hasSpokenBriefSuccessfullyRef.current && !isSpeakingBriefRef.current) {
+        playBrief(true);
+      }
+    };
+
+    window.addEventListener('pointerdown', handleGesture, { passive: true });
+    window.addEventListener('click', handleGesture, { passive: true });
+    window.addEventListener('keydown', handleGesture, { passive: true });
+    window.addEventListener('touchstart', handleGesture, { passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', handleGesture);
+      window.removeEventListener('click', handleGesture);
+      window.removeEventListener('keydown', handleGesture);
+      window.removeEventListener('touchstart', handleGesture);
+    };
+  }, [playBrief]);
+
+  // 2. Continuous Voice Recognition Handler for "Login"
+  useEffect(() => {
+    let clearTimer: NodeJS.Timeout | null = null;
+
     return subscribe((transcript) => {
       setStatusMessage(transcript);
+      if (clearTimer) clearTimeout(clearTimer);
+      clearTimer = setTimeout(() => {
+        setStatusMessage('');
+      }, 4500);
+
+      const lower = transcript.toLowerCase().trim();
+
+      const isLoginMatch =
+        lower.includes('login') ||
+        lower.includes('log in') ||
+        lower.includes('sign in') ||
+        lower.includes('लॉगिन') ||
+        lower.includes('साइन इन');
+
+      if (isLoginMatch && !isNavigatingToLoginRef.current) {
+        isNavigatingToLoginRef.current = true;
+        speak(
+          isHindi ? "लॉगिन पृष्ठ खोला जा रहा है" : "Opening login page",
+          {
+            lang: isHindi ? 'hi-IN' : 'en-US',
+            onEnd: () => {
+              router.push('/login');
+            },
+          }
+        );
+        router.push('/login');
+      }
     });
-  }, []);
+  }, [router, isHindi]);
 
   return (
     <div className="relative w-full overflow-hidden bg-transparent text-black dark:text-white transition-colors">
@@ -232,13 +331,15 @@ export default function ExamSarthiHero() {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mt-4 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md"
+              onClick={() => playBrief(true)}
+              title="Click to hear launch overview"
+              className="mt-4 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md cursor-pointer hover:border-[#ffed00] transition-colors"
             >
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>
                 {statusMessage
-                  ? (isHindi ? `सुना: "${statusMessage}"` : `Heard: "${statusMessage}"`)
-                  : (isHindi ? "बोलें: 'डैशबोर्ड', 'परीक्षा', 'प्रैक्टिस', 'सेटिंग्स', या 'साइन इन'" : "Say 'Dashboard', 'Exams', 'Practice', 'Settings', or 'Sign In'")}
+                  ? (isHindi ? `सुना: "${statusMessage}" — 'लॉगिन' बोलें` : `Heard: "${statusMessage}" — Say 'Login'`)
+                  : (isHindi ? "बोलें: 'लॉगिन' अपने खाते में जाने के लिए" : "Say 'Login' to sign in to your account")}
               </span>
             </motion.div>
           )}

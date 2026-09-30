@@ -680,6 +680,23 @@ export function startListening(
         return;
       }
 
+      const isLoginCommand = 
+        lower.includes('login') || 
+        lower.includes('log in') || 
+        lower.includes('sign in') || 
+        lower.includes('लॉगिन') || 
+        lower.includes('साइन इन');
+
+      if (isLoginCommand) {
+        console.log("🔥 [VOICE ENGINE] 'Login' command caught! Dispatching navigation event...");
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'LOGIN' } }));
+        forwardTranscript(transcript);
+        return;
+      }
+
       // Allow candidate to switch sections anytime
       const isNavCommand = 
         lower.includes('dashboard') || lower.includes('डैशबोर्ड') ||

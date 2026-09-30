@@ -64,6 +64,16 @@ export const EXAM_CATALOG: ExamCatalogItem[] = [
     subjects: ['General Awareness', 'Mathematics', 'General Intelligence'],
   },
   {
+    id: 'ugc-net',
+    param: 'ugc-mock-1',
+    title: 'UGC NET Paper 1 Mock',
+    authority: 'University Grants Commission (NTA)',
+    questionsCount: 10,
+    durationMinutes: 15,
+    description: 'National Eligibility Test General Paper 1 covering Teaching & Research Aptitude, ICT, and Higher Education.',
+    subjects: ['Teaching Aptitude', 'Research Aptitude', 'Reasoning', 'ICT'],
+  },
+  {
     id: 'vision-ai-diagram',
     param: 'p6',
     title: 'Diagram & Visual Interpretation (Vision AI)',
@@ -157,25 +167,48 @@ export function ExamSelectionHub() {
 
     // 2. Command Router match
     const routed = routeVoiceCommand(capturedText, 'hub');
-    if (routed.handled && routed.type === 'route' && routed.path) {
+    if (routed.handled) {
       // Check if it routes to an exam parameter (e.g. /exam?set=...)
-      if (routed.path.startsWith('/exam?set=')) {
-        const param = routed.path.split('set=')[1];
-        const examItem = EXAM_CATALOG.find((e) => e.param === param) || EXAM_VOICE_ROUTES.find((e) => e.param === param);
+      if (routed.type === 'route' && routed.path) {
+        if (routed.path.startsWith('/exam?set=')) {
+          const param = routed.path.split('set=')[1];
+          const examItem = EXAM_CATALOG.find((e) => e.param === param) || EXAM_VOICE_ROUTES.find((e) => e.param === param);
+          if (examItem) {
+            launchExam(examItem, examItem.title);
+            return;
+          }
+          launchExam({ id: param, param, title: 'Session' }, 'Session');
+          return;
+        }
+
+        // 3. Different section navigation (Dashboard, Practice, Results, Settings)
+        if (!routed.path.startsWith('/exam')) {
+          speakText(routed.readback || `Navigating to ${routed.path}`, isHindi ? 'hi-IN' : 'en-US', () => {
+            router.push(routed.path!);
+          });
+          setTimeout(() => {
+            router.push(routed.path!);
+          }, 1200);
+          return;
+        }
+      }
+
+      // 4. Ordinal / Numbered Exam selection (e.g. "first exam", "option 1", "mock 2", "पहला एग्जाम")
+      if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
+        const examItem = EXAM_CATALOG[routed.optionIndex];
         if (examItem) {
           launchExam(examItem, examItem.title);
           return;
         }
       }
+    }
 
-      // 3. Different section navigation (Dashboard, Practice, Results, Settings)
-      if (!routed.path.startsWith('/exam')) {
-        speakText(routed.readback || `Navigating to ${routed.path}`, isHindi ? 'hi-IN' : 'en-US', () => {
-          router.push(routed.path!);
-        });
-        setTimeout(() => {
-          router.push(routed.path!);
-        }, 1200);
+    // 5. Generic "Start" triggers highlighted or first mock exam
+    const lowerClean = capturedText.toLowerCase();
+    if (['start exam', 'start mock', 'start test', 'take test', 'take exam', 'begin', 'start', 'शुरू करें', 'शुरू', 'स्टार्ट'].some(k => lowerClean.includes(k))) {
+      const targetExam = (highlightedExamId ? EXAM_CATALOG.find(e => e.id === highlightedExamId) : null) || EXAM_CATALOG[0];
+      if (targetExam) {
+        launchExam(targetExam, targetExam.title);
         return;
       }
     }
