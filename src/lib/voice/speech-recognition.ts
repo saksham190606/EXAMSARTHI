@@ -35,16 +35,28 @@ export interface ResolvedVoiceCommand {
 // 1. Phonetic Homophones & Command Dictionary
 const PHONETIC_MAP: Record<CanonicalAction, string[]> = {
   SELECT_A: [
-    "a", "eight", "option a", "opt a", "choice a", "select a", "विकल्प ए", "पहला", "ए", "एक", "1", "one"
+    "a", "eight", "ay", "hey", "option a", "opt a", "choice a", "select a", "select option a",
+    "choose a", "choose option a", "mark a", "mark option a", "answer a", "ans a", "option 1",
+    "opt 1", "choice 1", "select 1", "select option 1", "first", "first option", "vikalp a",
+    "vikalp 1", "विकल्प ए", "पहला", "ए", "एक", "1", "one", "पहला विकल्प", "ऑप्शन ए", "ऑप्शन 1"
   ],
   SELECT_B: [
-    "b", "bee", "option b", "opt b", "choice b", "select b", "विकल्प बी", "दूसरा", "बी", "दो", "2", "two"
+    "b", "bee", "be", "option b", "opt b", "choice b", "select b", "select option b",
+    "choose b", "choose option b", "mark b", "mark option b", "answer b", "ans b", "option 2",
+    "opt 2", "choice 2", "select 2", "select option 2", "second", "second option", "vikalp b",
+    "vikalp 2", "विकल्प बी", "दूसरा", "बी", "दो", "2", "two", "दूसरा विकल्प", "ऑप्शन बी", "ऑप्शन 2"
   ],
   SELECT_C: [
-    "c", "see", "sea", "si", "option c", "opt c", "choice c", "select c", "विकल्प सी", "तीसरा", "सी", "तीन", "3", "three"
+    "c", "see", "sea", "si", "option c", "opt c", "choice c", "select c", "select option c",
+    "choose c", "choose option c", "mark c", "mark option c", "answer c", "ans c", "option 3",
+    "opt 3", "choice 3", "select 3", "select option 3", "third", "third option", "vikalp c",
+    "vikalp 3", "विकल्प सी", "तीसरा", "सी", "तीन", "3", "three", "तीसरा विकल्प", "ऑप्शन सी", "ऑप्शन 3"
   ],
   SELECT_D: [
-    "d", "dee", "option d", "opt d", "choice d", "select d", "विकल्प डी", "चौथा", "डी", "चार", "4", "four"
+    "d", "dee", "option d", "opt d", "choice d", "select d", "select option d",
+    "choose d", "choose option d", "mark d", "mark option d", "answer d", "ans d", "option 4",
+    "opt 4", "choice 4", "select 4", "select option 4", "fourth", "fourth option", "vikalp d",
+    "vikalp 4", "विकल्प डी", "चौथा", "डी", "चार", "4", "four", "चौथा विकल्प", "ऑप्शन डी", "ऑप्शन 4"
   ],
   SELECT_TRUE: [
     "true", "truth", "yes", "sahi", "satya", "ट्रू", "सत्य", "सही", "हाँ", "हा", "haan"
@@ -68,7 +80,7 @@ const PHONETIC_MAP: Record<CanonicalAction, string[]> = {
     "repeat", "repeet", "re-read", "दोबारा", "फिर से", "read again", "repeat question", "dobara padho", "दोबारा बोलो", "फिर से पढ़ो"
   ],
   FLAG_REVIEW: [
-    "flag", "mark", "review", "flag for review", "flagfor review", "flagfor", "flag this", "flag question", "mark for review", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
+    "flag", "review", "flag for review", "flagfor review", "flagfor", "flag this", "flag question", "mark for review", "mark question", "review later", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "फ्लैग", "bookmark", "चिह्नित"
   ],
   CLEAR_RESPONSE: [
     "clear", "clear response", "clear answer", "unselect", "remove answer", "erase", "साफ करो", "हटाओ", "खाली करो", "remove"
@@ -141,7 +153,7 @@ export function matchTokenToCommand(rawCandidate: string): { action: CanonicalAc
 
   // 2. Individual word token matching
   const words = candidate.split(/\s+/).map(normalizeToken);
-  const isExplicitSelection = /\b(?:option|opt|choice|select|choose|answer|vikalp)\s+(?:option\s+)?[a-d1-4]\b/i.test(candidate);
+  const isExplicitSelection = /\b(?:option|opt|choice|select|choose|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन)\s+(?:is\s+)?(?:option\s+|vikalp\s*)?[a-d1-4]\b/i.test(candidate);
   const allowsFuzzyCommand = words.length === 1 ||
     /\b(?:go|move|navigate|select|choose|answer|pause|stop|resume|repeat|read|flag|mark|clear|submit|finish|skip)\b/i.test(candidate);
   const isChoiceAction = (action: CanonicalAction) =>

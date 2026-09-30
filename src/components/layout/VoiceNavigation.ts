@@ -5,7 +5,7 @@
 
 import { cleanVoiceTranscript } from '@/lib/voice/useVoiceEngine';
 
-export type NavigationTarget = 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN';
+export type NavigationTarget = 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'PRACTICE_GK' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN';
 
 export interface NavigationRouteConfig {
   target: NavigationTarget;
@@ -34,6 +34,27 @@ export const EXAMS_KEYWORDS = [
   "परीक्षा", 
   "मॉक टेस्ट", 
   "टेस्ट"
+];
+
+export const PRACTICE_GK_KEYWORDS = [
+  "practice, gk and geography",
+  "practice gk and geography",
+  "practice gk geography",
+  "open practice gk and geography",
+  "open practice gk geography",
+  "open gk and geography",
+  "go to practice gk",
+  "open geography practice",
+  "open gk geography",
+  "gk and geography",
+  "gk & geography",
+  "gk geography",
+  "practice gk",
+  "geography practice",
+  "geography",
+  "भूगोल",
+  "सामान्य ज्ञान और भूगोल",
+  "जीके और भूगोल",
 ];
 
 export const PRACTICE_KEYWORDS = [
@@ -78,6 +99,13 @@ export const NAVIGATION_ROUTES: NavigationRouteConfig[] = [
     announcementEn: 'Opening the Exams Hub',
     announcementHi: 'परीक्षा केंद्र खोला जा रहा है',
     keywords: EXAMS_KEYWORDS,
+  },
+  {
+    target: 'PRACTICE_GK',
+    path: '/practice?subject=gk',
+    announcementEn: 'Opening Practice, General Knowledge and Geography',
+    announcementHi: 'सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है',
+    keywords: PRACTICE_GK_KEYWORDS,
   },
   {
     target: 'PRACTICE',
@@ -130,6 +158,13 @@ export function handleVoiceNavigation(
 ): boolean {
   const match = matchNavigationIntent(rawTranscript);
   if (!match) return false;
+
+  const text = cleanVoiceTranscript(rawTranscript);
+  console.log('Voice transcript:', rawTranscript);
+  console.log('Normalized command:', text);
+  console.log('Detected intent:', match.target);
+  console.log('Action:', 'navigate');
+  console.log('Navigation route:', match.path);
 
   const speechLang = isHindi ? 'hi-IN' : 'en-US';
   const announcement = isHindi ? match.announcementHi : match.announcementEn;

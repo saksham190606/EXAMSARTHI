@@ -150,9 +150,31 @@ export function resolveLocally(transcript: string): IntentResult | null {
   }
 
   // --- 3. ANSWER intents ---
-  const optionMatch = t.match(/\b(option\s+)?([abcd])\b/);
+  const optionMatch = t.match(/\b(?:option|choose|select|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन)?\s*(?:is\s*)?(?:option\s*|vikalp\s*)?([abcd1-4])\b/i);
   if (optionMatch) {
-    return { intent: 'ANSWER', target: optionMatch[2].toUpperCase() };
+    const val = optionMatch[1].toLowerCase();
+    const mapNum: Record<string, string> = { '1': 'A', '2': 'B', '3': 'C', '4': 'D' };
+    const letter = mapNum[val] || val.toUpperCase();
+    return { intent: 'ANSWER', target: letter };
+  }
+  const hindiOptionMatch = t.match(/(?:विकल्प|ऑप्शन)?\s*(ए|बी|सी|डी|पहला|दूसरा|तीसरा|चौथा|एक|दो|तीन|चार)/);
+  if (hindiOptionMatch) {
+    const hindiMap: Record<string, string> = {
+      'ए': 'A', 'बी': 'B', 'सी': 'C', 'डी': 'D',
+      'पहला': 'A', 'दूसरा': 'B', 'तीसरा': 'C', 'चौथा': 'D',
+      'एक': 'A', 'दो': 'B', 'तीन': 'C', 'चार': 'D',
+    };
+    const letter = hindiMap[hindiOptionMatch[1]];
+    if (letter) return { intent: 'ANSWER', target: letter };
+  }
+  const wordOptionMap: Record<string, string> = {
+    one: 'A', first: 'A', 'first option': 'A', pehla: 'A', 'pehla option': 'A', ay: 'A', hey: 'A',
+    two: 'B', second: 'B', 'second option': 'B', doosra: 'B', 'doosra option': 'B', bee: 'B',
+    three: 'C', third: 'C', 'third option': 'C', teesra: 'C', 'teesra option': 'C', see: 'C',
+    four: 'D', fourth: 'D', 'fourth option': 'D', chautha: 'D', 'chautha option': 'D', dee: 'D',
+  };
+  if (wordOptionMap[t]) {
+    return { intent: 'ANSWER', target: wordOptionMap[t] };
   }
   if ((/\b(true)\b/.test(t) || t.includes('सही')) && !/\b(not true)\b/.test(t)) {
     return { intent: 'ANSWER', target: 'TRUE' };

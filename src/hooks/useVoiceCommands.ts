@@ -147,8 +147,12 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
     }
 
     // 3. Fallback regex checks
-    const optionMatch = transcript.match(/(?:option|choose|select)\s*(?:option\s*)?([a-d1-4])/i);
-    if (optionMatch && !isSubmitDialogOpen) {
+    const optionMatch = transcript.match(/(?:option|choose|select|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन)?\s*(?:is\s*)?(?:option\s*|vikalp\s*)?([a-d1-4])/i);
+    const isOptionUtterance = optionMatch && (
+      /^[a-d1-4]$/i.test(transcript.trim()) ||
+      /(?:option|opt|choice|choose|select|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन)/i.test(transcript)
+    );
+    if (isOptionUtterance && !isSubmitDialogOpen && optionMatch) {
       const val = optionMatch[1].toLowerCase();
       let index = -1;
       if (val === 'a' || val === '1') index = 0;

@@ -5,6 +5,7 @@ import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { routeVoiceCommand, hasActiveContext } from './commandRouter';
+import { matchExamTokens, matchExamVoiceRoute } from './exam-router';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
@@ -54,12 +55,20 @@ function scheduleRecognitionRestart(delayMs: number): void {
   }
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'scheduleRecognitionRestart', delayMs, isListeningGlobal, globalRecognitionExists: !!globalRecognition });
   recognitionRetryTimer = setTimeout(() => {
-    if (!isSpeakingGlobal && isListeningGlobal && globalRecognition && typeof globalRecognition.start === 'function') {
+    const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
+    if (isListeningGlobal || isAlwaysOn) {
       try {
         console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'auto-restart-attempting', isListeningGlobal, isSpeakingGlobal });
-        globalRecognition.start();
+        if (globalRecognition && typeof globalRecognition.start === 'function') {
+          globalRecognition.start();
+        } else {
+          startListening(activeLang);
+        }
       } catch (e) {
-        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'auto-restart-failed', error: String(e) });
+        console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'auto-restart-failed, re-initializing', error: String(e) });
+        try {
+          startListening(activeLang);
+        } catch (_) {}
       }
     }
   }, delayMs);
@@ -191,6 +200,15 @@ export function stopSpeaking(expectedGeneration?: number): void {
   currentSpeechPriority = null;
   currentUtteranceGlobal = null;
   notifyState();
+
+  const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
+  if (isAlwaysOn) {
+    setTimeout(() => {
+      if (!isSpeakingGlobal) {
+        startListening(activeLang);
+      }
+    }, 100);
+  }
 }
 
 function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; rate?: number; pitch?: number; voiceURI?: string | null } = {}): number | null {
@@ -221,9 +239,8 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
     window.speechSynthesis.cancel();
   } catch (_) {}
 
-  if (wasListeningBefore) {
-    stopListening(false);
-  }
+  // Retain continuous recognition in always-on mode so candidate can interrupt or speak commands anytime
+
 
   if (typeof window !== 'undefined') {
     (window as any).isSystemSpeaking = true;
@@ -274,6 +291,16 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
     (window as any).__currentUtterance = null;
     notifyState();
     opts.onEnd?.();
+
+    // Auto-resume microphone: always keep mic alive, paused only when voice companion is speaking
+    const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
+    if (!isSpeakingGlobal && (wasListeningBefore || isAlwaysOn)) {
+      setTimeout(() => {
+        if (!isSpeakingGlobal) {
+          startListening(activeLang);
+        }
+      }, 100);
+    }
   };
 
   const speakNextChunk = () => {
@@ -403,7 +430,7 @@ function handleRecognitionError(error: any): void {
     return;
   }
 
-  const fallbackText = 'Voice unavailable, use keyboard: Alt+N, Alt+P, 1-4';
+  const fallbackText = 'Microphone unavailable. Please allow microphone access for complete voice control.';
   if (['network', 'not-allowed', 'service-not-allowed', 'audio-capture', 'language-not-supported'].includes(code)) {
     console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'fallback-message-triggered', code });
     stopListening();
@@ -435,15 +462,20 @@ export function startListening(
 ): void {
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal });
   if (typeof window === 'undefined') return;
+  (window as any).__alwaysListening = true;
   const normalized = normalizeLanguage(lang);
   activeLang = normalized;
   if (isSpeakingGlobal) {
-    activeRecognitionHandler = onTranscript ?? activeRecognitionHandler;
+    if (onTranscript !== undefined) {
+      activeRecognitionHandler = onTranscript;
+    }
     return;
   }
 
   stopListening(false);
-  activeRecognitionHandler = onTranscript ?? null;
+  if (onTranscript !== undefined) {
+    activeRecognitionHandler = onTranscript;
+  }
   resolveRecognitionAlternatives = options.resolveAlternatives ?? true;
 
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -501,11 +533,10 @@ export function startListening(
       const forwardTranscript = (text: string) => {
         if (activeRecognitionHandler) {
           try { activeRecognitionHandler(text); } catch (_) {}
-        } else {
-          transcriptSubscribers.forEach((cb) => {
-            try { cb(text); } catch (_) {}
-          });
         }
+        transcriptSubscribers.forEach((cb) => {
+          try { cb(text); } catch (_) {}
+        });
       };
 
       // Always allow critical navigation, flag & review commands to fire immediately and notify handlers!
@@ -571,6 +602,49 @@ export function startListening(
         return;
       }
 
+      // Check for prompt echo: ignore only if the transcript is the prompt's own sentence
+      const isPromptEcho = 
+        lower.includes('which exam would you like') || 
+        lower.includes('you can say upsc') || 
+        lower.includes('कौन सी परीक्षा चुनना');
+
+      if (isSpeakingGlobal && isPromptEcho) {
+        return;
+      }
+
+      // Allow candidate to interrupt/launch exams anytime (UPSC, SSC, CGL, Bank PO, Railway, Vision AI)
+      const examMatch = matchExamTokens(lower) || (matchExamVoiceRoute(lower) ? { route: matchExamVoiceRoute(lower)!, examName: matchExamVoiceRoute(lower)!.title } : null);
+      if (examMatch) {
+        console.log("🔥 [VOICE ENGINE] Exam match caught!", examMatch.examName);
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        window.dispatchEvent(new CustomEvent('examsarthi-exam-launch', { 
+          detail: { 
+            examId: examMatch.route.id, 
+            param: examMatch.route.param, 
+            examName: examMatch.examName,
+            transcript: lower 
+          } 
+        }));
+        forwardTranscript(transcript);
+        return;
+      }
+
+      // Allow candidate to switch sections anytime
+      const isNavCommand = 
+        lower.includes('dashboard') || lower.includes('डैशबोर्ड') ||
+        lower.includes('practice') || lower.includes('प्रैक्टिस') ||
+        lower.includes('result') || lower.includes('परिणाम') || lower.includes('रिजल्ट') ||
+        lower.includes('setting') || lower.includes('सेटिंग');
+      if (isNavCommand) {
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        forwardTranscript(transcript);
+        return;
+      }
+
       if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
         return;
       }
@@ -580,9 +654,14 @@ export function startListening(
         console.debug('[VoiceEngine] final:', lower, 'conf:', confidence.toFixed(2));
       }
 
-      // Ignore single short tokens with low confidence unless they exactly match a command
+      // Ignore single short tokens with low confidence unless they match an exam option, exam acronym or command
       const confidence = lastResult[0]?.confidence ?? 1;
-      if (confidence < 0.4 && lower.split(/\s+/).length === 1 && lower.length < 4) {
+      const cleanToken = lower.trim();
+      const isSingleExamToken =
+        /^[a-d1-4]$/i.test(cleanToken) ||
+        ['ए', 'बी', 'सी', 'डी', 'एक', 'दो', 'तीन', 'चार', 'ay', 'bee', 'see', 'dee', 'opt', 'ans',
+         'upsc', 'ssc', 'cgl', 'po', 'ipo', 'rrb', 'ntpc', 'cse', 'ias', 'bank', 'रब', 'पीओ', 'सी', 'एसएससी', 'सीजीएल', 'रेलवे'].includes(cleanToken);
+      if (confidence < 0.4 && lower.split(/\s+/).length === 1 && lower.length < 4 && !isSingleExamToken) {
         if (typeof localStorage !== 'undefined' && localStorage.getItem('voiceDebug') === '1') {
           console.debug('[VoiceEngine] rejected: low confidence single short token');
         }
@@ -595,11 +674,12 @@ export function startListening(
       notifyState();
 
       console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'transcript-handler-invoking', isListeningGlobal, isSpeakingGlobal });
-      // Deliver ONCE: to activeRecognitionHandler if set, otherwise to subscribers
+      // Deliver transcript to activeRecognitionHandler and subscribers
       if (activeRecognitionHandler) {
         console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'calling-activeRecognitionHandler' });
-        activeRecognitionHandler(transcript);
-      } else {
+        try { activeRecognitionHandler(transcript); } catch (e) { console.error(e); }
+      }
+      if (transcriptSubscribers.size > 0) {
         console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'calling-transcriptSubscribers', subscriberCount: transcriptSubscribers.size });
         transcriptSubscribers.forEach((cb) => {
           try { cb(transcript); } catch (_) {}
@@ -617,10 +697,10 @@ export function startListening(
       console.log('[EXAMSARTHI VOICE DEBUG]', { 
         event: 'recognition-onend-fired', 
         isListeningGlobal, 
-        isSpeakingGlobal, 
-        willAutoRestart: isSpeakingGlobal === false && isListeningGlobal === true 
+        isSpeakingGlobal 
       });
-      if (isSpeakingGlobal || !isListeningGlobal) {
+      const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
+      if (!isListeningGlobal && !isAlwaysOn) {
         console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'onend-skipping-restart', isSpeakingGlobal, isListeningGlobal });
         return;
       }

@@ -43,15 +43,15 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       textSize: 'default',
       contrast: 'default',
       reducedMotion: false,
-      audioAssistance: false,
-      autoReadQuestions: false,
-      enableVoiceCommands: false,
+      audioAssistance: true,
+      autoReadQuestions: true,
+      enableVoiceCommands: true,
       voiceSpeed: 'normal',
       speechRate: 1.0,
       selectedVoiceURI: null,
-      voiceModeEnabled: false,
+      voiceModeEnabled: true,
       hasAnnouncedWelcome: false,
-      isListeningCommands: false,
+      isListeningCommands: true,
       language: 'en',
 
       setTextSize: (size) => set({ textSize: size }),
@@ -89,6 +89,14 @@ export const useAccessibilityStore = create<AccessibilityState>()(
         selectedVoiceURI: state.selectedVoiceURI,
         language: state.language,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.enableVoiceCommands = true;
+          state.voiceModeEnabled = true;
+          state.isListeningCommands = true;
+          state.audioAssistance = true;
+        }
+      },
     }
   )
 );

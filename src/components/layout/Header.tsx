@@ -55,9 +55,11 @@ export function Header() {
         const target = event.detail.target;
         if (target === 'DASHBOARD') router.push('/dashboard');
         else if (target === 'PRACTICE') router.push('/practice');
+        else if (target === 'PRACTICE_GK') router.push('/practice?subject=gk');
         else if (target === 'EXAMS') router.push('/exam');
         else if (target === 'SETTINGS') router.push('/settings');
         else if (target === 'RESULTS') router.push('/results');
+        else if (typeof target === 'string' && target.startsWith('/')) router.push(target);
       }
     };
     window.addEventListener('ai_voice_command', handleVoiceNav);

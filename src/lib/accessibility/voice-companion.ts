@@ -11,7 +11,8 @@
 import { useAccessibilityStore } from "@/store/useAccessibilityStore";
 import { parseSpokenIntent, playVoiceFeedbackChime } from "@/lib/voice/intent-parser";
 import { startListening as globalStartListening, stopListening as globalStopListening } from "@/lib/voice/useVoiceEngine";
-import { hasActiveContext } from "@/lib/voice/commandRouter";
+import { hasActiveContext, routeVoiceCommand } from "@/lib/voice/commandRouter";
+import { matchExamTokens, matchExamVoiceRoute } from "@/lib/voice/exam-router";
 
 /**
  * Formats text for natural speech synthesis pronunciation.
@@ -26,14 +27,12 @@ export function formatSpeechPronunciation(text: string | null | undefined): stri
 }
 
 export const WELCOME_TOUR_TEXT_EN =
-  "Welcome to Exam Saarthi — Empowering every aspirant with accessible examination and practice. " +
-  "Voice companion is now active. Use Tab to navigate through options, " +
-  "or press Alt plus V anytime to speak voice commands.";
+  "Welcome to Exam Saarthi. This platform is 100% voice operated and the microphone is continuously listening. " +
+  "Speak commands anytime to navigate between Dashboard, Practice, Exams, Results, and Settings.";
 
 export const WELCOME_TOUR_TEXT_HI =
-  "एग्जाम सारथी में आपका स्वागत है — सभी उम्मीदवारों के लिए सुलभ परीक्षा और अभ्यास। " +
-  "वॉइस साथी अब सक्रिय है। विकल्पों पर जाने के लिए Tab दबाएं, " +
-  "या वॉइस कमांड बोलने के लिए कभी भी Alt plus V दबाएं।";
+  "एग्जाम सारथी में आपका स्वागत है। यह प्लेटफॉर्म पूरी तरह से वॉइस संचालित है और माइक्रोफ़ोन लगातार सुन रहा है। " +
+  "डैशबोर्ड, प्रैक्टिस, परीक्षा, परिणाम और सेटिंग्स में जाने के लिए कभी भी बोलें।";
 
 export const WELCOME_TOUR_TEXT = WELCOME_TOUR_TEXT_EN;
 
@@ -393,7 +392,7 @@ export function speak(text: string, options?: SpeakOptions): void {
     utterance.lang = targetLang;
 
     // Lock in the exact same natural female voice across the platform
-    let femaleVoice = getNaturalFemaleVoice(targetLang);
+    const femaleVoice = getNaturalFemaleVoice(targetLang);
     if (femaleVoice) {
       utterance.voice = femaleVoice;
     }
@@ -1272,25 +1271,33 @@ class VoiceNavigationEngine {
   public navigate(path: string, confirmationText: string) {
     playVoiceFeedbackChime();
     this.isSpeakingFeedback = true;
-    globalStopListening();
+
+    let hasNavigated = false;
+    const doNavigate = () => {
+      if (hasNavigated) return;
+      hasNavigated = true;
+      if (this.routerNavigate) {
+        this.routerNavigate(path);
+      } else if (typeof window !== "undefined") {
+        window.location.href = path;
+      }
+      setTimeout(() => {
+        this.isSpeakingFeedback = false;
+        if (this.isListeningExplicitly) {
+          const store = useAccessibilityStore.getState();
+          const lang = store.language === "hi" ? "hi-IN" : "en-US";
+          globalStartListening(lang, (t) => this.processCommand(t));
+        }
+      }, 300);
+    };
 
     speak(confirmationText, {
-      onEnd: () => {
-        if (this.routerNavigate) {
-          this.routerNavigate(path);
-        } else if (typeof window !== "undefined") {
-          window.location.href = path;
-        }
-        setTimeout(() => {
-          this.isSpeakingFeedback = false;
-          if (this.isListeningExplicitly) {
-            const store = useAccessibilityStore.getState();
-            const lang = store.language === "hi" ? "hi-IN" : "en-US";
-            globalStartListening(lang, (t) => this.processCommand(t));
-          }
-        }, 300);
-      },
+      onEnd: doNavigate,
+      onError: doNavigate,
     });
+
+    // Guaranteed fallback: navigate after 1000ms even if TTS is muted/delayed
+    setTimeout(doNavigate, 1000);
   }
 
   public advanceFocusToNextElement() {
@@ -1362,11 +1369,6 @@ class VoiceNavigationEngine {
       const store = useAccessibilityStore.getState();
       const lang = store.language === "hi" ? "hi-IN" : "en-US";
       globalStartListening(lang, (t) => this.processCommand(t));
-      speak(
-        isHi
-          ? "वॉइस कमांड सुन रहे हैं। रोकने के लिए Alt plus V दबाएं।"
-          : "Listening for voice commands. Press Alt plus V to stop."
-      );
       return true;
     } else {
       this.isListeningExplicitly = false;
@@ -1381,19 +1383,52 @@ class VoiceNavigationEngine {
     }
   }
 
+  public startAlwaysOnListening(): void {
+    if (!isSpeechRecognitionSupported()) return;
+    this.isListeningExplicitly = true;
+    useAccessibilityStore.getState().setIsListeningCommands(true);
+    const store = useAccessibilityStore.getState();
+    const lang = store.language === "hi" ? "hi-IN" : "en-US";
+    globalStartListening(lang, (t) => this.processCommand(t));
+  }
+
   public async processCommand(rawInput: string) {
     if (!rawInput || !rawInput.trim()) return;
-
-    // Skip if an active voice context is registered (exam/review/hub/practice handles transcripts)
-    if (hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
-      return;
-    }
 
     const input = rawInput.trim();
     const isHi = useAccessibilityStore.getState().language === "hi";
 
     // 1. Process through AI-powered Natural Speech Intent Engine (local rule + fuzzy + Gemini fallback)
     const recognized = await parseSpokenIntent(rawInput, isHi ? "hi" : "en");
+
+    // Specific exam portal launch commands (e.g. "upsc", "cgl", "ssc", "bank po", "bank ipo", "railway", "vision ai")
+    const examMatch = matchExamTokens(input) || (matchExamVoiceRoute(input) ? { route: matchExamVoiceRoute(input)!, examName: matchExamVoiceRoute(input)!.title } : null);
+    if (examMatch) {
+      playVoiceFeedbackChime();
+      const targetUrl = `/exam?set=${examMatch.route.param}`;
+      const announcement = isHi 
+        ? `${examMatch.examName} परीक्षा पोर्टल खोला जा रहा है`
+        : `Opening ${examMatch.examName} examination portal`;
+      this.navigate(targetUrl, announcement);
+      return;
+    }
+
+    // Primary Section Switching Commands MUST ALWAYS WORK from anywhere in the application
+    const isGlobalNavIntent = [
+      "NAVIGATE_DASHBOARD",
+      "NAVIGATE_PRACTICE",
+      "NAVIGATE_PRACTICE_GK",
+      "NAVIGATE_EXAMS",
+      "NAVIGATE_RESULTS",
+      "NAVIGATE_SETTINGS",
+      "NAVIGATE_LOGIN",
+      "SWITCH_TO_HINDI",
+      "SWITCH_TO_ENGLISH"
+    ].includes(recognized.intent);
+
+    if (!isGlobalNavIntent && hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
+      return;
+    }
 
     // 2. Immediate Auditory Feedback Chime for recognized commands
     if (recognized.intent !== "UNKNOWN") {
@@ -1407,6 +1442,10 @@ class VoiceNavigationEngine {
 
       case "NAVIGATE_PRACTICE":
         this.navigate("/practice", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
+
+      case "NAVIGATE_PRACTICE_GK":
+        this.navigate("/practice?subject=gk", isHi ? recognized.announcementHi : recognized.announcementEn);
         return;
 
       case "NAVIGATE_EXAMS":
@@ -1673,11 +1712,27 @@ class VoiceNavigationEngine {
       return;
     }
 
+    // Check commandRouter route table as a fallback before declaring unrecognized
+    const routedFallback = routeVoiceCommand(input, 'global-nav');
+    if (routedFallback.handled && routedFallback.type === 'route' && routedFallback.path) {
+      const confirmationText = isHi
+        ? (routedFallback.path.includes('gk') ? 'सामान्य ज्ञान और भूगोल खोला जा रहा है' :
+           routedFallback.path === '/dashboard' ? 'डैशबोर्ड खोला जा रहा है' :
+           routedFallback.path === '/practice' ? 'प्रैक्टिस सत्र खोला जा रहा है' :
+           routedFallback.path === '/exam' ? 'परीक्षा केंद्र खोला जा रहा है' :
+           routedFallback.path === '/results' ? 'परिणाम देखे जा रहे हैं' :
+           routedFallback.path === '/settings' ? 'सेटिंग्स खोली जा रही हैं' :
+           `जा रहे हैं ${routedFallback.path}`)
+        : (routedFallback.readback || `Navigating to ${routedFallback.path}`);
+      this.navigate(routedFallback.path, confirmationText);
+      return;
+    }
+
     // Fallback: Unrecognized
     speak(
       isHi
-        ? `मैंने सुना "${input}", लेकिन गंतव्य समझ नहीं आया। 'डैशबोर्ड', 'परीक्षा', या 'प्रैक्टिस' बोलें।`
-        : `I heard ${input}, but I didn't catch the destination. Say 'Dashboard', 'Exams', or 'Practice'.`
+        ? `मैंने सुना "${input}", लेकिन कमांड समझ नहीं आया। 'डैशबोर्ड', 'प्रैक्टिस', 'परीक्षा', 'परिणाम', या 'सेटिंग्स' बोलें।`
+        : `I heard ${input}, but I didn't catch that command. You can say 'Dashboard', 'Practice', 'Exams', 'Results', or 'Settings'.`
     );
   }
 

@@ -1,22 +1,15 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
-import { useAuth } from '@/components/providers/AuthProvider';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import {
-  isVoiceRecognitionSupported,
-  speak as speakWithVoiceEngine,
-  startListening as startVoiceRecognition,
-  stopListening as stopVoiceRecognition,
-} from '@/lib/voice/useVoiceEngine';
-import { routeVoiceCommand } from '@/lib/voice/commandRouter';
+import { voiceEngine } from '@/lib/accessibility/voice-companion';
+import { subscribe } from '@/lib/voice/useVoiceEngine';
 import { cn } from '@/lib/utils';
 
 import { 
@@ -30,7 +23,7 @@ import {
 
 export { DASHBOARD_KEYWORDS, EXAMS_KEYWORDS, PRACTICE_KEYWORDS, SETTINGS_KEYWORDS, LOGIN_KEYWORDS };
 
-export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
+export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'PRACTICE_GK' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
   const match = matchNavigationIntent(text);
   return match ? match.target : 'UNKNOWN';
 };
@@ -102,297 +95,21 @@ export function ExamTickerBar() {
 }
 
 export default function ExamSarthiHero() {
-  const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
-  const userRef = useRef(user);
-  const authLoadingRef = useRef(authLoading);
-  const activeAbortControllerRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    userRef.current = user;
-    authLoadingRef.current = authLoading;
-    if (!user && activeAbortControllerRef.current) {
-      activeAbortControllerRef.current.abort();
-      activeAbortControllerRef.current = null;
-    }
-  }, [user, authLoading]);
-
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
-  const isVoiceModeActiveRef = useRef(false);
-  const isPermissionRequestPendingRef = useRef(false);
-  const lastCommandTimeRef = useRef(0);
-  const transcriptHandlerRef = useRef<(transcript: string) => void>(() => {});
-
+  const isListening = useAccessibilityStore((state) => state.isListeningCommands);
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
 
-  const launchExam = useCallback((target: string) => {
-    const t = (target || '').toLowerCase().trim();
-    if (t.includes('gk') || t.includes('geography')) {
-      router.push('/exam?set=p2');
-    } else if (t.includes('ssc')) {
-      router.push('/exam?exam=e1');
-    } else if (t.includes('upsc')) {
-      router.push('/exam?exam=e3');
-    } else if (t.includes('ibps')) {
-      router.push('/exam?exam=e2');
-    } else if (t.includes('rrb')) {
-      router.push('/exam?exam=e1');
-    } else if (t.includes('vision')) {
-      router.push('/exam?exam=e4');
-    } else if (/^(e[1-4]|p[1-6])$/.test(t)) {
-      router.push(`/exam?${t.startsWith('p') ? 'set' : 'exam'}=${encodeURIComponent(t)}`);
-    } else {
-      router.push('/exam');
-    }
-  }, [router]);
-
-  // Use the shared speech engine so all voice surfaces share one audio lifecycle.
-  const speakText = useCallback((text: string, lang?: string, onComplete?: () => void) => {
-    if (typeof window === 'undefined') return;
-    const targetLang = lang || (isHindi ? 'hi-IN' : 'en-US');
-    const store = useAccessibilityStore.getState();
-    stopVoiceRecognition(false);
-    speakWithVoiceEngine(text, {
-      lang: targetLang,
-      rate: store.speechRate || 1,
-      priority: 'response',
-      interrupt: true,
-      onEnd: () => {
-        setTimeout(() => {
-          if (isVoiceModeActiveRef.current) {
-            startVoiceRecognition(targetLang, transcriptHandlerRef.current, { resolveAlternatives: false });
-            setIsListening(true);
-          } else {
-            setIsListening(false);
-          }
-          onComplete?.();
-        }, 500);
-      },
-    });
-  }, [isHindi]);
-
-  const startListening = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    if (!isVoiceRecognitionSupported()) {
-      isVoiceModeActiveRef.current = false;
-      setIsListening(false);
-      speakText(isHindi ? "वॉइस पहचान समर्थित नहीं है।" : "Speech recognition is not supported in this browser.");
-      return;
-    }
-
-    isVoiceModeActiveRef.current = true;
-    startVoiceRecognition(isHindi ? 'hi-IN' : 'en-US', transcriptHandlerRef.current, {
-      resolveAlternatives: false,
-    });
-    setIsListening(true);
-  }, [isHindi, speakText]);
+  const toggleListening = useCallback(() => {
+    voiceEngine.toggle();
+  }, []);
 
   useEffect(() => {
-    transcriptHandlerRef.current = async (rawTranscript) => {
-      const transcript = rawTranscript.toLowerCase().trim();
-      if (!transcript || !isVoiceModeActiveRef.current) return;
-      const now = Date.now();
-      if (now - lastCommandTimeRef.current < 1500) return;
-      lastCommandTimeRef.current = now;
+    return subscribe((transcript) => {
       setStatusMessage(transcript);
-      stopVoiceRecognition(false);
-      setIsListening(false);
-
-      // --- Helper: handle a resolved intent ---
-      const handleIntent = (data: { intent: string; target: string }) => {
-        if (data.intent === 'NAVIGATE') {
-          const target = (data.target || 'dashboard').toLowerCase();
-          const routed = routeVoiceCommand(target === 'home' ? 'dashboard' : target, 'global-nav');
-          if (!routed.handled || !routed.path) {
-            // If target is a path like '/exam', route directly
-            const directPaths = ['/dashboard', '/exam', '/practice', '/settings', '/login'];
-            if (directPaths.includes(data.target)) {
-              isVoiceModeActiveRef.current = false;
-              setIsListening(false);
-              const pageName = data.target.slice(1);
-              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
-              router.push(data.target);
-              return true;
-            }
-            speakText(isHindi ? "क्षमा करें, मैं उस पृष्ठ पर नहीं जा सकती।" : "Sorry, I can't navigate to that page.");
-            return true;
-          }
-          const pageName = routed.path === '/dashboard' ? 'dashboard' : routed.path.slice(1);
-          isVoiceModeActiveRef.current = false;
-          setIsListening(false);
-          speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
-          router.push(routed.path);
-          return true;
-        } else if (data.intent === 'EXAM_LAUNCH') {
-          isVoiceModeActiveRef.current = false;
-          setIsListening(false);
-          speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : 'Launching exam');
-          launchExam(data.target);
-          return true;
-        } else if (data.intent === 'CONTROL') {
-          const confirmation = data.target === 'NEXT'
-            ? (isHindi ? 'अगला' : 'Next')
-            : data.target === 'PREVIOUS'
-              ? (isHindi ? 'पिछला' : 'Previous')
-              : data.target === 'SUBMIT'
-                ? (isHindi ? 'सबमिट किया जा रहा है' : 'Submitting')
-                : '';
-          speakText(confirmation || (isHindi ? "क्षमा करें, मुझे समझ नहीं आया।" : "Sorry, I didn't understand."));
-          return true;
-        } else if (data.intent === 'ANSWER') {
-          speakText(isHindi ? `विकल्प ${data.target} चुना गया` : `Option ${data.target} selected`);
-          return true;
-        }
-        return false;
-      };
-
-      // --- Helper: try local-only keyword matching ---
-      const tryLocalFallback = (): boolean => {
-        // 1. Exam launch keywords (e.g., "start SSC CGL", "take UPSC mock")
-        if (transcript.includes('ssc') || transcript.includes('cgl')) {
-          if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(transcript) || transcript.includes('mock')) {
-            isVoiceModeActiveRef.current = false;
-            setIsListening(false);
-            speakText(isHindi ? 'एसएससी सीजीएल परीक्षा शुरू की जा रही है' : 'Launching SSC CGL exam');
-            launchExam('ssc-cgl');
-            return true;
-          }
-        }
-        if (transcript.includes('upsc') || transcript.includes('csat')) {
-          if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(transcript) || transcript.includes('mock')) {
-            isVoiceModeActiveRef.current = false;
-            setIsListening(false);
-            speakText(isHindi ? 'यूपीएससी परीक्षा शुरू की जा रही है' : 'Launching UPSC exam');
-            launchExam('upsc');
-            return true;
-          }
-        }
-
-        // 2. Navigation keywords
-        const fallback = matchIntent(transcript);
-        const pathMap: Record<string, string> = {
-          DASHBOARD: '/dashboard',
-          EXAMS: '/exam',
-          PRACTICE: '/practice',
-          SETTINGS: '/settings',
-          LOGIN: '/login',
-        };
-        const fallbackPath = pathMap[fallback];
-        if (fallbackPath) {
-          isVoiceModeActiveRef.current = false;
-          setIsListening(false);
-          speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
-          router.push(fallbackPath);
-          return true;
-        }
-        return false;
-      };
-
-      // Step 1: Try local keyword matching FIRST (zero-latency, no network)
-      if (tryLocalFallback()) return;
-
-      // Check session before making remote /api/intent call
-      let currentUser = userRef.current;
-      if (authLoadingRef.current) {
-        // Await session initialization to prevent race conditions (up to 1500ms)
-        const start = Date.now();
-        while (authLoadingRef.current && Date.now() - start < 1500) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        currentUser = userRef.current;
-      }
-
-      // If user is unauthenticated, do NOT call /api/intent
-      if (!currentUser) {
-        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
-        return;
-      }
-
-      const controller = new AbortController();
-      activeAbortControllerRef.current = controller;
-
-      // Step 2: Fall back to /api/intent for authenticated complex/AI-powered intents
-      try {
-        const res = await fetch('/api/intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript }),
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
-          return;
-        }
-        const data = await res.json();
-        if (data.intent && data.intent !== 'UNKNOWN') {
-          if (handleIntent(data)) return;
-        }
-        // AI also couldn't resolve — tell the user
-        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
-      } catch (error: unknown) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
-        }
-        console.error('[Landing Voice] Intent routing failed:', error);
-        // Network/server failure — don't crash, just inform the user
-        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
-      } finally {
-        if (activeAbortControllerRef.current === controller) {
-          activeAbortControllerRef.current = null;
-        }
-      }
-    };
-
-  }, [isHindi, launchExam, router, speakText]);
-
-  const toggleListening = useCallback(async () => {
-    if (isListening || isPermissionRequestPendingRef.current) {
-      isPermissionRequestPendingRef.current = false;
-      isVoiceModeActiveRef.current = false;
-      stopVoiceRecognition();
-      setIsListening(false);
-    } else {
-      isPermissionRequestPendingRef.current = true;
-      isVoiceModeActiveRef.current = true;
-      setStatusMessage(isHindi ? 'माइक्रोफ़ोन की अनुमति मांगी जा रही है' : 'Requesting microphone access');
-      let micGranted = false;
-      try {
-        micGranted = await requestMicPermission();
-      } finally {
-        isPermissionRequestPendingRef.current = false;
-      }
-      if (!isVoiceModeActiveRef.current) return;
-      if (micGranted) {
-        startListening();
-      } else {
-        isVoiceModeActiveRef.current = false;
-        setIsListening(false);
-        speakText(isHindi ? 'कृपया माइक्रोफ़ोन की अनुमति दें।' : 'Please allow microphone access to use voice navigation.');
-      }
-    }
-  }, [isHindi, isListening, speakText, startListening]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === 'v' || e.key === 'V' || e.code === 'KeyV')) {
-        e.preventDefault();
-        toggleListening();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleListening]);
-
-  useEffect(() => {
-    return () => {
-      isPermissionRequestPendingRef.current = false;
-      isVoiceModeActiveRef.current = false;
-      stopVoiceRecognition();
-    };
+    });
   }, []);
 
   return (

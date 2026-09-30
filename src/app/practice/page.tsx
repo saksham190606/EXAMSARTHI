@@ -231,6 +231,27 @@ function PracticeContent() {
     const routed = routeVoiceCommand(rawTranscript, 'practice')
     if (routed.handled) {
       lastCommandTimeRef.current = now
+      if (routed.type === 'route' && routed.path) {
+        console.log('Voice transcript:', rawTranscript)
+        console.log('Normalized command:', text)
+        console.log('Detected intent:', routed.path.includes('gk') ? 'NAVIGATE_PRACTICE_GK' : 'NAVIGATE_ROUTE')
+        console.log('Action:', 'navigate')
+        console.log('Navigation route:', routed.path)
+
+        if (routed.path === '/practice?subject=gk') {
+          handleSubjectSelect("General Knowledge")
+          speakText(isHindi ? "सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है" : "Starting General Knowledge and Geography practice")
+          triggerPracticeLaunch('gk-geography')
+          return
+        }
+        if (routed.path === '/practice') {
+          handleSubjectSelect("All Subjects")
+          speakText(isHindi ? "सभी विषय दिखाए जा रहे हैं" : "Showing all practice subjects")
+          return
+        }
+        router.push(routed.path)
+        return
+      }
       if (routed.type === 'next' || routed.type === 'previous' || routed.type === 'repeat-question' || routed.type === 'clear-answer' || routed.type === 'flag-unflag' || routed.type === 'submit') {
         const message = routed.readback || 'Command processed'
         if (routed.type === 'next' || routed.type === 'previous') {
@@ -262,6 +283,46 @@ function PracticeContent() {
       return
     }
 
+    // GK & Geography specific phrases checked FIRST before generic GK
+    if ([
+      "open practice gk and geography",
+      "open practice gk geography",
+      "open gk and geography",
+      "go to practice gk",
+      "open geography practice",
+      "open gk geography",
+      "gk and geography",
+      "gk geography",
+      "geography practice",
+      "geography",
+      "भूगोल",
+      "सामान्य ज्ञान और भूगोल",
+      "जीके और भूगोल"
+    ].some(k => text.includes(k))) {
+      lastCommandTimeRef.current = now
+      console.log('Voice transcript:', rawTranscript)
+      console.log('Normalized command:', text)
+      console.log('Detected intent:', 'NAVIGATE_PRACTICE_GK')
+      console.log('Action:', 'navigate')
+      console.log('Navigation route:', '/practice?subject=gk')
+      handleSubjectSelect("General Knowledge")
+      speakText(isHindi ? "सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है" : "Starting General Knowledge and Geography practice")
+      triggerPracticeLaunch('gk-geography')
+      return
+    }
+
+    if (["open practice", "practice page", "अभ्यास", "प्रैक्टिस"].some(k => text === k || text === `go to ${k}`)) {
+      lastCommandTimeRef.current = now
+      console.log('Voice transcript:', rawTranscript)
+      console.log('Normalized command:', text)
+      console.log('Detected intent:', 'NAVIGATE_PRACTICE')
+      console.log('Action:', 'navigate')
+      console.log('Navigation route:', '/practice')
+      handleSubjectSelect("All Subjects")
+      speakText(isHindi ? "सभी विषय दिखाए जा रहे हैं" : "Showing all practice subjects")
+      return
+    }
+
     if (["quant", "quantitative", "aptitude", "math", "maths", "mathematics", "क्वांट", "गणित"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
       handleSubjectSelect("Quantitative Aptitude")
@@ -282,6 +343,11 @@ function PracticeContent() {
     }
     if (["gk", "general knowledge", "awareness", "current affairs", "जीके", "सामान्य ज्ञान"].some(k => text.includes(k))) {
       lastCommandTimeRef.current = now
+      console.log('Voice transcript:', rawTranscript)
+      console.log('Normalized command:', text)
+      console.log('Detected intent:', 'NAVIGATE_PRACTICE_GK')
+      console.log('Action:', 'filter')
+      console.log('Navigation route:', '/practice?subject=gk')
       handleSubjectSelect("General Knowledge")
       speakText("Filtering by General Knowledge")
       return
@@ -298,12 +364,6 @@ function PracticeContent() {
       speakText("Showing all subjects")
       return
     }
-    if (["geography", "gk and geography", "geography practice", "भूगोल"].some(k => text.includes(k))) {
-      lastCommandTimeRef.current = now
-      speakText("Starting General Knowledge and Geography practice")
-      triggerPracticeLaunch('gk-geography')
-      return
-    }
     if (["start practice", "start test", "take test", "begin", "start", "शुरू करें", "स्टार्ट", "शुरू"].some(k => text.includes(k))) {
       const sets = filteredSetsRef.current
       if (sets.length === 1) {
@@ -313,7 +373,7 @@ function PracticeContent() {
         return
       }
     }
-  }, [handleSubjectSelect, triggerPracticeLaunch])
+  }, [handleSubjectSelect, isHindi, router, triggerPracticeLaunch])
 
   React.useEffect(() => {
     registerVoiceContext('practice', handlePracticeVoiceCommand)

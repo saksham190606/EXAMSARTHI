@@ -16,7 +16,7 @@ import {
   requestMicAccess,
   stopSpeaking,
 } from '@/lib/voice/useVoiceEngine';
-import { routeVoiceCommand, wholeWordMatch } from '@/lib/voice/commandRouter';
+import { routeVoiceCommand, wholeWordMatch, registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
 
 export type VoiceStatus =
   | 'Ready'
@@ -374,7 +374,14 @@ export function useVoiceMode({
       playVoiceFeedbackChime();
       const feedback = routed.readback || 'Command recognized';
       setLastActionFeedback(`✓ ${feedback}`);
-      announceToScreenReader(feedback);
+      if (routed.type === 'route' && routed.path) {
+        speakText(feedback, speechLang, () => {
+          if (typeof window !== 'undefined') {
+            window.location.href = routed.path!;
+          }
+        });
+        return;
+      }
       if (routed.type === 'next') {
         handleNextQuestion();
         return;
@@ -399,6 +406,13 @@ export function useVoiceMode({
         const q = currentQuestionRef.current;
         if (q && q.options && routed.optionIndex >= 0 && routed.optionIndex < q.options.length) {
           handleSelectOption(routed.optionIndex);
+          const letter = String.fromCharCode(65 + routed.optionIndex);
+          const confText = isHi ? `विकल्प ${letter} चुना गया` : `Option ${letter} selected`;
+          speakText(confText, speechLang, () => {
+            if (isActiveRef.current && !userManuallyMutedRef.current) {
+              startListening(speechLang);
+            }
+          });
           return;
         }
       }
@@ -465,11 +479,22 @@ export function useVoiceMode({
     }
 
     // FLAG FOR REVIEW:
-    // Keywords: ["flag", "flagfor", "flag for review", "flagfor review", "mark for review", "mark", "review later", "bookmark", "चिह्नित करो", "फ्लैग"]
+    // Ensure option selection phrases (e.g. "mark option a", "mark 1") are never hijacked as flags
+    const isOptionCommand = routed.type === 'select-option' ||
+      /(?:option|opt|choice|select|choose|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन)\s*(?:is\s*)?(?:option\s*)?([a-d1-4]|ay|bee|see|dee)/i.test(transcript) ||
+      /^[a-d1-4]$/i.test(transcript);
+
     const flagKeywords = [
-      "flag", "flagfor", "flag for review", "flagfor review", "flag this", "flag question", "review later", "mark", "रिव्यू", "चिह्नित करो", "फ्लैग", "mark for review", "बाद में देखेंगे", "bookmark", "चिह्नित"
+      "flag for review", "flagfor review", "flagfor", "flag this", "flag question",
+      "mark for review", "review later", "bookmark", "रिव्यू", "चिह्नित करो", "फ्लैग", "बाद में देखेंगे", "चिह्नित"
     ];
-    if (phoneticMatch?.action === 'FLAG_REVIEW' || flagKeywords.some((k) => transcript === k || transcript.includes(k))) {
+    const isFlagMatch = !isOptionCommand && (
+      phoneticMatch?.action === 'FLAG_REVIEW' ||
+      flagKeywords.some((k) => transcript === k || (k.includes(' ') && transcript.includes(k))) ||
+      wholeWordMatch(transcript, "flag") ||
+      (wholeWordMatch(transcript, "mark") && !/(?:option|opt|choice|[a-d1-4]|ay|bee|see|dee|one|two|three|four)/i.test(transcript))
+    );
+    if (isFlagMatch) {
       lastCommandTimeRef.current = now;
       playVoiceFeedbackChime();
       handleToggleFlag();
@@ -539,10 +564,13 @@ export function useVoiceMode({
     // A. TYPE: "TRUE_FALSE" (or questions with only 2 binary options)
     // -------------------------------------------------------------------------
     if (isTrueFalse) {
-      // Recognized inputs for TRUE:
-      // ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ"]
-      const trueTokens = ["true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ", "हा"];
-      if (phoneticMatch?.action === 'SELECT_TRUE' || trueTokens.some((t) => transcript === t || (t.length > 3 && wholeWordMatch(transcript, t)))) {
+      // Recognized inputs for TRUE (Option A / 1 / True / Sahi):
+      const trueTokens = [
+        "true", "sahi", "satya", "yes", "सही", "सत्य", "ट्रू", "हाँ", "हा",
+        "a", "1", "one", "option a", "option 1", "opt a", "opt 1", "select a", "choose a", "विकल्प ए", "पहला"
+      ];
+      const matchTrueToken = (t: string) => /^[a1]$/.test(t) ? (transcript === t || words.includes(t)) : (transcript === t || wholeWordMatch(transcript, t));
+      if (phoneticMatch?.action === 'SELECT_TRUE' || phoneticMatch?.action === 'SELECT_A' || routed.optionIndex === 0 || trueTokens.some(matchTrueToken)) {
         playVoiceFeedbackChime();
         const trueOptId = (currentQ.options && currentQ.options[0]) ? currentQ.options[0].id : "true";
         if (actionsRef.current.setAnswer) {
@@ -556,10 +584,13 @@ export function useVoiceMode({
         return;
       }
 
-      // Recognized inputs for FALSE:
-      // ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं"]
-      const falseTokens = ["false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं", "ना"];
-      if (phoneticMatch?.action === 'SELECT_FALSE' || falseTokens.some((t) => transcript === t || (t.length > 3 && wholeWordMatch(transcript, t)))) {
+      // Recognized inputs for FALSE (Option B / 2 / False / Galat):
+      const falseTokens = [
+        "false", "galat", "asatya", "no", "गलत", "असत्य", "फॉल्स", "नहीं", "ना",
+        "b", "2", "two", "option b", "option 2", "opt b", "opt 2", "select b", "choose b", "विकल्प बी", "दूसरा"
+      ];
+      const matchFalseToken = (t: string) => /^[b2]$/.test(t) ? (transcript === t || words.includes(t)) : (transcript === t || wholeWordMatch(transcript, t));
+      if (phoneticMatch?.action === 'SELECT_FALSE' || phoneticMatch?.action === 'SELECT_B' || routed.optionIndex === 1 || falseTokens.some(matchFalseToken)) {
         playVoiceFeedbackChime();
         const falseOptId = (currentQ.options && currentQ.options[1]) ? currentQ.options[1].id : "false";
         if (actionsRef.current.setAnswer) {
@@ -573,14 +604,9 @@ export function useVoiceMode({
         return;
       }
 
-      // If user says A/B/C/D on a True/False question:
-      // Announce: "This is a True or False question. Please say True or False."
-      const mcqTokens = [
-        "option a", "option b", "option c", "option d",
-        "विकल्प ए", "विकल्प बी", "विकल्प सी", "विकल्प डी",
-        "a", "b", "c", "d", "ए", "बी", "सी", "डी"
-      ];
-      if ((phoneticMatch && ['SELECT_A', 'SELECT_B', 'SELECT_C', 'SELECT_D'].includes(phoneticMatch.action)) || mcqTokens.some((t) => transcript === t || words.includes(t))) {
+      // If user says C or D on a True/False question:
+      const invalidTFTokens = ["option c", "option d", "c", "d", "सी", "डी", "3", "4", "three", "four"];
+      if ((phoneticMatch && ['SELECT_C', 'SELECT_D'].includes(phoneticMatch.action)) || invalidTFTokens.some((t) => transcript === t || words.includes(t))) {
         const warning = isHi
           ? "यह सत्य या असत्य प्रश्न है। कृपया सत्य या असत्य कहें।"
           : "This is a True or False question. Please say True or False.";
@@ -636,69 +662,78 @@ export function useVoiceMode({
     // -------------------------------------------------------------------------
     // C. TYPE: "MCQ" (Standard 4 Options)
     // -------------------------------------------------------------------------
-    // Option A: ["a", "ay", "hey", "one", "1", "option a", "ए", "विकल्प ए", "पहला"]
-    const optATokens = ["option a", "विकल्प ए", "पहला", "ए", "एक"];
-    const optBTokens = ["option b", "विकल्प बी", "दूसरा", "बी", "दो"];
-    const optCTokens = ["option c", "विकल्प सी", "तीसरा", "सी", "तीन"];
-    const optDTokens = ["option d", "विकल्प डी", "चौथा", "डी", "चार"];
+    const optATokens = [
+      "a", "1", "one", "eight", "ay", "hey",
+      "option a", "opt a", "choice a", "select a", "select option a", "choose a", "choose option a",
+      "mark a", "mark option a", "answer a", "answer is a", "ans a", "option 1", "opt 1", "choice 1",
+      "select 1", "select option 1", "first", "first option", "vikalp a", "vikalp 1", "विकल्प ए", "पहला", "ए", "एक", "पहला विकल्प", "ऑप्शन ए", "ऑप्शन 1"
+    ];
+    const optBTokens = [
+      "b", "2", "two", "bee", "be",
+      "option b", "opt b", "choice b", "select b", "select option b", "choose b", "choose option b",
+      "mark b", "mark option b", "answer b", "answer is b", "ans b", "option 2", "opt 2", "choice 2",
+      "select 2", "select option 2", "second", "second option", "vikalp b", "vikalp 2", "विकल्प बी", "दूसरा", "बी", "दो", "दूसरा विकल्प", "ऑप्शन बी", "ऑप्शन 2"
+    ];
+    const optCTokens = [
+      "c", "3", "three", "see", "sea", "si",
+      "option c", "opt c", "choice c", "select c", "select option c", "choose c", "choose option c",
+      "mark c", "mark option c", "answer c", "answer is c", "ans c", "option 3", "opt 3", "choice 3",
+      "select 3", "select option 3", "third", "third option", "vikalp c", "vikalp 3", "विकल्प सी", "तीसरा", "सी", "तीन", "तीसरा विकल्प", "ऑप्शन सी", "ऑप्शन 3"
+    ];
+    const optDTokens = [
+      "d", "4", "four", "dee",
+      "option d", "opt d", "choice d", "select d", "select option d", "choose d", "choose option d",
+      "mark d", "mark option d", "answer d", "answer is d", "ans d", "option 4", "opt 4", "choice 4",
+      "select 4", "select option 4", "fourth", "fourth option", "vikalp d", "vikalp 4", "विकल्प डी", "चौथा", "डी", "चार", "चौथा विकल्प", "ऑप्शन डी", "ऑप्शन 4"
+    ];
 
-    // Single-letter/number: only match if the WHOLE transcript is that token
-    const singleTokenExact = (t: string) => /^[a-d1-4]$/.test(t) ? transcript === t : (transcript === t || wholeWordMatch(transcript, t));
+    const matchOptToken = (t: string) => {
+      if (/^[a-d1-4]$/.test(t)) {
+        return transcript === t || words.includes(t);
+      }
+      return transcript === t || wholeWordMatch(transcript, t);
+    };
 
-    if (phoneticMatch?.action === 'SELECT_A' || optATokens.some(singleTokenExact)) {
-      lastCommandTimeRef.current = now;
-      playVoiceFeedbackChime();
-      handleSelectOption(0);
-      speakText(isHi ? "विकल्प ए चुना गया" : "Selected A", speechLang, () => {
-        startListening(speechLang);
-      });
-      return;
-    }
-
-    if (phoneticMatch?.action === 'SELECT_B' || optBTokens.some(singleTokenExact)) {
-      lastCommandTimeRef.current = now;
-      playVoiceFeedbackChime();
-      handleSelectOption(1);
-      speakText(isHi ? "विकल्प बी चुना गया" : "Selected B", speechLang, () => {
-        startListening(speechLang);
-      });
-      return;
-    }
-
-    if (phoneticMatch?.action === 'SELECT_C' || optCTokens.some(singleTokenExact)) {
-      lastCommandTimeRef.current = now;
-      playVoiceFeedbackChime();
-      handleSelectOption(2);
-      speakText(isHi ? "विकल्प सी चुना गया" : "Selected C", speechLang, () => {
-        startListening(speechLang);
-      });
-      return;
-    }
-
-    if (phoneticMatch?.action === 'SELECT_D' || optDTokens.some(singleTokenExact)) {
-      lastCommandTimeRef.current = now;
-      playVoiceFeedbackChime();
-      handleSelectOption(3);
-      speakText(isHi ? "विकल्प डी चुना गया" : "Selected D", speechLang, () => {
-        startListening(speechLang);
-      });
-      return;
-    }
-
-    // General intent matcher fallback
     const match = matchExamIntent(transcript, false);
-    if (match.type === 'SELECT_OPTION_A') {
+
+    if (phoneticMatch?.action === 'SELECT_A' || routed.optionIndex === 0 || optATokens.some(matchOptToken) || match.type === 'SELECT_OPTION_A') {
+      lastCommandTimeRef.current = now;
+      playVoiceFeedbackChime();
       handleSelectOption(0);
-      speakText(isHi ? "विकल्प ए चुना गया" : "Selected A", speechLang, () => startListening(speechLang));
-    } else if (match.type === 'SELECT_OPTION_B') {
+      speakText(isHi ? "विकल्प ए चुना गया" : "Option A selected", speechLang, () => {
+        startListening(speechLang);
+      });
+      return;
+    }
+
+    if (phoneticMatch?.action === 'SELECT_B' || routed.optionIndex === 1 || optBTokens.some(matchOptToken) || match.type === 'SELECT_OPTION_B') {
+      lastCommandTimeRef.current = now;
+      playVoiceFeedbackChime();
       handleSelectOption(1);
-      speakText(isHi ? "विकल्प बी चुना गया" : "Selected B", speechLang, () => startListening(speechLang));
-    } else if (match.type === 'SELECT_OPTION_C') {
+      speakText(isHi ? "विकल्प बी चुना गया" : "Option B selected", speechLang, () => {
+        startListening(speechLang);
+      });
+      return;
+    }
+
+    if (phoneticMatch?.action === 'SELECT_C' || routed.optionIndex === 2 || optCTokens.some(matchOptToken) || match.type === 'SELECT_OPTION_C') {
+      lastCommandTimeRef.current = now;
+      playVoiceFeedbackChime();
       handleSelectOption(2);
-      speakText(isHi ? "विकल्प सी चुना गया" : "Selected C", speechLang, () => startListening(speechLang));
-    } else if (match.type === 'SELECT_OPTION_D') {
+      speakText(isHi ? "विकल्प सी चुना गया" : "Option C selected", speechLang, () => {
+        startListening(speechLang);
+      });
+      return;
+    }
+
+    if (phoneticMatch?.action === 'SELECT_D' || routed.optionIndex === 3 || optDTokens.some(matchOptToken) || match.type === 'SELECT_OPTION_D') {
+      lastCommandTimeRef.current = now;
+      playVoiceFeedbackChime();
       handleSelectOption(3);
-      speakText(isHi ? "विकल्प डी चुना गया" : "Selected D", speechLang, () => startListening(speechLang));
+      speakText(isHi ? "विकल्प डी चुना गया" : "Option D selected", speechLang, () => {
+        startListening(speechLang);
+      });
+      return;
     }
   }, [
     handleSelectOption,
@@ -728,7 +763,7 @@ export function useVoiceMode({
       isActiveRef.current = false;
       setStatus('Unsupported');
       setVoiceStatus('Speech recognition is not supported in this browser.');
-      setErrorMessage('Use keyboard controls to navigate and answer questions.');
+      setErrorMessage('Microphone access needed. Please click to allow voice control.');
       return;
     }
     setVoiceStatus('Requesting microphone permission...');
@@ -759,23 +794,11 @@ export function useVoiceMode({
     readCurrentQuestion();
   }, [handleManualMicActivation, readCurrentQuestion]);
 
-  // Space key to unlock voice if banner is active
+  // Register exam context with central command router
   useEffect(() => {
-    if (isAudioUnlocked) return;
-    const handleSpaceUnlock = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return;
-      }
-      if (e.code === 'Space' || e.key === ' ') {
-        e.preventDefault();
-        unlockAudio();
-      }
-    };
-
-    window.addEventListener('keydown', handleSpaceUnlock);
-    return () => window.removeEventListener('keydown', handleSpaceUnlock);
-  }, [isAudioUnlocked, unlockAudio]);
+    registerVoiceContext('exam', handleCapturedSpeech);
+    return () => unregisterVoiceContext('exam');
+  }, [handleCapturedSpeech]);
 
   // Support globally dispatched AI Voice Commands (NEXT, PREVIOUS, FLAG, REPEAT, STOP)
   useEffect(() => {

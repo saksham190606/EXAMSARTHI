@@ -7,6 +7,7 @@
 export type CanonicalVoiceIntent =
   | 'NAVIGATE_DASHBOARD'
   | 'NAVIGATE_PRACTICE'
+  | 'NAVIGATE_PRACTICE_GK'
   | 'NAVIGATE_EXAMS'
   | 'NAVIGATE_RESULTS'
   | 'NAVIGATE_SETTINGS'
@@ -134,6 +135,11 @@ const INTENT_METADATA: Record<
     announcementEn: 'Opening Practice section',
     announcementHi: 'प्रैक्टिस सत्र खोला जा रहा है',
   },
+  NAVIGATE_PRACTICE_GK: {
+    targetPath: '/practice?subject=gk',
+    announcementEn: 'Opening Practice, General Knowledge and Geography',
+    announcementHi: 'सामान्य ज्ञान और भूगोल अभ्यास खोला जा रहा है',
+  },
   NAVIGATE_EXAMS: {
     targetPath: '/exam',
     announcementEn: 'Opening the Exams Hub',
@@ -209,14 +215,16 @@ const INTENT_METADATA: Record<
 export const DASHBOARD_KEYWORDS = ["dashboard", "home", "main screen", "profile", "डैशबोर्ड", "होम", "मुख्य पृष्ठ"];
 export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "परीक्षा", "मॉक टेस्ट", "टेस्ट"];
 export const PRACTICE_KEYWORDS = ["practice", "learn", "study", "prepare", "प्रैक्टिस", "अभ्यास", "पढ़ाई"];
-export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "विकल्प"];
+export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "सेटिंग्स", "विकल्प"];
+export const RESULTS_KEYWORDS = ["result", "results", "score", "scores", "marks", "score card", "scorecard", "परिणाम", "नतीजे", "रिजल्ट", "स्कोर"];
 export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
 
-export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'LOGIN' | 'UNKNOWN' => {
+export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'RESULTS' | 'LOGIN' | 'UNKNOWN' => {
   const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
   if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
   if (EXAMS_KEYWORDS.some(k => clean.includes(k))) return 'EXAMS';
   if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
+  if (RESULTS_KEYWORDS.some(k => clean.includes(k))) return 'RESULTS';
   if (SETTINGS_KEYWORDS.some(k => clean.includes(k))) return 'SETTINGS';
   if (LOGIN_KEYWORDS.some(k => clean.includes(k))) return 'LOGIN';
   return 'UNKNOWN';
@@ -266,6 +274,23 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
+  // 1.5 Practice Sub-sections: General Knowledge & Geography (Checked before generic Practice)
+  const isGkGeography =
+    /(?:gk\s*(?:and|&)?\s*geography|geography\s*practice|practice\s*gk|gk\s*practice|open\s*gk\s*geography|भूगोल|सामान्य\s*ज्ञान\s*और\s*भूगोल|जीके\s*और\s*भूगोल)/i.test(norm) ||
+    ((norm.includes('gk') || norm.includes('general knowledge') || norm.includes('जीके')) && (norm.includes('geography') || norm.includes('भूगोल'))) ||
+    ((norm.includes('geography') || norm.includes('भूगोल')) && (norm.includes('practice') || norm.includes('open') || norm.includes('खोलें') || norm.includes('अभ्यास')));
+
+  if (isGkGeography) {
+    return {
+      intent: 'NAVIGATE_PRACTICE_GK',
+      confidence: 0.98,
+      rawText,
+      normalizedText: norm,
+      source: 'local_rule',
+      ...INTENT_METADATA.NAVIGATE_PRACTICE_GK,
+    };
+  }
+
   // 2. Fuzzy Keyword Intent Matcher for Primary Destinations
   const fuzzyIntent = matchIntent(rawText);
   if (fuzzyIntent === 'DASHBOARD') {
@@ -296,6 +321,16 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
       normalizedText: norm,
       source: 'fuzzy_match',
       ...INTENT_METADATA.NAVIGATE_PRACTICE,
+    };
+  }
+  if (fuzzyIntent === 'RESULTS') {
+    return {
+      intent: 'NAVIGATE_RESULTS',
+      confidence: 0.96,
+      rawText,
+      normalizedText: norm,
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.NAVIGATE_RESULTS,
     };
   }
   if (fuzzyIntent === 'SETTINGS') {
@@ -350,9 +385,9 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  // 8. Action: Start Exam / Mock
+  // 8. Action: Start Exam / Mock / Specific Exam Portals
   if (
-    /(?:start\s+mock|take\s+test|take\s+mock|start\s+exam|begin\s+test|begin\s+exam|मॉक\s+टेस्ट\s+शुरू|टेस्ट\s+शुरू|परीक्षा\s+शुरू|शुरू\s+करो|mock\s+exam\s+shuru|test\s+shuru)/i.test(norm)
+    /(?:start\s+mock|take\s+test|take\s+mock|start\s+exam|begin\s+test|begin\s+exam|मॉक\s+टेस्ट\s+शुरू|टेस्ट\s+शुरू|परीक्षा\s+शुरू|शुरू\s+करो|mock\s+exam\s+shuru|test\s+shuru|upsc|cgl|ssc|bank\s*po|bank\s*ipo|ibps|rrb|railway|यूपीएससी|सीजीएल|एसएससी|बैंक\s*पीओ|रेलवे)/i.test(norm)
   ) {
     return {
       intent: 'START_EXAM',
@@ -421,7 +456,7 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
   }
 
   // 13. In-Exam: Select Option
-  const optionMatchA = /(?:विकल्प\s+(?:ए|a|1)|पहला\s+विकल्प|option\s+(?:a|1|one|ए)|vikalp\s+(?:a|1)|^option\s+a$|^विकल्प\s+ए$|^ए$|^a$)/i.test(norm);
+  const optionMatchA = /(?:विकल्प\s+(?:ए|a|1)|पहला\s+विकल्प|option\s+(?:a|1|one|ए)|opt\s+(?:a|1)|choice\s+(?:a|1)|(?:select|choose|mark|pick|answer|ans)\s+(?:option\s+)?(?:a|1)|vikalp\s+(?:a|1)|^option\s+a$|^option\s+1$|^विकल्प\s+ए$|^ए$|^a$|^1$|^one$|^first$|^first\s+option$|^पहला$|^पहला\s+विकल्प$|^ay$|^hey$)/i.test(norm);
   if (optionMatchA) {
     return {
       intent: 'SELECT_OPTION',
@@ -435,7 +470,7 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  const optionMatchB = /(?:विकल्प\s+(?:बी|b|2)|दूसरा\s+विकल्प|option\s+(?:b|2|two|बी)|vikalp\s+(?:b|2)|^option\s+b$|^विकल्प\s+बी$|^बी$|^b$)/i.test(norm);
+  const optionMatchB = /(?:विकल्प\s+(?:बी|b|2)|दूसरा\s+विकल्प|option\s+(?:b|2|two|बी)|opt\s+(?:b|2)|choice\s+(?:b|2)|(?:select|choose|mark|pick|answer|ans)\s+(?:option\s+)?(?:b|2)|vikalp\s+(?:b|2)|^option\s+b$|^option\s+2$|^विकल्प\s+बी$|^बी$|^b$|^2$|^two$|^second$|^second\s+option$|^दूसरा$|^दूसरा\s+विकल्प$|^bee$|^be$)/i.test(norm);
   if (optionMatchB) {
     return {
       intent: 'SELECT_OPTION',
@@ -449,7 +484,7 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  const optionMatchC = /(?:विकल्प\s+(?:सी|c|3)|तीसरा\s+विकल्प|option\s+(?:c|3|three|सी)|vikalp\s+(?:c|3)|^option\s+c$|^विकल्प\s+सी$|^सी$|^c$)/i.test(norm);
+  const optionMatchC = /(?:विकल्प\s+(?:सी|c|3)|तीसरा\s+विकल्प|option\s+(?:c|3|three|सी)|opt\s+(?:c|3)|choice\s+(?:c|3)|(?:select|choose|mark|pick|answer|ans)\s+(?:option\s+)?(?:c|3)|vikalp\s+(?:c|3)|^option\s+c$|^option\s+3$|^विकल्प\s+सी$|^सी$|^c$|^3$|^three$|^third$|^third\s+option$|^तीसरा$|^तीसरा\s+विकल्प$|^see$|^sea$|^si$)/i.test(norm);
   if (optionMatchC) {
     return {
       intent: 'SELECT_OPTION',
@@ -463,7 +498,7 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
     };
   }
 
-  const optionMatchD = /(?:विकल्प\s+(?:डी|d|4)|चौथा\s+विकल्प|option\s+(?:d|4|four|डी)|vikalp\s+(?:d|4)|^option\s+d$|^विकल्प\s+डी$|^डी$|^d$)/i.test(norm);
+  const optionMatchD = /(?:विकल्प\s+(?:डी|d|4)|चौथा\s+विकल्प|option\s+(?:d|4|four|डी)|opt\s+(?:d|4)|choice\s+(?:d|4)|(?:select|choose|mark|pick|answer|ans)\s+(?:option\s+)?(?:d|4)|vikalp\s+(?:d|4)|^option\s+d$|^option\s+4$|^विकल्प\s+डी$|^डी$|^d$|^4$|^four$|^fourth$|^fourth\s+option$|^चौथा$|^चौथा\s+विकल्प$|^dee$)/i.test(norm);
   if (optionMatchD) {
     return {
       intent: 'SELECT_OPTION',
@@ -526,6 +561,12 @@ export async function parseSpokenIntent(
   language: 'en' | 'hi' = 'en'
 ): Promise<RecognizedIntent> {
   const localResult = classifyIntentLocally(rawTranscript);
+
+  console.log('Voice transcript:', rawTranscript);
+  console.log('Normalized command:', localResult.normalizedText);
+  console.log('Detected intent:', localResult.intent);
+  console.log('Action:', localResult.intent.startsWith('NAVIGATE') || localResult.intent.startsWith('START') ? 'navigate' : 'action');
+  console.log('Navigation route:', localResult.targetPath || 'none');
 
   // Return immediately if deterministic keyword matched
   if (localResult.confidence >= 0.75) {

@@ -39,28 +39,56 @@ export interface KeywordDefinition {
 export const EXAM_KEYWORD_MAPS: KeywordDefinition[] = [
   {
     type: 'SELECT_OPTION_A',
-    keywords: ["option a", "a", "one", "first", "option 1", "ए", "विकल्प ए", "पहला", "ऑप्शन ए", "एक", "option ek"],
+    keywords: [
+      "1", "a", "option a", "one", "first", "option 1", "opt a", "opt 1", "choice a", "choice 1",
+      "select a", "select option a", "select 1", "select option 1",
+      "choose a", "choose option a", "choose 1", "choose option 1",
+      "mark a", "mark option a", "mark 1", "mark option 1",
+      "answer a", "answer is a", "ans a", "answer 1", "first option", "vikalp a", "vikalp 1",
+      "pehla option", "ay", "hey", "ए", "विकल्प ए", "पहला", "ऑप्शन ए", "एक", "option ek", "पहला विकल्प", "ऑप्शन 1"
+    ],
     optionIndex: 0,
     audioConfirmationEn: "Option A selected",
     audioConfirmationHi: "विकल्प ए चुना गया",
   },
   {
     type: 'SELECT_OPTION_B',
-    keywords: ["option b", "b", "two", "second", "option 2", "बी", "विकल्प बी", "दूसरा", "ऑप्शन बी", "दो", "option do"],
+    keywords: [
+      "2", "b", "option b", "two", "second", "option 2", "opt b", "opt 2", "choice b", "choice 2",
+      "select b", "select option b", "select 2", "select option 2",
+      "choose b", "choose option b", "choose 2", "choose option 2",
+      "mark b", "mark option b", "mark 2", "mark option 2",
+      "answer b", "answer is b", "ans b", "answer 2", "second option", "vikalp b", "vikalp 2",
+      "doosra option", "bee", "be", "बी", "विकल्प बी", "दूसरा", "ऑप्शन बी", "दो", "option do", "दूसरा विकल्प", "ऑप्शन 2"
+    ],
     optionIndex: 1,
     audioConfirmationEn: "Option B selected",
     audioConfirmationHi: "विकल्प बी चुना गया",
   },
   {
     type: 'SELECT_OPTION_C',
-    keywords: ["option c", "c", "three", "third", "option 3", "सी", "विकल्प सी", "तीसरा", "ऑप्शन सी", "तीन", "option teen"],
+    keywords: [
+      "3", "c", "option c", "three", "third", "option 3", "opt c", "opt 3", "choice c", "choice 3",
+      "select c", "select option c", "select 3", "select option 3",
+      "choose c", "choose option c", "choose 3", "choose option 3",
+      "mark c", "mark option c", "mark 3", "mark option 3",
+      "answer c", "answer is c", "ans c", "answer 3", "third option", "vikalp c", "vikalp 3",
+      "teesra option", "see", "sea", "si", "सी", "विकल्प सी", "तीसरा", "ऑप्शन सी", "तीन", "option teen", "तीसरा विकल्प", "ऑप्शन 3"
+    ],
     optionIndex: 2,
     audioConfirmationEn: "Option C selected",
     audioConfirmationHi: "विकल्प सी चुना गया",
   },
   {
     type: 'SELECT_OPTION_D',
-    keywords: ["option d", "d", "four", "fourth", "option 4", "डी", "विकल्प डी", "चौथा", "ऑप्शन डी", "चार", "option char"],
+    keywords: [
+      "4", "d", "option d", "four", "fourth", "option 4", "opt d", "opt 4", "choice d", "choice 4",
+      "select d", "select option d", "select 4", "select option 4",
+      "choose d", "choose option d", "choose 4", "choose option 4",
+      "mark d", "mark option d", "mark 4", "mark option 4",
+      "answer d", "answer is d", "ans d", "answer 4", "fourth option", "vikalp d", "vikalp 4",
+      "chautha option", "dee", "डी", "विकल्प डी", "चौथा", "ऑप्शन डी", "चार", "option char", "चौथा विकल्प", "ऑप्शन 4"
+    ],
     optionIndex: 3,
     audioConfirmationEn: "Option D selected",
     audioConfirmationHi: "विकल्प डी चुना गया",
@@ -85,7 +113,7 @@ export const EXAM_KEYWORD_MAPS: KeywordDefinition[] = [
   },
   {
     type: 'MARK_FOR_REVIEW',
-    keywords: ["flag for review", "flagfor review", "flagfor", "flag", "mark for review", "review", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "mark", "flag question", "flag this", "चिन्हित करो"],
+    keywords: ["flag for review", "flagfor review", "flagfor", "flag", "mark for review", "review", "रिव्यू", "चिह्नित करो", "बाद में देखेंगे", "flag question", "flag this", "चिन्हित करो"],
     audioConfirmationEn: "Marked for review",
     audioConfirmationHi: "समीक्षा के लिए चिह्नित किया गया",
   },
@@ -166,21 +194,29 @@ function matchesKeyword(transcript: string, keyword: string): boolean {
   const normKw = keyword.toLowerCase().trim();
   if (transcript === normKw) return true;
 
+  // Single letter/number keywords require exact match to prevent collision (e.g. 'b' vs 'a')
+  if (/^[a-d1-4]$/i.test(normKw)) {
+    const tokens = transcript.split(/\s+/);
+    return tokens.includes(normKw);
+  }
+
   // Word boundary regex check for exact phrase
   const escapedKw = normKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const boundaryRegex = new RegExp(`(^|\\s)${escapedKw}(\\s|$)`, 'i');
   if (boundaryRegex.test(transcript)) return true;
 
-  // Single word keyword fuzzy check
-  if (!normKw.includes(' ') && !transcript.includes(' ')) {
+  // Single word keyword fuzzy check (disabled for single/short tokens and protected choice words to prevent false positives)
+  const isProtectedChoiceWord = /^(pehla|doosra|teesra|chautha|पहला|दूसरा|तीसरा|चौथा|एक|दो|तीन|चार|ए|बी|सी|डी|one|two|three|four|ay|bee|see|dee)$/i;
+  if (!normKw.includes(' ') && !transcript.includes(' ') && normKw.length > 2 && !isProtectedChoiceWord.test(normKw) && !isProtectedChoiceWord.test(transcript)) {
     const maxDist = normKw.length <= 4 ? 1 : 2;
     if (calculateLevenshtein(transcript, normKw) <= maxDist) {
       return true;
     }
   }
 
-  // Multi-word phrase fuzzy tolerance
-  if (normKw.includes(' ')) {
+  // Multi-word phrase fuzzy tolerance (disabled for option phrases to prevent 'विकल्प बी' matching 'विकल्प ए' or 'option b' matching 'option a')
+  const isOptionPhrase = /(?:option|opt|choice|select|choose|mark|pick|answer|ans|vikalp|विकल्प|ऑप्शन|पहला|दूसरा|तीसरा|चौथा)/i;
+  if (normKw.includes(' ') && !isOptionPhrase.test(normKw) && !isOptionPhrase.test(transcript)) {
     const maxDist = 2;
     if (calculateLevenshtein(transcript, normKw) <= maxDist) {
       return true;

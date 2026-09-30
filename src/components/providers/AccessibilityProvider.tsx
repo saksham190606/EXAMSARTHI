@@ -1,20 +1,27 @@
 "use client"
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccessibilityStore } from '@/store/useAccessibilityStore'
 import { 
-  initGestureTrigger, 
   initFocusTalkBack, 
-  initVoiceCommandHotkey, 
-  initLanguageHotkey,
   voiceEngine,
-  stopSpeech 
+  stopSpeech,
+  speak,
+  unlockAudioContext,
 } from '@/lib/accessibility/voice-companion'
+import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser'
+import { useVoiceEngine } from '@/lib/voice/useVoiceEngine'
+import { Mic, MicOff, Volume2, ShieldAlert } from 'lucide-react'
 
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
-  const { textSize, contrast, reducedMotion } = useAccessibilityStore()
+  const { textSize, contrast, reducedMotion, language } = useAccessibilityStore()
   const router = useRouter()
+  const [showKeyWarning, setShowKeyWarning] = useState(false)
+  const lastKeyWarningTimeRef = useRef<number>(0)
+  const keyWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const { isListening, isSpeaking } = useVoiceEngine()
 
   // Handle visual accessibility tokens (Text scaling, Contrast, Reduced Motion)
   useEffect(() => {
@@ -43,38 +50,151 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     }
   }, [textSize, contrast, reducedMotion])
 
-  // Initialize Audio Companion & Voice Navigation Systems
+  // STRICT GLOBAL KEYBOARD BLOCKING (100% Voice-Based Platform)
+  useEffect(() => {
+    const handleKeyBlock = (e: KeyboardEvent) => {
+      // Allow developer bypasses for DevTools and page refresh
+      if (
+        e.key === 'F12' ||
+        e.key === 'F5' ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'i' || e.key === 'I'))
+      ) {
+        return;
+      }
+
+      // Intercept and completely disable keyboard input
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      const now = Date.now();
+      if (now - lastKeyWarningTimeRef.current > 3500) {
+        lastKeyWarningTimeRef.current = now;
+        setShowKeyWarning(true);
+        if (keyWarningTimerRef.current) clearTimeout(keyWarningTimerRef.current);
+        keyWarningTimerRef.current = setTimeout(() => {
+          setShowKeyWarning(false);
+        }, 3200);
+
+        playVoiceFeedbackChime();
+        const isHi = useAccessibilityStore.getState().language === 'hi';
+        speak(
+          isHi 
+            ? "कीबोर्ड अक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
+            : "Keyboard is disabled. This platform is 100% voice operated. Please speak your command."
+        );
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyBlock, { capture: true });
+    window.addEventListener('keyup', handleKeyBlock, { capture: true });
+    window.addEventListener('keypress', handleKeyBlock, { capture: true });
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyBlock, { capture: true });
+      window.removeEventListener('keyup', handleKeyBlock, { capture: true });
+      window.removeEventListener('keypress', handleKeyBlock, { capture: true });
+      if (keyWarningTimerRef.current) clearTimeout(keyWarningTimerRef.current);
+    };
+  }, []);
+
+  // Initialize Continuous Audio Companion & Always-On Voice Navigation
   useEffect(() => {
     // Eagerly prime Chromium SpeechSynthesis engine voices
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
-        window.speechSynthesis.getVoices()
+        window.speechSynthesis.getVoices();
       } catch (_) {}
     }
 
     // Connect Next.js router to voice navigation engine
-    voiceEngine.setRouter((path) => router.push(path))
+    voiceEngine.setRouter((path) => router.push(path));
 
-    // Step 1: Automated Gesture Trigger (Tab or Space activates voice mode & spoken welcome tour)
-    const cleanupGesture = initGestureTrigger()
+    // Global Talk-Back Engine for element focus
+    const cleanupFocus = initFocusTalkBack();
 
-    // Step 2: Global Tab Talk-Back Engine (focusin listener with clean speech cancellation)
-    const cleanupFocus = initFocusTalkBack()
+    // Start continuous always-on voice recognition immediately
+    unlockAudioContext();
+    voiceEngine.startAlwaysOnListening();
 
-    // Step 3: Natural Voice Commands listener (Alt + V toggle)
-    const cleanupHotkey = initVoiceCommandHotkey()
+    // Browser interaction listener to guarantee mic activation if autoplay policy restricted initial start
+    const handleUserGesture = () => {
+      unlockAudioContext();
+      voiceEngine.startAlwaysOnListening();
+    };
 
-    // Step 4: Bilingual Voice & Language Switch Hotkey (Alt + L)
-    const cleanupLangHotkey = initLanguageHotkey()
+    window.addEventListener('pointerdown', handleUserGesture, { passive: true });
+    window.addEventListener('click', handleUserGesture, { passive: true });
 
     return () => {
-      cleanupGesture()
-      cleanupFocus()
-      cleanupHotkey()
-      cleanupLangHotkey()
-      stopSpeech()
-    }
-  }, [router])
+      cleanupFocus();
+      stopSpeech();
+      window.removeEventListener('pointerdown', handleUserGesture);
+      window.removeEventListener('click', handleUserGesture);
+    };
+  }, [router]);
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+
+      {/* Keyboard Disabled Alert Toast */}
+      {showKeyWarning && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-5 py-3 rounded-xl bg-amber-500/95 dark:bg-amber-600/95 text-white font-semibold shadow-2xl backdrop-blur-md border border-amber-300/40 animate-in fade-in slide-in-from-bottom-5 duration-200"
+        >
+          <ShieldAlert className="h-5 w-5 shrink-0 animate-bounce" />
+          <div className="text-sm">
+            <span className="font-bold">
+              {language === 'hi' ? 'कीबोर्ड अक्षम है (100% वॉइस मोड):' : 'Keyboard Disabled (100% Voice Mode):'}
+            </span>{' '}
+            {language === 'hi'
+              ? "डैशबोर्ड, प्रैक्टिस, परीक्षा, परिणाम या सेटिंग्स बोलें।"
+              : "Speak 'Dashboard', 'Practice', 'Exams', 'Results', or 'Settings'."}
+          </div>
+        </div>
+      )}
+
+      {/* 100% Voice Mode Live Status Indicator */}
+      <div
+        aria-live="polite"
+        className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium shadow-lg backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
+      >
+        {isSpeaking ? (
+          <>
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+            </span>
+            <Volume2 className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
+            <span className="text-blue-600 dark:text-blue-400 font-semibold">
+              {language === 'hi' ? 'साथी बोल रहा है (माइक रुका हुआ)' : 'Companion Speaking (Mic Paused)'}
+            </span>
+          </>
+        ) : isListening ? (
+          <>
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            </span>
+            <Mic className="h-3.5 w-3.5 text-emerald-500" />
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+              {language === 'hi' ? 'माइक सक्रिय (सुन रहा है)' : 'Mic Live (Listening Always)'}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+            <MicOff className="h-3.5 w-3.5 text-amber-500" />
+            <span className="text-muted-foreground font-semibold">
+              {language === 'hi' ? 'वॉइस कनेक्ट हो रहा है...' : 'Voice Connecting...'}
+            </span>
+          </>
+        )}
+      </div>
+    </>
+  )
 }

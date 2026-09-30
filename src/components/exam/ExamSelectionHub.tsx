@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Clock, HelpCircle, ArrowRight, Sparkles, BookOpen, Volume2, Mic, MicOff } from 'lucide-react';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { useVoiceEngine } from '@/lib/voice/useVoiceEngine';
+import { useVoiceEngine, stopSpeaking } from '@/lib/voice/useVoiceEngine';
 import { routeVoiceCommand, registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
 import { EXAM_VOICE_ROUTES, matchExamTokens, matchExamVoiceRoute, ExamVoiceRoute } from '@/lib/voice/exam-router';
 import { cn } from '@/lib/utils';
@@ -98,38 +98,7 @@ export function ExamSelectionHub() {
     lang: isHindi ? 'hi-IN' : 'en-US',
     autoStart: true,
     onTranscript: (capturedText) => {
-      if (isLaunchingRef.current) return;
-
-      const routed = routeVoiceCommand(capturedText, 'hub');
-      if (routed.handled && routed.type === 'confirm') {
-        return;
-      }
-
-      const match =
-        matchExamTokens(capturedText) ||
-        (matchExamVoiceRoute(capturedText)
-          ? { route: matchExamVoiceRoute(capturedText)!, examName: matchExamVoiceRoute(capturedText)!.title }
-          : null);
-
-      if (match) {
-        const route = match.route;
-        if (isLaunchingRef.current) return;
-        isLaunchingRef.current = true;
-        const targetName = match.examName || route.title;
-        setLaunchingTitle(targetName);
-        setHighlightedExamId(route.id);
-        const cardEl = document.getElementById(`exam-card-${route.id}`);
-        if (cardEl) {
-          cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
-        speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
-          router.push(`/exam?set=${route.param}`);
-        });
-        setTimeout(() => {
-          router.push(`/exam?set=${route.param}`);
-        }, 2000);
-      }
+      handleExamHubVoiceCommand(capturedText);
     },
   });
 
@@ -137,6 +106,8 @@ export function ExamSelectionHub() {
     (route: { id: string; param: string; title: string }, examName?: string) => {
       if (isLaunchingRef.current) return;
       isLaunchingRef.current = true;
+      stopSpeaking(); // Immediately stop the welcome prompt or any ongoing speech!
+
       const targetName = examName || route.title;
 
       setLaunchingTitle(targetName);
@@ -147,26 +118,32 @@ export function ExamSelectionHub() {
         cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      const announcement = isHindi ? `${targetName} शुरू किया जा रहा है` : `Opening ${targetName}`;
-      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', () => {
-        router.push(`/exam?set=${route.param}`);
-      });
+      const announcement = isHindi 
+        ? `${targetName} परीक्षा पोर्टल खोला जा रहा है।` 
+        : `Opening ${targetName} examination portal...`;
 
-      setTimeout(() => {
-        router.push(`/exam?set=${route.param}`);
-      }, 2000);
+      const targetUrl = `/exam?set=${route.param}`;
+
+      const doNavigate = () => {
+        if (typeof window !== 'undefined') {
+          window.location.href = targetUrl;
+        } else {
+          router.push(targetUrl);
+        }
+      };
+
+      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', doNavigate);
+
+      // Guaranteed navigation fallback: ensure exam loads even if TTS is slow/muted
+      setTimeout(doNavigate, 800);
     },
     [isHindi, router, speakText]
   );
 
   const handleExamHubVoiceCommand = useCallback((capturedText: string) => {
-    if (isLaunchingRef.current) return;
+    if (isLaunchingRef.current || !capturedText) return;
 
-    const routed = routeVoiceCommand(capturedText, 'hub');
-    if (routed.handled && routed.type === 'confirm') {
-      return;
-    }
-
+    // 1. Direct Exam Match (UPSC, SSC, CGL, Bank PO, Bank IPO, Railway, Vision AI, etc.)
     const match =
       matchExamTokens(capturedText) ||
       (matchExamVoiceRoute(capturedText)
@@ -175,45 +152,81 @@ export function ExamSelectionHub() {
 
     if (match) {
       launchExam(match.route, match.examName);
+      return;
     }
-  }, [launchExam]);
 
-  useEffect(() => {
-    registerVoiceContext('hub', handleExamHubVoiceCommand)
-    return () => unregisterVoiceContext('hub')
-  }, [handleExamHubVoiceCommand])
-
-  // Announce the exam selection screen upon landing
-  useEffect(() => {
-    const welcome = isHindi
-      ? 'परीक्षा चयन केंद्र। कोई भी परीक्षा चुनने के लिए उसका नाम बोलें—जैसे यूपीएससी, सीजीएल, बैंक पीओ या रेलवे।'
-      : 'Exam Selection Hub. Say any exam title to launch—such as UPSC, CGL, Bank PO, Railway, or Vision AI.';
-    speakText(welcome, isHindi ? 'hi-IN' : 'en-US', () => {
-      startListening(isHindi ? 'hi-IN' : 'en-US');
-    });
-  }, [isHindi, speakText, startListening]);
-
-  // Alt+M Keyboard Shortcut to toggle Voice Router
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return;
+    // 2. Command Router match
+    const routed = routeVoiceCommand(capturedText, 'hub');
+    if (routed.handled && routed.type === 'route' && routed.path) {
+      // Check if it routes to an exam parameter (e.g. /exam?set=...)
+      if (routed.path.startsWith('/exam?set=')) {
+        const param = routed.path.split('set=')[1];
+        const examItem = EXAM_CATALOG.find((e) => e.param === param) || EXAM_VOICE_ROUTES.find((e) => e.param === param);
+        if (examItem) {
+          launchExam(examItem, examItem.title);
+          return;
+        }
       }
 
-      if (e.altKey && (e.key === 'm' || e.key === 'M' || e.code === 'KeyM')) {
-        e.preventDefault();
-        if (isListening) {
-          stopListening();
-        } else {
-          startListening(isHindi ? 'hi-IN' : 'en-US');
-        }
+      // 3. Different section navigation (Dashboard, Practice, Results, Settings)
+      if (!routed.path.startsWith('/exam')) {
+        speakText(routed.readback || `Navigating to ${routed.path}`, isHindi ? 'hi-IN' : 'en-US', () => {
+          router.push(routed.path!);
+        });
+        setTimeout(() => {
+          router.push(routed.path!);
+        }, 1200);
+        return;
+      }
+    }
+  }, [isHindi, launchExam, router, speakText]);
+
+  useEffect(() => {
+    registerVoiceContext('hub', handleExamHubVoiceCommand);
+
+    const handleExamLaunchEvent = (e: any) => {
+      const { examId, param, examName, transcript: text } = e.detail || {};
+      if (param) {
+        const examItem = EXAM_CATALOG.find((ex) => ex.param === param || ex.id === examId) || {
+          id: examId || 'exam',
+          param,
+          title: examName || 'Exam',
+          authority: '',
+          questionsCount: 10,
+          durationMinutes: 15,
+          description: '',
+          subjects: [],
+        };
+        launchExam(examItem, examName);
+      } else if (text) {
+        handleExamHubVoiceCommand(text);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isHindi, isListening, startListening, stopListening]);
+    window.addEventListener('examsarthi-exam-launch', handleExamLaunchEvent);
+
+    return () => {
+      unregisterVoiceContext('hub');
+      window.removeEventListener('examsarthi-exam-launch', handleExamLaunchEvent);
+    };
+  }, [handleExamHubVoiceCommand, launchExam]);
+
+  // Prompt the candidate with exam options upon landing on the Exams tab
+  useEffect(() => {
+    const promptText = isHindi
+      ? 'आप कौन सी परीक्षा चुनना चाहते हैं? आप यूपीएससी, एसएससी, बैंक पीओ, या रेलवे बोल सकते हैं।'
+      : 'Which exam would you like to choose? You can say UPSC, SSC, Bank PO, or Railway.';
+
+    const timer = setTimeout(() => {
+      if (!isLaunchingRef.current) {
+        speakText(promptText, isHindi ? 'hi-IN' : 'en-US', () => {
+          startListening(isHindi ? 'hi-IN' : 'en-US');
+        });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [isHindi, speakText, startListening]);
 
   return (
     <div className="min-h-screen bg-black text-white px-4 py-12 sm:px-6 lg:px-8">
