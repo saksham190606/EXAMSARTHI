@@ -195,7 +195,7 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
   if (!normalized) return base;
 
   const inExam = typeof window !== 'undefined' && window.location.pathname.startsWith('/exam');
-  if (context === 'global-nav' && inExam && ['next', 'previous', 'select-option', 'clear-answer', 'flag-unflag', 'submit', 'confirm', 'cancel'].includes(base.type as any)) {
+  if (context === 'global-nav' && inExam && (['next', 'previous', 'select-option', 'clear-answer', 'flag-unflag', 'submit', 'confirm', 'cancel'] as CommandType[]).includes(base.type)) {
     return { ...base, handled: false, message: 'exam command ignored by global-nav context' };
   }
 
@@ -244,17 +244,39 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     home: '/dashboard',
     exam: '/exam',
     exams: '/exam',
+    'exam kholo': '/exam',
+    'exam shuru karo': '/exam',
+    'exam shuru': '/exam',
+    'take exam': '/exam',
+    'start exam': '/exam',
+    'go to exam': '/exam',
+    'open exams': '/exam',
+    'open exam': '/exam',
+    'परीक्षा': '/exam',
+    'मॉक टेस्ट': '/exam',
+    'टेस्ट': '/exam',
+    'डैशबोर्ड': '/dashboard',
+    'होम': '/dashboard',
+    'मुख्य पृष्ठ': '/dashboard',
     practice: '/practice',
     'go to practice': '/practice',
+    'open practice': '/practice',
+    'अभ्यास': '/practice',
+    'प्रैक्टिस': '/practice',
+    'पढ़ाई': '/practice',
     settings: '/settings',
     'go to settings': '/settings',
+    'open settings': '/settings',
+    'सेटिंग': '/settings',
+    'सेटिंग्स': '/settings',
     login: '/login',
     'go to login': '/login',
-    'open dashboard': '/dashboard',
-    'open exam': '/exam',
-    'open practice': '/practice',
-    'open settings': '/settings',
     'open login': '/login',
+    results: '/results',
+    'go to results': '/results',
+    'open results': '/results',
+    'रिजल्ट': '/results',
+    'स्कोर': '/results',
     'dashboard page': '/dashboard',
     'exam page': '/exam',
     'practice page': '/practice',
@@ -373,7 +395,7 @@ export function getCommandReadback(result: CommandRouterResult): string | undefi
   return result.readback || buildReadback(result.type, result.optionIndex);
 }
 
-export default {
+const commandRouter = {
   registerVoiceContext,
   unregisterVoiceContext,
   normalizeSpeechInput,
@@ -382,3 +404,5 @@ export default {
   getActiveContextHandlers,
   getCommandReadback,
 };
+
+export default commandRouter;

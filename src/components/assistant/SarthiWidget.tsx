@@ -112,6 +112,65 @@ export function SarthiWidget() {
         return;
       }
 
+      // Check local deterministic commands first (zero-network, offline-resilient)
+      if (
+        transcript === 'exam' ||
+        transcript === 'exams' ||
+        transcript === 'open exam' ||
+        transcript === 'go to exam' ||
+        transcript === 'exam kholo' ||
+        transcript === 'exam shuru karo' ||
+        transcript === 'exam shuru' ||
+        transcript === 'परीक्षा' ||
+        transcript === 'मॉक टेस्ट'
+      ) {
+        handleStateChange('SPEAKING');
+        const resp = isHindi ? 'परीक्षा केंद्र खोला जा रहा है।' : 'Opening the exams hub.';
+        router.push('/exam');
+        speak(resp, 'Voice feedback');
+        return;
+      }
+      if (
+        transcript === 'dashboard' ||
+        transcript === 'home' ||
+        transcript === 'go to dashboard' ||
+        transcript === 'open dashboard' ||
+        transcript === 'डैशबोर्ड' ||
+        transcript === 'होम'
+      ) {
+        handleStateChange('SPEAKING');
+        const resp = isHindi ? 'डैशबोर्ड खोला जा रहा है।' : 'Navigating to your dashboard.';
+        router.push('/dashboard');
+        speak(resp, 'Voice feedback');
+        return;
+      }
+      if (
+        transcript === 'practice' ||
+        transcript === 'go to practice' ||
+        transcript === 'open practice' ||
+        transcript === 'अभ्यास' ||
+        transcript === 'प्रैक्टिस'
+      ) {
+        handleStateChange('SPEAKING');
+        const resp = isHindi ? 'अभ्यास अनुभाग खोला जा रहा है।' : 'Navigating to the practice section.';
+        router.push('/practice');
+        speak(resp, 'Voice feedback');
+        return;
+      }
+      if (
+        transcript === 'settings' ||
+        transcript === 'go to settings' ||
+        transcript === 'open settings' ||
+        transcript === 'सेटिंग्स' ||
+        transcript === 'सेटिंग'
+      ) {
+        handleStateChange('SPEAKING');
+        const resp = isHindi ? 'सेटिंग्स खोली जा रही हैं।' : 'Navigating to settings.';
+        router.push('/settings');
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
       handleStateChange('THINKING');
       try {
         const res = await fetch('/api/ai/sarthi', {

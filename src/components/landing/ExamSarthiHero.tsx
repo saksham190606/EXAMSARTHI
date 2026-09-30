@@ -187,32 +187,37 @@ export default function ExamSarthiHero() {
       stopVoiceRecognition(false);
       setIsListening(false);
 
-      try {
-        const res = await fetch('/api/intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript }),
-        });
-        if (!res.ok) throw new Error(`Intent service returned ${res.status}`);
-        const data = await res.json();
-
+      // --- Helper: handle a resolved intent ---
+      const handleIntent = (data: { intent: string; target: string }) => {
         if (data.intent === 'NAVIGATE') {
           const target = (data.target || 'dashboard').toLowerCase();
           const routed = routeVoiceCommand(target === 'home' ? 'dashboard' : target, 'global-nav');
           if (!routed.handled || !routed.path) {
+            // If target is a path like '/exam', route directly
+            const directPaths = ['/dashboard', '/exam', '/practice', '/settings', '/login'];
+            if (directPaths.includes(data.target)) {
+              isVoiceModeActiveRef.current = false;
+              setIsListening(false);
+              const pageName = data.target.slice(1);
+              speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
+              router.push(data.target);
+              return true;
+            }
             speakText(isHindi ? "क्षमा करें, मैं उस पृष्ठ पर नहीं जा सकती।" : "Sorry, I can't navigate to that page.");
-            return;
+            return true;
           }
           const pageName = routed.path === '/dashboard' ? 'dashboard' : routed.path.slice(1);
           isVoiceModeActiveRef.current = false;
           setIsListening(false);
           speakText(isHindi ? `${pageName} पर जाया जा रहा है` : `Navigating to ${pageName}`);
           router.push(routed.path);
+          return true;
         } else if (data.intent === 'EXAM_LAUNCH') {
           isVoiceModeActiveRef.current = false;
           setIsListening(false);
           speakText(isHindi ? 'परीक्षा शुरू की जा रही है' : 'Launching exam');
           launchExam(data.target);
+          return true;
         } else if (data.intent === 'CONTROL') {
           const confirmation = data.target === 'NEXT'
             ? (isHindi ? 'अगला' : 'Next')
@@ -222,32 +227,83 @@ export default function ExamSarthiHero() {
                 ? (isHindi ? 'सबमिट किया जा रहा है' : 'Submitting')
                 : '';
           speakText(confirmation || (isHindi ? "क्षमा करें, मुझे समझ नहीं आया।" : "Sorry, I didn't understand."));
+          return true;
         } else if (data.intent === 'ANSWER') {
           speakText(isHindi ? `विकल्प ${data.target} चुना गया` : `Option ${data.target} selected`);
-        } else {
-          const fallback = matchIntent(transcript);
-          const pathMap: Record<string, string> = {
-            DASHBOARD: '/dashboard',
-            EXAMS: '/exam',
-            PRACTICE: '/practice',
-            SETTINGS: '/settings',
-            LOGIN: '/login',
-          };
-          const fallbackPath = pathMap[fallback];
-          if (fallbackPath) {
+          return true;
+        }
+        return false;
+      };
+
+      // --- Helper: try local-only keyword matching ---
+      const tryLocalFallback = (): boolean => {
+        // 1. Exam launch keywords (e.g., "start SSC CGL", "take UPSC mock")
+        if (transcript.includes('ssc') || transcript.includes('cgl')) {
+          if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(transcript) || transcript.includes('mock')) {
             isVoiceModeActiveRef.current = false;
             setIsListening(false);
-            speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
-            router.push(fallbackPath);
-          } else {
-            speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+            speakText(isHindi ? 'एसएससी सीजीएल परीक्षा शुरू की जा रही है' : 'Launching SSC CGL exam');
+            launchExam('ssc-cgl');
+            return true;
           }
         }
+        if (transcript.includes('upsc') || transcript.includes('csat')) {
+          if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(transcript) || transcript.includes('mock')) {
+            isVoiceModeActiveRef.current = false;
+            setIsListening(false);
+            speakText(isHindi ? 'यूपीएससी परीक्षा शुरू की जा रही है' : 'Launching UPSC exam');
+            launchExam('upsc');
+            return true;
+          }
+        }
+
+        // 2. Navigation keywords
+        const fallback = matchIntent(transcript);
+        const pathMap: Record<string, string> = {
+          DASHBOARD: '/dashboard',
+          EXAMS: '/exam',
+          PRACTICE: '/practice',
+          SETTINGS: '/settings',
+          LOGIN: '/login',
+        };
+        const fallbackPath = pathMap[fallback];
+        if (fallbackPath) {
+          isVoiceModeActiveRef.current = false;
+          setIsListening(false);
+          speakText(isHindi ? `${fallback.toLowerCase()} पर जाया जा रहा है` : `Navigating to ${fallback.toLowerCase()}`);
+          router.push(fallbackPath);
+          return true;
+        }
+        return false;
+      };
+
+      // Step 1: Try local keyword matching FIRST (zero-latency, no network)
+      if (tryLocalFallback()) return;
+
+      // Step 2: Fall back to /api/intent for complex/AI-powered intents
+      try {
+        const res = await fetch('/api/intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript }),
+        });
+        if (!res.ok) {
+          speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+          return;
+        }
+        const data = await res.json();
+        if (data.intent && data.intent !== 'UNKNOWN') {
+          if (handleIntent(data)) return;
+        }
+        // AI also couldn't resolve — tell the user
+        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
       } catch (error) {
         console.error('[Landing Voice] Intent routing failed:', error);
+        // Network/server failure — don't crash, just inform the user
         speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
       }
     };
+
   }, [isHindi, launchExam, router, speakText]);
 
   const toggleListening = useCallback(async () => {
