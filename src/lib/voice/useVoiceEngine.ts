@@ -5,6 +5,7 @@ import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
 import { injectExamGrammar } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { routeVoiceCommand, hasActiveContext } from './commandRouter';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
@@ -842,7 +843,20 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
   if (now - lastRemoteCall < 1500) {
     return { intent: 'UNKNOWN', target: '' };
   }
-  if (typeof window !== 'undefined') sessionStorage.setItem('last_intent_call', now.toString());
+  // Check client-side authentication before making remote AI call
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) {
+    return { intent: 'UNKNOWN', target: '' };
+  }
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      // Unauthenticated client -> gracefully degrade without calling /api/intent
+      return { intent: 'UNKNOWN', target: '' };
+    }
+  } catch {
+    return { intent: 'UNKNOWN', target: '' };
+  }
 
   try {
     const res = await fetch('/api/intent', {

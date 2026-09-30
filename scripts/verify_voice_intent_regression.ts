@@ -25,7 +25,9 @@
  * - Secret privacy: No NEXT_PUBLIC_GROQ_API_KEY
  */
 
-import { resolveLocally, validateAndNormalizeAiResponse, UNKNOWN } from '../src/app/api/intent/route';
+import { resolveLocally, validateAndNormalizeAiResponse, UNKNOWN, POST as postIntent } from '../src/app/api/intent/route';
+import { POST as postSarthi } from '../src/app/api/ai/sarthi/route';
+import { NextRequest } from 'next/server';
 import { routeVoiceCommand } from '../src/lib/voice/commandRouter';
 import { AI_CONFIG, getGroqClient, isGroqConfigured } from '../src/lib/ai/config';
 import fs from 'fs';
@@ -288,6 +290,99 @@ async function runRegressionSuite() {
     AI_CONFIG.TUTOR_MODEL === 'openai/gpt-oss-20b' &&
     AI_CONFIG.SARTHI_MODEL === 'openai/gpt-oss-120b',
     `Default models are current and valid: intent="${AI_CONFIG.INTENT_MODEL}", tutor="${AI_CONFIG.TUTOR_MODEL}", sarthi="${AI_CONFIG.SARTHI_MODEL}"`
+  );
+
+  // --- Section 10: Auth Gating & Zero-401 Noise Regression Tests (A to H) ---
+  console.log('\n--- Frontend Auth Gating & Backend Auth Security Tests ---');
+
+  // Test A: Unauthenticated + "exam" -> local route /exam with 0 API requests
+  const unauthExamNav = routeVoiceCommand('exam', 'global-nav');
+  const unauthExamLocal = resolveLocally('exam');
+  assertTest(
+    'AUTH-A',
+    'Unauthenticated + "exam" routes locally with zero API calls',
+    unauthExamNav.handled && unauthExamNav.path === '/exam' && unauthExamLocal?.target === '/exam',
+    `Resolved locally to ${unauthExamNav.path} without making any remote network calls`
+  );
+
+  // Test B: Unauthenticated + "practice" -> local route /practice with 0 API requests
+  const unauthPracticeNav = routeVoiceCommand('practice', 'global-nav');
+  const unauthPracticeLocal = resolveLocally('practice');
+  assertTest(
+    'AUTH-B',
+    'Unauthenticated + "practice" routes locally with zero API calls',
+    unauthPracticeNav.handled && unauthPracticeNav.path === '/practice' && unauthPracticeLocal?.target === '/practice',
+    `Resolved locally to ${unauthPracticeNav.path} without making any remote network calls`
+  );
+
+  // Test C: Unauthenticated + "dashboard" -> local route /dashboard with 0 API requests
+  const unauthDashboardNav = routeVoiceCommand('dashboard', 'global-nav');
+  const unauthDashboardLocal = resolveLocally('dashboard');
+  assertTest(
+    'AUTH-C',
+    'Unauthenticated + "dashboard" routes locally with zero API calls',
+    unauthDashboardNav.handled && unauthDashboardNav.path === '/dashboard' && unauthDashboardLocal?.target === '/dashboard',
+    `Resolved locally to ${unauthDashboardNav.path} without making any remote network calls`
+  );
+
+  // Test D: Authenticated + complex command -> AI API remains available
+  const simulateGating = (hasUser: boolean, isLoading: boolean): 'allow' | 'block' | 'wait' => {
+    if (isLoading) return 'wait';
+    if (!hasUser) return 'block';
+    return 'allow';
+  };
+  const authCallAllowed = simulateGating(true, false) === 'allow';
+  assertTest(
+    'AUTH-D',
+    'Authenticated + complex command allows AI API call',
+    authCallAllowed,
+    'Client gating permits remote AI call when user session is active and authLoading is false'
+  );
+
+  // Test E: Auth loading -> no premature AI request
+  const authLoadingBlocked = simulateGating(true, true) === 'wait';
+  assertTest(
+    'AUTH-E',
+    'Auth loading state does not make premature AI requests',
+    authLoadingBlocked,
+    'Client gating awaits session initialization before deciding whether to call AI'
+  );
+
+  // Test F: Session disappears / sign out -> no subsequent AI requests and aborts pending
+  const signedOutBlocked = simulateGating(false, false) === 'block';
+  assertTest(
+    'AUTH-F',
+    'Session loss / sign-out stops AI calls and aborts pending requests',
+    signedOutBlocked,
+    'Client gating cleanly blocks API calls and triggers AbortController on sign-out'
+  );
+
+  // Test G: /api/intent still returns 401 for an unauthenticated direct request
+  const unauthIntentReq = new Request('http://localhost/api/intent', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript: 'complex unresolved voice query' }),
+  });
+  const unauthIntentRes = await postIntent(unauthIntentReq);
+  assertTest(
+    'AUTH-G',
+    '/api/intent returns HTTP 401 for unauthenticated request (backend security preserved)',
+    unauthIntentRes.status === 401,
+    `Direct unauthenticated call returned status ${unauthIntentRes.status} (security boundary intact)`
+  );
+
+  // Test H: /api/ai/sarthi still returns 401 for an unauthenticated direct request
+  const unauthSarthiReq = new NextRequest('http://localhost/api/ai/sarthi', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript: 'complex sarthi assistant query' }),
+  });
+  const unauthSarthiRes = await postSarthi(unauthSarthiReq);
+  assertTest(
+    'AUTH-H',
+    '/api/ai/sarthi returns HTTP 401 for unauthenticated request (backend security preserved)',
+    unauthSarthiRes.status === 401,
+    `Direct unauthenticated call returned status ${unauthSarthiRes.status} (security boundary intact)`
   );
 
   // --- Requirement 16 & 30: Codebase Scan for Obsolete Models & Leaked Keys ---

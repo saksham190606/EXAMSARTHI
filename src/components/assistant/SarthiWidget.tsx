@@ -5,6 +5,7 @@ import { useSpeech } from '@/hooks/useSpeech';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 
 import { useRouter, usePathname } from 'next/navigation';
+import { useAuth } from '@/components/providers/AuthProvider';
 import { executeSarthiAction, SarthiActionContext, SarthiAction } from '@/lib/assistant/sarthiActions';
 import { isExamRoute, isExamActiveNow } from '@/lib/assistant/sarthiExamLock';
 import {
@@ -32,11 +33,18 @@ export function SarthiWidget() {
   const stateRef = useRef(state);
   const pathnameRef = useRef(pathname);
 
+  const { user, loading: authLoading } = useAuth();
+  const userRef = useRef(user);
+  const authLoadingRef = useRef(authLoading);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     isExamActiveRef.current = isExamActive;
     stateRef.current = state;
     pathnameRef.current = pathname;
-  }, [isExamActive, pathname, state]);
+    userRef.current = user;
+    authLoadingRef.current = authLoading;
+  }, [isExamActive, pathname, state, user, authLoading]);
 
   const stopListening = useCallback(() => {
     stopVoiceRecognition();
@@ -98,6 +106,19 @@ export function SarthiWidget() {
       handleStateChange('LISTENING');
     }
   }, [speechStatus, state, handleStateChange]);
+
+  // Handle sign-out or session loss: abort any pending AI requests and return to safe state
+  useEffect(() => {
+    if (!user) {
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+        activeAbortControllerRef.current = null;
+      }
+      if (stateRef.current === 'THINKING') {
+        handleStateChange('IDLE');
+      }
+    }
+  }, [user, handleStateChange]);
 
   // Keep Sarthi on the shared recognition engine used by the rest of the app.
   useEffect(() => {
@@ -171,6 +192,29 @@ export function SarthiWidget() {
         return;
       }
 
+      // Session verification before making authenticated /api/ai/sarthi call
+      let currentUser = userRef.current;
+      if (authLoadingRef.current) {
+        // Await session initialization to prevent race conditions (up to 1500ms)
+        const start = Date.now();
+        while (authLoadingRef.current && Date.now() - start < 1500) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        currentUser = userRef.current;
+      }
+
+      if (!currentUser) {
+        handleStateChange('SPEAKING');
+        const unauthMsg = isHindi
+          ? 'सारथी के एआई सहायक का उपयोग करने के लिए कृपया लॉगिन करें। आप "परीक्षा" या "अभ्यास" बोलकर नेविगेट कर सकते हैं।'
+          : 'Please log in to use Sarthi AI features. You can still use voice navigation like "exam" or "practice".';
+        speak(unauthMsg, 'Voice feedback');
+        return;
+      }
+
+      const controller = new AbortController();
+      activeAbortControllerRef.current = controller;
+
       handleStateChange('THINKING');
       try {
         const res = await fetch('/api/ai/sarthi', {
@@ -181,6 +225,7 @@ export function SarthiWidget() {
             language: isHindi ? 'hi' : 'en',
             currentUrl: pathnameRef.current || window.location.pathname || '/',
           }),
+          signal: controller.signal,
         });
 
         if (isExamActiveRef.current || isExamActiveNow()) return;
@@ -199,11 +244,18 @@ export function SarthiWidget() {
 
         handleStateChange(actionData.action === 'CLOSE_SARTHI' ? 'CLOSING_SPEAKING' : 'SPEAKING');
         speak(spokenResponse || (isHindi ? 'कार्रवाई पूरी हुई।' : 'Action completed.'), 'Voice feedback');
-      } catch (error) {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('[Sarthi] Failed to process the request:', error);
         if (isExamActiveRef.current || isExamActiveNow()) return;
         handleStateChange('SPEAKING');
         speak(isHindi ? 'सर्वर से संपर्क नहीं हो पाया।' : 'Could not reach the server.', 'Voice feedback');
+      } finally {
+        if (activeAbortControllerRef.current === controller) {
+          activeAbortControllerRef.current = null;
+        }
       }
     };
   }, [accessibilityStore, handleStateChange, isHindi, router, speak, stopListening]);

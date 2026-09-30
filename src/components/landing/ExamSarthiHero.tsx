@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
+import { useAuth } from '@/components/providers/AuthProvider';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
 import {
@@ -102,6 +103,20 @@ export function ExamTickerBar() {
 
 export default function ExamSarthiHero() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const userRef = useRef(user);
+  const authLoadingRef = useRef(authLoading);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+    authLoadingRef.current = authLoading;
+    if (!user && activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+      activeAbortControllerRef.current = null;
+    }
+  }, [user, authLoading]);
+
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -280,12 +295,33 @@ export default function ExamSarthiHero() {
       // Step 1: Try local keyword matching FIRST (zero-latency, no network)
       if (tryLocalFallback()) return;
 
-      // Step 2: Fall back to /api/intent for complex/AI-powered intents
+      // Check session before making remote /api/intent call
+      let currentUser = userRef.current;
+      if (authLoadingRef.current) {
+        // Await session initialization to prevent race conditions (up to 1500ms)
+        const start = Date.now();
+        while (authLoadingRef.current && Date.now() - start < 1500) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        currentUser = userRef.current;
+      }
+
+      // If user is unauthenticated, do NOT call /api/intent
+      if (!currentUser) {
+        speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+        return;
+      }
+
+      const controller = new AbortController();
+      activeAbortControllerRef.current = controller;
+
+      // Step 2: Fall back to /api/intent for authenticated complex/AI-powered intents
       try {
         const res = await fetch('/api/intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript }),
+          signal: controller.signal,
         });
         if (!res.ok) {
           speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
@@ -297,10 +333,17 @@ export default function ExamSarthiHero() {
         }
         // AI also couldn't resolve — tell the user
         speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
-      } catch (error) {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error('[Landing Voice] Intent routing failed:', error);
         // Network/server failure — don't crash, just inform the user
         speakText(isHindi ? "क्षमा करें, मुझे समझ नहीं आया। क्या आप दोहरा सकते हैं?" : "I didn't quite catch that. Could you repeat?");
+      } finally {
+        if (activeAbortControllerRef.current === controller) {
+          activeAbortControllerRef.current = null;
+        }
       }
     };
 
