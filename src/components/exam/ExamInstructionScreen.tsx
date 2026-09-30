@@ -117,11 +117,6 @@ export function ExamInstructionScreen({
     isTransitioningRef.current = true;
     stopSpeaking();
 
-    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
-      onStartExam();
-      return;
-    }
-
     const startMsg = isHindi ? "परीक्षा शुरू की जा रही है..." : "Starting examination now...";
     setActionStatus(startMsg);
 
@@ -136,7 +131,7 @@ export function ExamInstructionScreen({
     // Guaranteed fallback transition
     setTimeout(() => {
       onStartExam();
-    }, 700);
+    }, 600);
   }, [isHindi, onStartExam]);
 
   // Action: Go Back
@@ -144,11 +139,6 @@ export function ExamInstructionScreen({
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
     stopSpeaking();
-
-    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
-      onGoBack();
-      return;
-    }
 
     const backMsg = isHindi ? "वापस जा रहे हैं..." : "Returning to portal...";
     setActionStatus(backMsg);
@@ -178,7 +168,7 @@ export function ExamInstructionScreen({
     }, 200);
   }, [isHindi, speakInstructionsAloud]);
 
-  // Keyboard shortcut listener (Enter = Start Exam, Escape = Go Back)
+  // Keyboard shortcut listener (Enter = Start Exam, Escape = Go Back, I/R = Read Instructions)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTransitioningRef.current) return;
@@ -188,12 +178,16 @@ export function ExamInstructionScreen({
       } else if (e.key === 'Escape') {
         e.preventDefault();
         handleGoBack();
+      } else if (e.key === 'i' || e.key === 'I' || e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        unlockAudioContext();
+        forceSpeak(getSpeechScript(), () => {}, isHindi ? 'hi-IN' : 'en-US');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleStartExam, handleGoBack]);
+  }, [handleStartExam, handleGoBack, getSpeechScript, isHindi]);
 
   // Mount effect: Trigger initial speech brief & voice listener (Voice mode only)
   useEffect(() => {

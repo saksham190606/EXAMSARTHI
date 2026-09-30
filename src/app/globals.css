@@ -358,3 +358,73 @@ html.reduced-motion select {
   transform: none !important;
   transition: none !important;
 }
+
+/* Accessibility: Color Blindness & Vision Palettes */
+
+/* 1. Deuteranopia & Protanopia (Red-Green Safe — High-Contrast Cobalt Blue & Golden Amber) */
+html.theme-deuteranopia {
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --primary-deep: #1d4ed8;
+  --ring: #3b82f6;
+}
+html.dark.theme-deuteranopia {
+  --primary: #38bdf8;
+  --primary-foreground: #000000;
+  --primary-deep: #0284c7;
+  --ring: #38bdf8;
+}
+
+/* 2. Tritanopia (Blue-Yellow Safe — High-Contrast Crimson Rose & Vivid Cyan) */
+html.theme-tritanopia {
+  --primary: #e11d48;
+  --primary-foreground: #ffffff;
+  --primary-deep: #be123c;
+  --ring: #f43f5e;
+}
+html.dark.theme-tritanopia {
+  --primary: #fb7185;
+  --primary-foreground: #000000;
+  --primary-deep: #f43f5e;
+  --ring: #fb7185;
+}
+
+/* 3. Monochrome (High-Contrast Black & White Grayscale) */
+html.theme-monochrome {
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --primary-deep: #262626;
+  --ring: #000000;
+  filter: grayscale(100%);
+}
+html.dark.theme-monochrome {
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --primary-deep: #e5e5e5;
+  --ring: #ffffff;
+  filter: grayscale(100%);
+}
+
+/* 4. Warm Sepia (Anti-Glare / Reduced Eye Strain) */
+html.theme-sepia {
+  --background: #fbf0d9;
+  --foreground: #433422;
+  --card: #f4e3c1;
+  --card-foreground: #433422;
+  --primary: #8c531b;
+  --primary-foreground: #ffffff;
+  --primary-deep: #683c11;
+  --border: #dfcca6;
+  --ring: #8c531b;
+}
+html.dark.theme-sepia {
+  --background: #1c1611;
+  --foreground: #f4e6d4;
+  --card: #281f18;
+  --card-foreground: #f4e6d4;
+  --primary: #e09f53;
+  --primary-foreground: #1c140c;
+  --primary-deep: #c48238;
+  --border: #443427;
+  --ring: #e09f53;
+}

@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle, Play, Square, Sparkles } from 'lucide-react';
-import { useAccessibilityStore, TextSize, Contrast, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
+import { ArrowLeft, Settings2, Sliders, Eye, SunMoon, Volume2, Move, Globe, User, CheckCircle2, AlertCircle, Play, Square, Sparkles, Palette } from 'lucide-react';
+import { useAccessibilityStore, TextSize, Contrast, ColorTheme, VoiceSpeed, Language } from "@/store/useAccessibilityStore";
+import { speak } from "@/lib/accessibility/voice-companion";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const { 
     textSize, setTextSize,
     contrast, setContrast,
+    colorTheme, setColorTheme,
     reducedMotion, setReducedMotion,
     audioAssistance, setAudioAssistance,
     voiceSpeed, setVoiceSpeed,
@@ -336,6 +338,107 @@ export default function SettingsPage() {
                 <div className="flex items-center space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
                   <RadioGroupItem value="high" id="settings-c-high" />
                   <Label htmlFor="settings-c-high" className="cursor-pointer font-medium">{t('highContrast')}</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* Color Blindness & Vision Palettes */}
+            <div className="space-y-3 pt-4 border-t border-border/60">
+              <div className="flex items-center gap-2">
+                <Palette className="h-4 w-4 text-primary" aria-hidden="true" />
+                <Label className="text-sm font-semibold">
+                  {language === 'hi' ? 'रंग दृष्टि और कंट्रास्ट पैलेट (Color Blindness Palettes)' : 'Color Vision & Accessibility Palettes'}
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {language === 'hi' 
+                  ? 'रंग दृष्टि दोष (Color Blindness) या आँखों के तनाव के लिए सुलभ रंग योजना चुनें। डिफ़ॉल्ट हमारी वर्तमान मानक थीम है।'
+                  : 'Tailored high-distinction color palettes for color vision deficiency (deuteranopia, protanopia, tritanopia), photophobia, and eye strain. Default is our present standard dark theme.'}
+              </p>
+              <RadioGroup 
+                value={colorTheme || 'default'} 
+                onValueChange={(val) => {
+                  const themeVal = val as ColorTheme;
+                  setColorTheme(themeVal);
+                  const names: Record<ColorTheme, string> = {
+                    default: language === 'hi' ? 'मानक डिफ़ॉल्ट थीम' : 'Default UI Theme',
+                    deuteranopia: language === 'hi' ? 'रेड-ग्रीन सुरक्षित कोबाल्ट थीम' : 'Red-Green Safe Cobalt Palette',
+                    tritanopia: language === 'hi' ? 'ब्लू-येलो सुरक्षित रोज़ सियान थीम' : 'Blue-Yellow Safe Rose-Cyan Palette',
+                    monochrome: language === 'hi' ? 'मोनोक्रोम ब्लैक एंड व्हाइट' : 'Monochrome High-Contrast Grayscale',
+                    sepia: language === 'hi' ? 'वार्म सेपिया एंटी-ग्लेयर' : 'Warm Sepia Anti-Glare Palette',
+                  };
+                  speak(names[themeVal] || 'Theme updated', { cancelPrevious: true });
+                }}
+                className="grid sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1"
+              >
+                {/* 1. Default */}
+                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="default" id="settings-theme-default" className="mt-1" />
+                  <Label htmlFor="settings-theme-default" className="cursor-pointer font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span className="size-3 rounded-full bg-[#ffed00] border border-black/40" />
+                      <span>{language === 'hi' ? 'मानक (डिफ़ॉल्ट)' : 'Default (Standard)'}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {language === 'hi' ? 'हमारी वर्तमान डार्क एम्बर थीम' : 'Present sleek dark UI with amber accents'}
+                    </p>
+                  </Label>
+                </div>
+
+                {/* 2. Deuteranopia / Protanopia */}
+                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="deuteranopia" id="settings-theme-deuteranopia" className="mt-1" />
+                  <Label htmlFor="settings-theme-deuteranopia" className="cursor-pointer font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span className="size-3 rounded-full bg-blue-500 border border-black/40" />
+                      <span>{language === 'hi' ? 'रेड-ग्रीन सेफ' : 'Red-Green Safe'}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {language === 'hi' ? 'ड्यूटेरानोपिया/प्रोटानोपिया (कोबाल्ट व एम्बर)' : 'Cobalt Blue & Gold for Deuteranopia/Protanopia'}
+                    </p>
+                  </Label>
+                </div>
+
+                {/* 3. Tritanopia */}
+                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="tritanopia" id="settings-theme-tritanopia" className="mt-1" />
+                  <Label htmlFor="settings-theme-tritanopia" className="cursor-pointer font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span className="size-3 rounded-full bg-rose-500 border border-black/40" />
+                      <span>{language === 'hi' ? 'ब्लू-येलो सेफ' : 'Blue-Yellow Safe'}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {language === 'hi' ? 'ट्रिटानोपिया (क्रिमसन रोज़ व सियान)' : 'Crimson Rose & Cyan for Tritanopia'}
+                    </p>
+                  </Label>
+                </div>
+
+                {/* 4. Monochrome */}
+                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="monochrome" id="settings-theme-monochrome" className="mt-1" />
+                  <Label htmlFor="settings-theme-monochrome" className="cursor-pointer font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span className="size-3 rounded-full bg-white border border-black" />
+                      <span>{language === 'hi' ? 'मोनोक्रोम' : 'Monochrome'}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {language === 'hi' ? 'शुद्ध ब्लैक एंड व्हाइट ग्रे-स्केल' : 'Pure high-contrast black & white grayscale'}
+                    </p>
+                  </Label>
+                </div>
+
+                {/* 5. Soft Sepia */}
+                <div className="flex items-start space-x-3 p-3 rounded-[2px] border border-border/60 hover:bg-muted/30 transition-colors">
+                  <RadioGroupItem value="sepia" id="settings-theme-sepia" className="mt-1" />
+                  <Label htmlFor="settings-theme-sepia" className="cursor-pointer font-medium space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span className="size-3 rounded-full bg-amber-700 border border-black/40" />
+                      <span>{language === 'hi' ? 'वार्म सेपिया' : 'Warm Sepia'}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {language === 'hi' ? 'एंटी-ग्लेयर आँखों के तनाव से राहत' : 'Anti-glare reduced eye strain & photophobia'}
+                    </p>
+                  </Label>
                 </div>
               </RadioGroup>
             </div>

@@ -14,11 +14,12 @@ import {
   WELCOME_TOUR_TEXT_HI,
 } from '@/lib/accessibility/voice-companion'
 import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser'
+import { isExamSessionActive } from '@/lib/assistant/sarthiExamLock'
 import { useVoiceEngine } from '@/lib/voice/useVoiceEngine'
 import { Mic, MicOff, Volume2, ShieldAlert } from 'lucide-react'
 
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
-  const { textSize, contrast, reducedMotion, language, accessibilityMode } = useAccessibilityStore()
+  const { textSize, contrast, colorTheme, reducedMotion, language, accessibilityMode } = useAccessibilityStore()
   const router = useRouter()
   const pathname = usePathname()
   const [showKeyWarning, setShowKeyWarning] = useState(false)
@@ -27,7 +28,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
 
   const { isListening, isSpeaking } = useVoiceEngine()
 
-  // Handle visual accessibility tokens (Text scaling, Contrast, Reduced Motion)
+  // Handle visual accessibility tokens (Text scaling, Contrast, Color Theme, Reduced Motion)
   useEffect(() => {
     const html = document.documentElement
 
@@ -46,13 +47,19 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       html.classList.remove('high-contrast')
     }
 
+    // Handle Color Blindness / Vision Themes
+    html.classList.remove('theme-deuteranopia', 'theme-tritanopia', 'theme-monochrome', 'theme-sepia')
+    if (colorTheme && colorTheme !== 'default') {
+      html.classList.add(`theme-${colorTheme}`)
+    }
+
     // Handle Reduced Motion
     if (reducedMotion) {
       html.classList.add('reduced-motion')
     } else {
       html.classList.remove('reduced-motion')
     }
-  }, [textSize, contrast, reducedMotion])
+  }, [textSize, contrast, colorTheme, reducedMotion])
 
   // STRICT GLOBAL KEYBOARD BLOCKING (Active ONLY in Voice Accessibility mode outside auth)
   useEffect(() => {
@@ -222,10 +229,20 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       const key = e.key.toLowerCase();
       const isHi = useAccessibilityStore.getState().language === 'hi';
 
-      // Check if inside active exam session
+      // Check if inside active exam session or on exam path with query params
       const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
-      const isInExamSession = currentPath.includes('/exam') && currentPath.includes('session');
-      if (isInExamSession && !e.altKey) {
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const isExamActive = 
+        currentPath.startsWith('/exam') && 
+        (search.includes('exam=') || 
+         search.includes('set=') || 
+         isExamSessionActive() || 
+         (typeof window !== 'undefined' && window.sessionStorage.getItem('examsarthi_active_session') === 'true'));
+
+      if (isExamActive) {
+        // STRICT EXAM INTEGRITY LOCKDOWN:
+        // When taking an exam, DO NOT hijack keys!
+        // Keys 1-4, A-D, N, P, R, O, F, C, T, Alt+S, Alt+D belong strictly to the Active Exam Engine!
         return;
       }
 
@@ -237,8 +254,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // 2. Dashboard (D or Alt+D)
-      if (key === 'd' || (e.altKey && key === 'd')) {
+      // 2. Dashboard (D or Alt+D) - Do not hijack if Alt+D is intended for DiagramDescriber
+      if ((key === 'd' && !e.altKey) || (e.altKey && key === 'd' && !document.querySelector('[data-diagram-describer]'))) {
         e.preventDefault();
         speak(isHi ? 'डैशबोर्ड' : 'Dashboard', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
         router.push('/dashboard');
@@ -305,12 +322,34 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // 9. Keyboard Shortcuts Guide (? or Shift+/)
+      // 9. Color Vision Palette Cycle (T or Alt+T)
+      if (key === 't' || (e.altKey && key === 't')) {
+        e.preventDefault();
+        const currentTheme = useAccessibilityStore.getState().colorTheme;
+        const order: ('default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
+          'default', 'deuteranopia', 'tritanopia', 'monochrome', 'sepia'
+        ];
+        const nextIndex = (order.indexOf(currentTheme) + 1) % order.length;
+        const next = order[nextIndex];
+        useAccessibilityStore.getState().setColorTheme(next);
+        const themeLabels: Record<string, { hi: string; en: string }> = {
+          default: { hi: 'मानक डिफ़ॉल्ट थीम', en: 'Default standard dark amber theme' },
+          deuteranopia: { hi: 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित)', en: 'Deuteranopia red-green safe palette' },
+          tritanopia: { hi: 'ट्रिटेनोपिया (नीला-पीला सुरक्षित)', en: 'Tritanopia blue-yellow safe palette' },
+          monochrome: { hi: 'मोनोक्रोम उच्च-कंट्रास्ट', en: 'Monochrome high-contrast grayscale palette' },
+          sepia: { hi: 'वार्म सेपिया कम्फर्ट', en: 'Warm sepia eye-comfort palette' },
+        };
+        const label = themeLabels[next] ? (isHi ? themeLabels[next].hi : themeLabels[next].en) : next;
+        speak(label, { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        return;
+      }
+
+      // 10. Keyboard Shortcuts Guide (? or Shift+/)
       if (key === '?' || (e.shiftKey && key === '/')) {
         e.preventDefault();
         const help = isHi
-          ? 'नेविगेशन शॉर्टकट: परीक्षा के लिए ई, डैशबोर्ड के लिए डी, अभ्यास के लिए पी, परिणाम के लिए आर, सारथी सहायक के लिए एस, भाषा के लिए एल, कंट्रास्ट के लिए सी दबाएं। आगे बढ़ने के लिए टैब का उपयोग करें।'
-          : 'Navigation shortcuts: Press E for Exam, D for Dashboard, P for Practice, R for Results, S for Sarthi Assistant, L for Language, C for Contrast. Use Tab to navigate elements.';
+          ? 'नेविगेशन शॉर्टकट: परीक्षा के लिए ई, डैशबोर्ड के लिए डी, अभ्यास के लिए पी, परिणाम के लिए आर, सारथी सहायक के लिए एस, रंग थीम के लिए टी, भाषा के लिए एल, कंट्रास्ट के लिए सी दबाएं। आगे बढ़ने के लिए टैब का उपयोग करें।'
+          : 'Navigation shortcuts: Press E for Exam, D for Dashboard, P for Practice, R for Results, S for Sarthi Assistant, T for Color Themes, L for Language, C for Contrast. Use Tab to navigate elements.';
         speak(help, { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
         return;
       }

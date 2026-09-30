@@ -2,6 +2,7 @@ export type SarthiActionType =
   | 'NAVIGATE'
   | 'SET_FONT_SIZE'
   | 'TOGGLE_CONTRAST'
+  | 'SET_COLOR_THEME'
   | 'START_EXAM'
   | 'READ_QUESTION'
   | 'READ_OPTIONS'
@@ -75,6 +76,24 @@ export async function executeSarthiAction(
       } else {
         const current = accessibilityStore.contrast;
         accessibilityStore.setContrast(current === 'default' ? 'high' : 'default');
+      }
+      break;
+
+    case 'SET_COLOR_THEME':
+      const targetTheme = payload?.theme || (actionData as any).theme || 'default';
+      const validThemes = ['default', 'deuteranopia', 'tritanopia', 'monochrome', 'sepia'];
+      if (validThemes.includes(targetTheme)) {
+        accessibilityStore.setColorTheme(targetTheme);
+        if (!spokenResponse) {
+          const names: Record<string, { hi: string; en: string }> = {
+            default: { hi: 'मानक डिफ़ॉल्ट थीम बहाल की गई।', en: 'Standard default dark amber theme restored.' },
+            deuteranopia: { hi: 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित) पैलेट लागू किया गया।', en: 'Deuteranopia red-green accessible color palette applied.' },
+            tritanopia: { hi: 'ट्रिटेनोपिया (नीला-पीला सुरक्षित) पैलेट लागू किया गया।', en: 'Tritanopia blue-yellow accessible color palette applied.' },
+            monochrome: { hi: 'मोनोक्रोम उच्च-कंट्रास्ट पैलेट लागू किया गया।', en: 'Monochrome high-contrast grayscale palette applied.' },
+            sepia: { hi: 'वार्म सेपिया कम्फर्ट पैलेट लागू किया गया।', en: 'Warm sepia eye-comfort palette applied.' },
+          };
+          return names[targetTheme] ? (isHindi ? names[targetTheme].hi : names[targetTheme].en) : 'Theme updated.';
+        }
       }
       break;
 

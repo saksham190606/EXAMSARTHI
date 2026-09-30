@@ -30,6 +30,8 @@ import { POST as postSarthi } from '../src/app/api/ai/sarthi/route';
 import { NextRequest } from 'next/server';
 import { routeVoiceCommand } from '../src/lib/voice/commandRouter';
 import { AI_CONFIG, getGroqClient, isGroqConfigured } from '../src/lib/ai/config';
+import { matchIntent, classifyIntentLocally } from '../src/lib/voice/intent-parser';
+import { executeSarthiAction } from '../src/lib/assistant/sarthiActions';
 import fs from 'fs';
 import path from 'path';
 
@@ -132,6 +134,41 @@ async function runRegressionSuite() {
     '"review" control intent',
     resH?.intent === 'CONTROL' && resH?.target === 'REVIEW',
     `Resolved to intent="${resH?.intent}", target="${resH?.target}"`
+  );
+
+  // --- Requirement LOGOUT: Voice commands for Logout in EN and HI ---
+  const logoutMatchEn = matchIntent('logout');
+  const logoutMatchSignout = matchIntent('sign out');
+  const logoutMatchHi = matchIntent('लॉगआउट');
+  const logoutClassify = classifyIntentLocally('logout');
+  assertTest(
+    'REQ-LOGOUT',
+    '"logout" / "sign out" voice intent resolution',
+    logoutMatchEn === 'LOGOUT' && logoutMatchSignout === 'LOGOUT' && logoutMatchHi === 'LOGOUT' && logoutClassify.intent === 'LOGOUT',
+    `English, sign out, and Hindi logout phrases all resolve to LOGOUT (confidence: ${logoutClassify.confidence})`
+  );
+
+  // --- Requirement SIGNUP: Voice commands for Signup / Registration in EN and HI ---
+  const signupMatchEn = matchIntent('signup');
+  const signupMatchRegister = matchIntent('register');
+  const signupMatchHi = matchIntent('साइन अप');
+  const signupClassify = classifyIntentLocally('signup');
+  assertTest(
+    'REQ-SIGNUP',
+    '"signup" / "register" voice intent resolution',
+    signupMatchEn === 'SIGNUP' && signupMatchRegister === 'SIGNUP' && signupMatchHi === 'SIGNUP' && signupClassify.intent === 'NAVIGATE_SIGNUP',
+    `English signup, register, and Hindi phrases resolve to NAVIGATE_SIGNUP (confidence: ${signupClassify.confidence})`
+  );
+
+  // --- Requirement COLOR-THEME: Accessible Color Themes via Sarthi Actions ---
+  const mockStore = { colorTheme: 'default', setColorTheme(t: any) { this.colorTheme = t; } };
+  const mockCtx = { router: { push() {} }, accessibilityStore: mockStore, isHindi: false };
+  const sarthiThemeRes = await executeSarthiAction({ action: 'SET_COLOR_THEME', payload: { theme: 'deuteranopia' } }, mockCtx as any);
+  assertTest(
+    'REQ-COLOR-THEME',
+    'Accessible color theme action execution by Sarthi',
+    mockStore.colorTheme === 'deuteranopia' && Boolean(sarthiThemeRes && sarthiThemeRes.includes('Deuteranopia')),
+    `Sarthi applied theme "deuteranopia" and responded with: "${sarthiThemeRes}"`
   );
 
   // --- Requirement I: AI fallback unavailable -> safe UNKNOWN result (not 500) ---

@@ -687,6 +687,46 @@ export function startListening(
         return;
       }
 
+      const isLogoutCommand =
+        lower.includes('logout') ||
+        lower.includes('log out') ||
+        lower.includes('sign out') ||
+        lower.includes('signout') ||
+        lower.includes('लॉगआउट') ||
+        lower.includes('लॉग आउट') ||
+        lower.includes('साइन आउट') ||
+        lower.includes('बाहर निकलें');
+
+      if (isLogoutCommand) {
+        console.log("🔥 [VOICE ENGINE] 'Logout' command caught! Dispatching navigation event...");
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'LOGOUT' } }));
+        forwardTranscript(transcript);
+        return;
+      }
+
+      const isSignupCommand =
+        lower.includes('signup') ||
+        lower.includes('sign up') ||
+        lower.includes('register') ||
+        lower.includes('registration') ||
+        lower.includes('create account') ||
+        lower.includes('साइन अप') ||
+        lower.includes('रजिस्टर') ||
+        lower.includes('खाता बनाएं');
+
+      if (isSignupCommand) {
+        console.log("🔥 [VOICE ENGINE] 'Signup' command caught! Dispatching navigation event...");
+        if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
+          stopSpeaking();
+        }
+        window.dispatchEvent(new CustomEvent('ai_voice_command', { detail: { intent: 'NAVIGATE', target: 'SIGNUP' } }));
+        forwardTranscript(transcript);
+        return;
+      }
+
       const isLoginCommand = 
         lower.includes('login') || 
         lower.includes('log in') || 
@@ -709,7 +749,9 @@ export function startListening(
         lower.includes('dashboard') || lower.includes('डैशबोर्ड') ||
         lower.includes('practice') || lower.includes('प्रैक्टिस') ||
         lower.includes('result') || lower.includes('परिणाम') || lower.includes('रिजल्ट') ||
-        lower.includes('setting') || lower.includes('सेटिंग');
+        lower.includes('setting') || lower.includes('सेटिंग') ||
+        lower.includes('logout') || lower.includes('sign out') ||
+        lower.includes('signup') || lower.includes('register');
       if (isNavCommand) {
         if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
           stopSpeaking();

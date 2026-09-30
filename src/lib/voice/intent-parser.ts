@@ -12,6 +12,8 @@ export type CanonicalVoiceIntent =
   | 'NAVIGATE_RESULTS'
   | 'NAVIGATE_SETTINGS'
   | 'NAVIGATE_LOGIN'
+  | 'NAVIGATE_SIGNUP'
+  | 'LOGOUT'
   | 'NAVIGATE_BACK'
   | 'START_EXAM'
   | 'START_PRACTICE'
@@ -165,6 +167,16 @@ const INTENT_METADATA: Record<
     announcementEn: 'Opening Sign In page',
     announcementHi: 'साइन इन पृष्ठ खोला जा रहा है',
   },
+  NAVIGATE_SIGNUP: {
+    targetPath: '/signup',
+    announcementEn: 'Opening registration page',
+    announcementHi: 'साइन अप पृष्ठ खोला जा रहा है',
+  },
+  LOGOUT: {
+    targetPath: '/login',
+    announcementEn: 'Logging out of ExamSarthi.',
+    announcementHi: 'एग्जामसारथी से लॉगआउट किया जा रहा है।',
+  },
   NAVIGATE_BACK: {
     announcementEn: 'Going back',
     announcementHi: 'वापस जा रहे हैं',
@@ -225,9 +237,13 @@ export const EXAMS_KEYWORDS = ["exam", "exams", "mock", "test", "test series", "
 export const SETTINGS_KEYWORDS = ["setting", "settings", "preferences", "accessibility", "सेटिंग", "सेटिंग्स", "विकल्प"];
 export const RESULTS_KEYWORDS = ["result", "results", "score", "scores", "marks", "score card", "scorecard", "परिणाम", "नतीजे", "रिजल्ट", "स्कोर"];
 export const LOGIN_KEYWORDS = ["login", "sign in", "log in", "authenticate", "लॉगिन", "साइन इन"];
+export const SIGNUP_KEYWORDS = ["signup", "sign up", "register", "registration", "create account", "साइन अप", "रजिस्टर", "खाता बनाएं", "नया खाता"];
+export const LOGOUT_KEYWORDS = ["logout", "log out", "sign out", "signout", "लॉगआउट", "लॉग आउट", "साइन आउट", "बाहर निकलें", "लॉग आफ"];
 
-export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'RESULTS' | 'LOGIN' | 'UNKNOWN' => {
+export const matchIntent = (text: string): 'DASHBOARD' | 'EXAMS' | 'PRACTICE' | 'SETTINGS' | 'RESULTS' | 'LOGIN' | 'SIGNUP' | 'LOGOUT' | 'UNKNOWN' => {
   const clean = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+  if (LOGOUT_KEYWORDS.some(k => clean.includes(k))) return 'LOGOUT';
+  if (SIGNUP_KEYWORDS.some(k => clean.includes(k))) return 'SIGNUP';
   if (DASHBOARD_KEYWORDS.some(k => clean.includes(k))) return 'DASHBOARD';
   // Check PRACTICE before EXAMS so "practice exam" is treated as PRACTICE rather than generic exams!
   if (PRACTICE_KEYWORDS.some(k => clean.includes(k))) return 'PRACTICE';
@@ -376,6 +392,26 @@ export function classifyIntentLocally(rawText: string): RecognizedIntent {
       normalizedText: norm,
       source: 'fuzzy_match',
       ...INTENT_METADATA.NAVIGATE_LOGIN,
+    };
+  }
+  if (fuzzyIntent === 'SIGNUP') {
+    return {
+      intent: 'NAVIGATE_SIGNUP',
+      confidence: 0.98,
+      rawText,
+      normalizedText: norm,
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.NAVIGATE_SIGNUP,
+    };
+  }
+  if (fuzzyIntent === 'LOGOUT') {
+    return {
+      intent: 'LOGOUT',
+      confidence: 0.98,
+      rawText,
+      normalizedText: norm,
+      source: 'fuzzy_match',
+      ...INTENT_METADATA.LOGOUT,
     };
   }
 

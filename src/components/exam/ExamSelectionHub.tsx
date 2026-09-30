@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Clock, HelpCircle, ArrowRight, Sparkles, BookOpen, Volume2, Mic, MicOff } from 'lucide-react';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { useVoiceEngine, stopSpeaking } from '@/lib/voice/useVoiceEngine';
+import { speak } from '@/lib/accessibility/voice-companion';
 import { routeVoiceCommand, registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
 import { EXAM_VOICE_ROUTES, matchExamTokens, matchExamVoiceRoute, ExamVoiceRoute } from '@/lib/voice/exam-router';
 import { cn } from '@/lib/utils';
@@ -90,6 +91,8 @@ export function ExamSelectionHub() {
   const router = useRouter();
   const language = useAccessibilityStore((state) => state.language);
   const isHindi = language === 'hi';
+  const accessibilityMode = useAccessibilityStore((state) => state.accessibilityMode);
+  const isKeyboardMode = accessibilityMode === 'keyboard';
 
   const [highlightedExamId, setHighlightedExamId] = useState<string | null>(null);
   const [launchingTitle, setLaunchingTitle] = useState<string | null>(null);
@@ -106,8 +109,9 @@ export function ExamSelectionHub() {
     requestMicAccess,
   } = useVoiceEngine({
     lang: isHindi ? 'hi-IN' : 'en-US',
-    autoStart: true,
+    autoStart: !isKeyboardMode,
     onTranscript: (capturedText) => {
+      if (isKeyboardMode) return;
       handleExamHubVoiceCommand(capturedText);
     },
   });
@@ -128,27 +132,41 @@ export function ExamSelectionHub() {
         cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      const announcement = isHindi 
-        ? `${targetName} परीक्षा पोर्टल खोला जा रहा है।` 
-        : `Opening ${targetName} examination portal...`;
+      speak(
+        isHindi ? `${targetName} परीक्षा शुरू की जा रही है...` : `Starting ${targetName} examination...`,
+        { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+      );
 
-      const targetUrl = `/exam?set=${route.param}`;
-
-      const doNavigate = () => {
-        if (typeof window !== 'undefined') {
-          window.location.href = targetUrl;
-        } else {
-          router.push(targetUrl);
-        }
-      };
-
-      speakText(announcement, isHindi ? 'hi-IN' : 'en-US', doNavigate);
-
-      // Guaranteed navigation fallback: ensure exam loads even if TTS is slow/muted
-      setTimeout(doNavigate, 800);
+      // Transition to official exam session
+      setTimeout(() => {
+        router.push(`/exam?exam=${route.param}`);
+      }, 700);
     },
-    [isHindi, router, speakText]
+    [router, isHindi]
   );
+
+  // Hotkey listener for Keyboard & Navigation mode (Keys 1-6 launch exams)
+  useEffect(() => {
+    if (!isKeyboardMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+      const num = parseInt(e.key, 10);
+      if (!isNaN(num) && num >= 1 && num <= EXAM_CATALOG.length) {
+        e.preventDefault();
+        const chosenExam = EXAM_CATALOG[num - 1];
+        launchExam(chosenExam);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isKeyboardMode, launchExam]);
+
+
 
   const handleExamHubVoiceCommand = useCallback((capturedText: string) => {
     if (isLaunchingRef.current || !capturedText) return;
@@ -244,8 +262,10 @@ export function ExamSelectionHub() {
     };
   }, [handleExamHubVoiceCommand, launchExam]);
 
-  // Prompt the candidate with exam options upon landing on the Exams tab
+  // Prompt the candidate with exam options upon landing on the Exams tab (Voice mode only)
   useEffect(() => {
+    if (isKeyboardMode) return;
+
     const promptText = isHindi
       ? 'आप कौन सी परीक्षा चुनना चाहते हैं? आप यूपीएससी, एसएससी, बैंक पीओ, या रेलवे बोल सकते हैं।'
       : 'Which exam would you like to choose? You can say UPSC, SSC, Bank PO, or Railway.';
@@ -259,7 +279,7 @@ export function ExamSelectionHub() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [isHindi, speakText, startListening]);
+  }, [isHindi, isKeyboardMode, speakText, startListening]);
 
   return (
     <div className="min-h-screen bg-black text-white px-4 py-12 sm:px-6 lg:px-8">
@@ -337,23 +357,34 @@ export function ExamSelectionHub() {
             Our fully accessible, voice-first engine is active across all national formats.
           </p>
 
-          {/* Voice Command Helper Banner */}
-          <div className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg bg-neutral-900/80 border border-white/10 px-4 py-2.5 text-xs text-neutral-300">
-            <Volume2 className="h-4 w-4 text-[#ffed00] shrink-0" aria-hidden="true" />
-            <span className="font-semibold text-white">Voice Shortcut:</span>
-            <span>Say</span>
-            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;CGL&quot;</span>,
-            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;UPSC&quot;</span>,
-            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;IBPS&quot;</span>,
-            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Railway&quot;</span>, or
-            <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Vision AI&quot;</span>
-            <span>to open any exam hands-free.</span>
-          </div>
+          {/* Command Helper Banner */}
+          {isKeyboardMode ? (
+            <div className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg bg-neutral-900/80 border border-amber-400/30 px-4 py-2.5 text-xs text-neutral-300">
+              <span className="font-semibold text-amber-300">Keyboard Shortcuts:</span>
+              <span>Press number keys</span>
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">1</span>
+              <span>to</span>
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">6</span>
+              <span>to launch any mock exam directly, or use Tab and Enter.</span>
+            </div>
+          ) : (
+            <div className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg bg-neutral-900/80 border border-white/10 px-4 py-2.5 text-xs text-neutral-300">
+              <Volume2 className="h-4 w-4 text-[#ffed00] shrink-0" aria-hidden="true" />
+              <span className="font-semibold text-white">Voice Shortcut:</span>
+              <span>Say</span>
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;CGL&quot;</span>,
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;UPSC&quot;</span>,
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;IBPS&quot;</span>,
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Railway&quot;</span>, or
+              <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[#ffed00] font-bold">&quot;Vision AI&quot;</span>
+              <span>to open any exam hands-free.</span>
+            </div>
+          )}
         </div>
 
         {/* Exam Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {EXAM_CATALOG.map((exam) => {
+          {EXAM_CATALOG.map((exam, idx) => {
             const isHighlighted = highlightedExamId === exam.id;
             const isLaunchingThis = launchingTitle === exam.title;
 
@@ -375,12 +406,17 @@ export function ExamSelectionHub() {
                     <span className="text-2xs font-bold tracking-wider uppercase text-neutral-400">
                       {exam.authority}
                     </span>
-                    {exam.badge && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-2xs font-semibold text-primary">
-                        <Sparkles className="h-3 w-3" aria-hidden="true" />
-                        <span>{exam.badge}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded bg-neutral-900 border border-white/20 text-[#ffed00] font-mono text-[10px] font-bold" title={`Press ${idx + 1} to launch`}>
+                        Key {idx + 1}
                       </span>
-                    )}
+                      {exam.badge && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/20 border border-primary/30 px-2.5 py-0.5 text-2xs font-semibold text-primary">
+                          <Sparkles className="h-3 w-3" aria-hidden="true" />
+                          <span>{exam.badge}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <h2 className="text-xl font-bold text-white mb-2 group-hover:text-[#ffed00] transition-colors">
@@ -417,8 +453,9 @@ export function ExamSelectionHub() {
                   <button
                     type="button"
                     onClick={() => launchExam(exam)}
+                    aria-label={`Start ${exam.title} (${exam.authority}). Shortcut key ${idx + 1}`}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer",
+                      "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-all cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ffed00]",
                       isLaunchingThis
                         ? "bg-emerald-400 text-black shadow-lg"
                         : "bg-[#ffed00] text-black hover:bg-[#e6d500]"

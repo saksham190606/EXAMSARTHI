@@ -20,6 +20,8 @@ import { resolveExamTitle, resolveExamSubject } from '@/lib/personalization/hist
 import { useExamEngine } from '@/lib/useExamEngine';
 import { stopSpeaking, speakText } from '@/lib/voice/useVoiceEngine';
 import { setExamSessionActive } from '@/lib/assistant/sarthiExamLock';
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+import { speak, stopSpeech } from '@/lib/accessibility/voice-companion';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
@@ -399,10 +401,37 @@ function ActiveExamSession({
     onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
   });
 
-  // Synchronize exam keyboard shortcuts: Alt+N (Next), Alt+P (Prev), Alt+M (Toggle Mic), 1-4 (Options), Space (Unlock Audio)
+  const accessibilityMode = useAccessibilityStore((s) => s.accessibilityMode);
+  const isKeyboardMode = accessibilityMode === 'keyboard';
+  const isHindi = language === 'hi';
+
+  // Periodic automatic time warnings (5 minutes and 1 minute remaining)
+  const timeAlertsRef = React.useRef<{ fiveMin: boolean; oneMin: boolean }>({ fiveMin: false, oneMin: false });
+  useEffect(() => {
+    if (state.isSubmitted || isSubmitting) return;
+    const remaining = state.timeRemaining;
+
+    if (remaining <= 300 && remaining > 290 && !timeAlertsRef.current.fiveMin) {
+      timeAlertsRef.current.fiveMin = true;
+      const msg = isHindi 
+        ? 'चेतावनी: परीक्षा समाप्त होने में केवल 5 मिनट शेष हैं।' 
+        : 'Exam notice: 5 minutes remaining in the examination.';
+      speak(msg, { cancelPrevious: false, langOverride: isHindi ? 'hi-IN' : 'en-US' });
+    }
+
+    if (remaining <= 60 && remaining > 50 && !timeAlertsRef.current.oneMin) {
+      timeAlertsRef.current.oneMin = true;
+      const msg = isHindi 
+        ? 'अंतिम चेतावनी: परीक्षा समाप्त होने में केवल 1 मिनट शेष है। कृपया अपने उत्तरों की समीक्षा करें।' 
+        : 'Final notice: Only 1 minute remaining. Please review your answers before automatic submission.';
+      speak(msg, { cancelPrevious: false, langOverride: isHindi ? 'hi-IN' : 'en-US' });
+    }
+  }, [state.timeRemaining, state.isSubmitted, isSubmitting, isHindi]);
+
+  // In-Exam Keyboard Scribe Engine: Hotkeys & Immediate Speech Feedback
   useEffect(() => {
     const handleExamKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
+      const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return;
       }
@@ -414,37 +443,168 @@ function ActiveExamSession({
         return;
       }
 
-      // Alt+M -> Toggle microphone on/off
+      // Alt+M -> Toggle microphone on/off (in voice mode only)
       if (e.altKey && (e.key === 'm' || e.key === 'M' || e.code === 'KeyM')) {
-        e.preventDefault();
-        toggleVoiceMode();
-        return;
-      }
-
-      // Alt+N -> Next question
-      if (e.altKey && (e.key === 'n' || e.key === 'N' || e.code === 'KeyN')) {
-        e.preventDefault();
-        handleNextQuestion();
-        return;
-      }
-
-      // Alt+P -> Previous question
-      if (e.altKey && (e.key === 'p' || e.key === 'P' || e.code === 'KeyP')) {
-        e.preventDefault();
-        handlePrevQuestion();
-        return;
-      }
-
-      // 1-4 -> Select Option A-D (1=A, 2=B, 3=C, 4=D)
-      if (!e.altKey && !e.ctrlKey && !e.metaKey && ['1', '2', '3', '4'].includes(e.key)) {
-        const optionIndex = parseInt(e.key, 10) - 1;
-        if (currentQuestion && currentQuestion.options && optionIndex >= 0 && optionIndex < currentQuestion.options.length) {
+        if (!isKeyboardMode) {
           e.preventDefault();
-          const opt = currentQuestion.options[optionIndex];
+          toggleVoiceMode();
+          return;
+        }
+      }
+
+      const key = e.key.toLowerCase();
+
+      // 1. Submit Exam: Alt+S or Ctrl+Enter
+      if ((e.altKey && key === 's') || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) {
+        e.preventDefault();
+        setIsSubmitDialogOpen(true);
+        speak(
+          isHindi 
+            ? 'परीक्षा सबमिट संवाद खोला गया। पुष्टि के लिए एंटर दबाएं या समीक्षा के लिए टैब दबाएं।' 
+            : 'Submit examination dialog opened. Press Enter to confirm submission or Tab to review.',
+          { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+        );
+        return;
+      }
+
+      // 2. Next Question: N, ArrowRight, PageDown, or Alt+N
+      if ((key === 'n' && !e.ctrlKey && !e.metaKey) || key === 'arrowright' || key === 'pagedown') {
+        e.preventDefault();
+        if (currentIndex < questions.length - 1) {
+          const nextIdx = currentIndex + 1;
+          const nextQ = questions[nextIdx] as any;
+          const qText = (isHindi && nextQ?.text_hi) ? nextQ.text_hi : nextQ?.text || '';
+          speak(
+            isHindi ? `प्रश्न संख्या ${nextIdx + 1}: ${qText}` : `Question ${nextIdx + 1} of ${totalQuestions}: ${qText}`,
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+          handleNextQuestion();
+        } else {
+          setIsSubmitDialogOpen(true);
+          speak(
+            isHindi ? 'आप अंतिम प्रश्न पर हैं। परीक्षा सबमिट संवाद खोला गया।' : 'You have reached the final question. Opening submit examination dialog.',
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+        }
+        return;
+      }
+
+      // 3. Previous Question: P, ArrowLeft, PageUp, or Alt+P
+      if ((key === 'p' && !e.ctrlKey && !e.metaKey) || key === 'arrowleft' || key === 'pageup') {
+        e.preventDefault();
+        if (currentIndex > 0) {
+          const prevIdx = currentIndex - 1;
+          const prevQ = questions[prevIdx] as any;
+          const qText = (isHindi && prevQ?.text_hi) ? prevQ.text_hi : prevQ?.text || '';
+          speak(
+            isHindi ? `प्रश्न संख्या ${prevIdx + 1}: ${qText}` : `Question ${prevIdx + 1} of ${totalQuestions}: ${qText}`,
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+          handlePrevQuestion();
+        } else {
+          speak(
+            isHindi ? 'आप पहले प्रश्न पर हैं।' : 'You are at the first question.',
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+        }
+        return;
+      }
+
+      // 4. Read Question: R
+      if (key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (currentQuestion) {
+          const cq = currentQuestion as any;
+          const qText = (isHindi && cq?.text_hi) ? cq.text_hi : currentQuestion.text;
+          speak(
+            isHindi ? `प्रश्न संख्या ${currentIndex + 1}: ${qText}` : `Question ${currentIndex + 1} of ${totalQuestions}: ${qText}`,
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+        }
+        return;
+      }
+
+      // 5. Read Options: O
+      if (key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (currentQuestion && currentQuestion.options) {
+          const letters = ['A', 'B', 'C', 'D', 'E'];
+          const optAnnouncement = currentQuestion.options.map((opt, i) => {
+            const op = opt as any;
+            const oText = (isHindi && op?.text_hi) ? op.text_hi : opt.text;
+            return isHindi ? `विकल्प ${letters[i] || i + 1}: ${oText}` : `Option ${letters[i] || i + 1}: ${oText}`;
+          }).join('. ');
+          speak(optAnnouncement, { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' });
+        }
+        return;
+      }
+
+      // 6. Time Remaining: T
+      if (key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const mins = Math.floor(state.timeRemaining / 60);
+        const secs = state.timeRemaining % 60;
+        speak(
+          isHindi ? `परीक्षा में शेष समय: ${mins} मिनट ${secs} सेकंड।` : `Time remaining: ${mins} minutes and ${secs} seconds.`,
+          { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+        );
+        return;
+      }
+
+      // 7. Toggle Flag / Mark for Review: F or M
+      if ((key === 'f' || key === 'm') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (currentQuestion) {
+          const isCurrentlyFlagged = state.flagged.has(currentQuestion.id);
+          actions.toggleFlag(currentQuestion.id);
+          speak(
+            isCurrentlyFlagged
+              ? (isHindi ? 'प्रश्न समीक्षा से हटाया गया।' : 'Question unmarked from review.')
+              : (isHindi ? 'प्रश्न समीक्षा के लिए चिह्नित किया गया।' : 'Question marked for review.'),
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+        }
+        return;
+      }
+
+      // 8. Clear Answer: Backspace, Delete, 0, or Alt+C
+      if (key === 'backspace' || key === 'delete' || key === '0' || (e.altKey && key === 'c')) {
+        e.preventDefault();
+        if (currentQuestion) {
+          if (actions.setAnswer) {
+            actions.setAnswer(currentQuestion.id, "");
+          }
+          speak(isHindi ? 'उत्तर साफ़ कर दिया गया।' : 'Answer response cleared.', { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' });
+        }
+        return;
+      }
+
+      // 9. Option Selection: 1-4, A-D (1/A=0, 2/B=1, 3/C=2, 4/D=3)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        let optionIndex = -1;
+        if (['1', '2', '3', '4'].includes(e.key)) {
+          optionIndex = parseInt(e.key, 10) - 1;
+        } else if (['a', 'b', 'c', 'd'].includes(key)) {
+          optionIndex = ['a', 'b', 'c', 'd'].indexOf(key);
+        }
+
+        if (optionIndex >= 0 && currentQuestion && currentQuestion.options && optionIndex < currentQuestion.options.length) {
+          e.preventDefault();
+          const opt = currentQuestion.options[optionIndex] as any;
+          const letters = ['A', 'B', 'C', 'D'];
+          const optLetter = letters[optionIndex] || String(optionIndex + 1);
+          const optText = (isHindi && opt?.text_hi) ? opt.text_hi : opt.text;
+
           if (actions.setAnswer) {
             actions.setAnswer(currentQuestion.id, opt.id);
           }
           actions.selectAnswer(currentQuestion.id, opt.id);
+
+          speak(
+            isHindi ? `विकल्प ${optLetter} चुना गया: ${optText}` : `Option ${optLetter} selected: ${optText}`,
+            { cancelPrevious: true, langOverride: isHindi ? 'hi-IN' : 'en-US' }
+          );
+          return;
         }
       }
     };
@@ -453,7 +613,22 @@ function ActiveExamSession({
     return () => {
       window.removeEventListener('keydown', handleExamKeyDown);
     };
-  }, [actions, currentQuestion, toggleVoiceMode, isAudioUnlocked, unlockAudio]);
+  }, [
+    actions,
+    currentIndex,
+    currentQuestion,
+    handleNextQuestion,
+    handlePrevQuestion,
+    isAudioUnlocked,
+    isHindi,
+    isKeyboardMode,
+    questions,
+    state.flagged,
+    state.timeRemaining,
+    toggleVoiceMode,
+    totalQuestions,
+    unlockAudio,
+  ]);
 
   const isFlagged = currentQuestion ? state.flagged.has(currentQuestion.id) : false;
   const answeredCount = questions.filter(q => isQuestionAnswered(q, state.answers[q.id])).length;

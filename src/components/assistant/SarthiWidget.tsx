@@ -227,11 +227,140 @@ export function SarthiWidget() {
       handleStateChange('SPEAKING');
       const resp = next === 'high' 
         ? (isHindi ? 'उच्च कंट्रास्ट मोड सक्षम किया गया।' : 'High contrast mode enabled.')
-        : (isHindi ? 'सामान्य कंट्रास्ट मोड सक्षम किया गया।' : 'Standard contrast mode enabled.');
+        : (isHindi ? 'सामान्य कंट्रास्ट mode सक्षम किया गया।' : 'Standard contrast mode enabled.');
       setMessages((prev) => [
         ...prev,
         { id: String(Date.now()), sender: 'sarthi', text: resp }
       ]);
+      speak(resp, 'Voice feedback');
+      return;
+    }
+
+    if (
+      lower === 'settings' ||
+      lower === 'setting' ||
+      lower === 'open settings' ||
+      lower === 'go to settings' ||
+      lower === 'सेटिंग्स' ||
+      lower === 'सेटिंग'
+    ) {
+      handleStateChange('SPEAKING');
+      const resp = isHindi ? 'सेटिंग्स अनुभाग खोला जा रहा है।' : 'Navigating to settings section.';
+      setMessages((prev) => [
+        ...prev,
+        { id: String(Date.now()), sender: 'sarthi', text: resp }
+      ]);
+      router.push('/settings');
+      speak(resp, 'Voice feedback');
+      return;
+    }
+
+    if (
+      lower === 'logout' ||
+      lower === 'log out' ||
+      lower === 'sign out' ||
+      lower === 'लॉगआउट' ||
+      lower === 'साइन आउट'
+    ) {
+      handleStateChange('SPEAKING');
+      const resp = isHindi ? 'लॉगआउट किया जा रहा है...' : 'Logging you out of ExamSarthi.';
+      setMessages((prev) => [
+        ...prev,
+        { id: String(Date.now()), sender: 'sarthi', text: resp }
+      ]);
+      speak(resp, 'Voice feedback');
+      setTimeout(() => {
+        try {
+          localStorage.removeItem('examsarthi_demo_auth');
+          document.cookie = 'examsarthi_demo_auth=; path=/; max-age=0; SameSite=Lax';
+        } catch (_) {}
+        router.push('/login');
+      }, 1000);
+      return;
+    }
+
+    // Fast color theme checks for visually impaired & color-blind candidates
+    const isColorCommand = 
+      lower.includes('color') || 
+      lower.includes('colour') || 
+      lower.includes('theme') || 
+      lower.includes('रंग') || 
+      lower.includes('थीम') ||
+      lower.includes('blind') ||
+      lower.includes('deuteranopia') ||
+      lower.includes('tritanopia') ||
+      lower.includes('monochrome') ||
+      lower.includes('sepia');
+
+    if (isColorCommand) {
+      if (lower.includes('deuteranopia') || lower.includes('protanopia') || lower.includes('red green') || lower.includes('लाल हरा')) {
+        accessibilityStore.setColorTheme('deuteranopia');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'ड्यूटरेनोपिया (लाल-हरा सुरक्षित) पैलेट लागू किया गया।' 
+          : 'Deuteranopia red-green accessible color palette applied.';
+        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      if (lower.includes('tritanopia') || lower.includes('blue yellow') || lower.includes('नीला पीला')) {
+        accessibilityStore.setColorTheme('tritanopia');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'ट्रिटेनोपिया (नीला-पीला सुरक्षित) पैलेट लागू किया गया।' 
+          : 'Tritanopia blue-yellow accessible color palette applied.';
+        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      if (lower.includes('monochrome') || lower.includes('grayscale') || lower.includes('black and white') || lower.includes('मोनोक्रोम')) {
+        accessibilityStore.setColorTheme('monochrome');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'मोनोक्रोम उच्च-कंट्रास्ट ग्रेस्केल पैलेट लागू किया गया।' 
+          : 'Monochrome high-contrast grayscale palette applied.';
+        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      if (lower.includes('sepia') || lower.includes('warm') || lower.includes('एंटी-ग्लेयर') || lower.includes('सेपिया')) {
+        accessibilityStore.setColorTheme('sepia');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'वार्म सेपिया कम्फर्ट पैलेट लागू किया गया।' 
+          : 'Warm sepia eye-comfort palette applied.';
+        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      if (lower.includes('default') || lower.includes('reset') || lower.includes('normal') || lower.includes('standard') || lower.includes('मानक') || lower.includes('डिफ़ॉल्ट')) {
+        accessibilityStore.setColorTheme('default');
+        handleStateChange('SPEAKING');
+        const resp = isHindi 
+          ? 'मानक डार्क एम्बर डिफ़ॉल्ट थीम बहाल की गई।' 
+          : 'Standard dark amber UI default theme restored.';
+        setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
+        speak(resp, 'Voice feedback');
+        return;
+      }
+
+      // General color theme toggle/cycle
+      const current = accessibilityStore.colorTheme;
+      const order: ('default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia')[] = [
+        'default', 'deuteranopia', 'tritanopia', 'monochrome', 'sepia'
+      ];
+      const nextIndex = (order.indexOf(current) + 1) % order.length;
+      const nextTheme = order[nextIndex];
+      accessibilityStore.setColorTheme(nextTheme);
+      handleStateChange('SPEAKING');
+      const resp = isHindi
+        ? `रंग थीम बदलकर ${nextTheme} की गई। आप 'ड्यूटरेनोपिया', 'ट्रिटेनोपिया', 'मोनोक्रोम', 'सेपिया', या 'डिफ़ॉल्ट' बोल सकते हैं।`
+        : `Color theme switched to ${nextTheme}. You can say 'Deuteranopia', 'Tritanopia', 'Monochrome', 'Sepia', or 'Default colors'.`;
+      setMessages((prev) => [...prev, { id: String(Date.now()), sender: 'sarthi', text: resp }]);
       speak(resp, 'Voice feedback');
       return;
     }
@@ -498,6 +627,13 @@ export function SarthiWidget() {
           className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-200 text-slate-300 text-[11px] font-medium border border-slate-700 focus-visible:outline focus-visible:outline-amber-400"
         >
           {isHindi ? 'कंट्रास्ट (C)' : 'Contrast (C)'}
+        </button>
+        <button
+          type="button"
+          onClick={() => processInput('color theme')}
+          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-200 text-slate-300 text-[11px] font-medium border border-slate-700 focus-visible:outline focus-visible:outline-amber-400"
+        >
+          {isHindi ? 'रंग (T)' : 'Colors (T)'}
         </button>
       </div>
 

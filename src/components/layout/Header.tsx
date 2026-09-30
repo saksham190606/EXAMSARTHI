@@ -76,6 +76,8 @@ export function Header() {
         else if (target === 'SETTINGS') router.push('/settings');
         else if (target === 'RESULTS') router.push('/results');
         else if (target === 'LOGIN') router.push('/login');
+        else if (target === 'SIGNUP') router.push('/signup');
+        else if (target === 'LOGOUT') handleSignOut();
         else if (typeof target === 'string' && target.startsWith('/')) router.push(target);
       }
     };

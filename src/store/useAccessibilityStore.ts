@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export type TextSize = 'default' | 'large' | 'xlarge';
 export type Contrast = 'default' | 'high';
+export type ColorTheme = 'default' | 'deuteranopia' | 'tritanopia' | 'monochrome' | 'sepia';
 export type VoiceSpeed = 'slow' | 'normal' | 'fast';
 export type Language = 'en' | 'hi';
 export type AccessibilityMode = 'voice' | 'keyboard';
@@ -10,6 +11,7 @@ export type AccessibilityMode = 'voice' | 'keyboard';
 interface AccessibilityState {
   textSize: TextSize;
   contrast: Contrast;
+  colorTheme: ColorTheme;
   reducedMotion: boolean;
   audioAssistance: boolean;
   autoReadQuestions: boolean;
@@ -26,6 +28,7 @@ interface AccessibilityState {
   // Actions
   setTextSize: (size: TextSize) => void;
   setContrast: (contrast: Contrast) => void;
+  setColorTheme: (theme: ColorTheme) => void;
   setReducedMotion: (enabled: boolean) => void;
   setAudioAssistance: (enabled: boolean) => void;
   setAutoReadQuestions: (enabled: boolean) => void;
@@ -45,6 +48,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
     (set) => ({
       textSize: 'default',
       contrast: 'default',
+      colorTheme: 'default',
       reducedMotion: false,
       audioAssistance: true,
       autoReadQuestions: true,
@@ -60,6 +64,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
 
       setTextSize: (size) => set({ textSize: size }),
       setContrast: (contrast) => set({ contrast: contrast }),
+      setColorTheme: (theme) => set({ colorTheme: theme }),
       setReducedMotion: (enabled) => set({ reducedMotion: enabled }),
       setAudioAssistance: (enabled) => set({ audioAssistance: enabled }),
       setAutoReadQuestions: (enabled) => set({ autoReadQuestions: enabled }),

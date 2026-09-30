@@ -1575,6 +1575,8 @@ class VoiceNavigationEngine {
       "NAVIGATE_RESULTS",
       "NAVIGATE_SETTINGS",
       "NAVIGATE_LOGIN",
+      "NAVIGATE_SIGNUP",
+      "LOGOUT",
       "SWITCH_TO_HINDI",
       "SWITCH_TO_ENGLISH"
     ].includes(recognized.intent);
@@ -1616,6 +1618,47 @@ class VoiceNavigationEngine {
       case "NAVIGATE_LOGIN":
         this.navigate("/login", isHi ? recognized.announcementHi : recognized.announcementEn);
         return;
+
+      case "NAVIGATE_SIGNUP":
+        this.navigate("/signup", isHi ? recognized.announcementHi : recognized.announcementEn);
+        return;
+
+      case "LOGOUT": {
+        if (isExamSessionActive()) {
+          const lockMsg = isHi
+            ? "सक्रिय परीक्षा के दौरान लॉगआउट वर्जित है। कृपया पहले परीक्षा सबमिट करें।"
+            : "Logout is disabled during an active examination. Please submit your exam first.";
+          speak(lockMsg, { langOverride: isHi ? "hi-IN" : "en-US" });
+          return;
+        }
+
+        const logoutMsg = isHi ? "लॉगआउट किया जा रहा है..." : "Logging you out of ExamSarthi.";
+        speak(logoutMsg, {
+          langOverride: isHi ? "hi-IN" : "en-US",
+          onEnd: () => {
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.removeItem("examsarthi_demo_auth");
+                document.cookie = "examsarthi_demo_auth=; path=/; max-age=0; SameSite=Lax";
+                fetch("/api/auth/demo-session", { method: "DELETE" }).catch(() => {});
+              } catch (_) {}
+              window.dispatchEvent(new CustomEvent("examsarthi-logout"));
+              window.location.href = "/login";
+            }
+          },
+        });
+        setTimeout(() => {
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.removeItem("examsarthi_demo_auth");
+              document.cookie = "examsarthi_demo_auth=; path=/; max-age=0; SameSite=Lax";
+              fetch("/api/auth/demo-session", { method: "DELETE" }).catch(() => {});
+            } catch (_) {}
+            window.location.href = "/login";
+          }
+        }, 1200);
+        return;
+      }
 
       case "NAVIGATE_BACK": {
         const inExam = typeof window !== "undefined" && window.location.pathname.startsWith("/exam");
