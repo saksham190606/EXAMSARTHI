@@ -57,6 +57,9 @@ function scheduleRecognitionRestart(delayMs: number): void {
   if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
     return;
   }
+  if (typeof window !== 'undefined' && (window as any).__examsarthi_brief_speaking) {
+    return;
+  }
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'scheduleRecognitionRestart', delayMs, isListeningGlobal, globalRecognitionExists: !!globalRecognition });
   recognitionRetryTimer = setTimeout(() => {
     const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
@@ -206,9 +209,10 @@ export function stopSpeaking(expectedGeneration?: number): void {
   notifyState();
 
   const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
-  if (isAlwaysOn) {
+  const isBriefSpeaking = typeof window !== 'undefined' && Boolean((window as any).__examsarthi_brief_speaking);
+  if (isAlwaysOn && !isBriefSpeaking) {
     setTimeout(() => {
-      if (!isSpeakingGlobal) {
+      if (!isSpeakingGlobal && !((window as any).__examsarthi_brief_speaking)) {
         startListening(activeLang);
       }
     }, 100);
@@ -298,9 +302,10 @@ function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePr
 
     // Auto-resume microphone: always keep mic alive, paused only when voice companion is speaking
     const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
-    if (!isSpeakingGlobal && (wasListeningBefore || isAlwaysOn)) {
+    const isBriefSpeaking = typeof window !== 'undefined' && Boolean((window as any).__examsarthi_brief_speaking);
+    if (!isSpeakingGlobal && !isBriefSpeaking && (wasListeningBefore || isAlwaysOn)) {
       setTimeout(() => {
-        if (!isSpeakingGlobal) {
+        if (!isSpeakingGlobal && !((window as any).__examsarthi_brief_speaking)) {
           startListening(activeLang);
         }
       }, 100);
@@ -466,6 +471,10 @@ export function startListening(
 ): void {
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal, explicitSession: options.explicitSession });
   if (typeof window === 'undefined') return;
+  if ((window as any).__examsarthi_brief_speaking && !options.explicitSession) {
+    console.log('[EXAMSARTHI VOICE DEBUG] Suppressing startListening while launch brief is actively speaking');
+    return;
+  }
   const isLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
   if (useAccessibilityStore.getState().accessibilityMode === 'keyboard' && !options.explicitSession && !isLanding) {
     (window as any).__alwaysListening = false;
@@ -509,6 +518,10 @@ export function startListening(
     let lastDeliveredTime = 0;
 
     recognition.onresult = (event: any) => {
+      if (typeof window !== 'undefined' && (window as any).__examsarthi_brief_speaking) {
+        return;
+      }
+
       // Only act on final results
       const lastResult = event.results[event.results.length - 1];
       if (!lastResult) return;
@@ -528,6 +541,16 @@ export function startListening(
 
       const lower = transcript.toLowerCase().trim();
       if (!lower) return;
+
+      // Discard cached/ambient audio delivered within 400ms of landing mic activation
+      const isLandingPage = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
+      if (isLandingPage) {
+        const activatedAt = (typeof window !== 'undefined' && (window as any).__examsarthi_mic_active_at) || 0;
+        if (activatedAt && Date.now() - activatedAt < 400) {
+          console.log('[VoiceEngine] Discarded cached surrounding audio right after landing activation:', lower);
+          return;
+        }
+      }
 
       console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'final-transcript-received', transcript: lower.substring(0, 50) });
 

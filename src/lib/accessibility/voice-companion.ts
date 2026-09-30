@@ -1431,6 +1431,9 @@ class VoiceNavigationEngine {
 
   public startAlwaysOnListening(): void {
     if (!isSpeechRecognitionSupported()) return;
+    if (typeof window !== 'undefined' && (window as any).__examsarthi_brief_speaking) {
+      return;
+    }
     const isLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
     if (!isLanding && useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
       this.isListeningExplicitly = false;
@@ -1456,6 +1459,11 @@ class VoiceNavigationEngine {
   public async processCommand(rawInput: string) {
     if (!rawInput || !rawInput.trim()) return;
 
+    // Discard any audio delivered while the launch brief is actively playing
+    if (typeof window !== "undefined" && (window as any).__examsarthi_brief_speaking) {
+      return;
+    }
+
     // Isolate login page: login page has its own dedicated voice state machine.
     // Never run global companion commands or speak the "You can say Dashboard..." fallback on login page.
     if (typeof window !== "undefined" && window.location.pathname.startsWith('/login')) {
@@ -1469,6 +1477,13 @@ class VoiceNavigationEngine {
     // to choose between Voice Accessibility and Keyboard Navigation, or say Login.
     const isLanding = typeof window !== "undefined" && (window.location.pathname === '/' || window.location.pathname === '');
     if (isLanding) {
+      // Discard cached/ambient audio delivered within 400ms of landing mic activation
+      const activatedAt = (typeof window !== 'undefined' && (window as any).__examsarthi_mic_active_at) || 0;
+      if (activatedAt && Date.now() - activatedAt < 400) {
+        console.log('[VoiceCompanion] Discarding early cached audio right after landing mic activation:', input);
+        return;
+      }
+
       const lower = input.toLowerCase();
 
       const isKeyboardChoice =
@@ -1521,19 +1536,32 @@ class VoiceNavigationEngine {
         return;
       }
 
-      // If candidate said something unrecognized on landing page, prompt back gently
-      const promptAgain = isHi
-        ? "कृपया 'वॉइस' या 'कीबोर्ड' बोलें, अथवा 'लॉगिन' बोलें।"
-        : "Please say 'Voice' for voice accessibility, 'Keyboard' for keyboard navigation, or 'Login'.";
+      // If candidate explicitly asked for help or options, prompt back gently
+      const isHelpOrOptions =
+        lower.includes('help') ||
+        lower.includes('option') ||
+        lower.includes('choice') ||
+        lower.includes('madad') ||
+        lower.includes('मदद') ||
+        lower.includes('विकल्प') ||
+        lower.includes('सुझाव') ||
+        lower.includes('what to do') ||
+        lower.includes('kya kare');
 
-      this.stopListening();
-      speak(promptAgain, {
-        lang: isHi ? 'hi-IN' : 'en-US',
-        onEnd: () => {
-          unlockAudioContext();
-          this.startAlwaysOnListening();
-        }
-      });
+      if (isHelpOrOptions) {
+        const promptAgain = isHi
+          ? "कृपया 'वॉइस' या 'कीबोर्ड' बोलें, अथवा 'लॉगिन' बोलें।"
+          : "Please say 'Voice' for voice accessibility, 'Keyboard' for keyboard navigation, or 'Login'.";
+
+        this.stopListening();
+        speak(promptAgain, {
+          lang: isHi ? 'hi-IN' : 'en-US',
+          onEnd: () => {
+            unlockAudioContext();
+            this.startAlwaysOnListening();
+          }
+        });
+      }
       return;
     }
 

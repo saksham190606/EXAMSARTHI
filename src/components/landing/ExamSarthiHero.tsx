@@ -11,6 +11,7 @@ import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission, fetchAvailableVoices } from '@/lib/accessibility/mic-permission';
 import { voiceEngine, speak, forceSpeak, stopSpeech, unlockAudioContext } from '@/lib/accessibility/voice-companion';
 import { subscribe } from '@/lib/voice/useVoiceEngine';
+import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 import { cn } from '@/lib/utils';
 
 import { 
@@ -107,8 +108,14 @@ export default function ExamSarthiHero() {
   const hasSpokenBriefSuccessfullyRef = useRef(false);
   const isSpeakingBriefRef = useRef(false);
   const isNavigatingToLoginRef = useRef(false);
+  const micActivatedTimestampRef = useRef<number>(0);
 
   const toggleListening = useCallback(() => {
+    const now = Date.now();
+    micActivatedTimestampRef.current = now;
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_mic_active_at = now;
+    }
     voiceEngine.toggle();
   }, []);
 
@@ -120,9 +127,15 @@ export default function ExamSarthiHero() {
     // Reset mode to voice while on landing page so speech recognition is not blocked
     useAccessibilityStore.getState().setAccessibilityMode('voice');
 
-    // Strictly stop microphone while the launch brief is playing so it doesn't listen to itself
+    // Strictly stop microphone while the launch brief is playing so it doesn't listen to itself or room
     voiceEngine.stop();
     useAccessibilityStore.getState().setIsListeningCommands(false);
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_brief_speaking = true;
+      (window as any).__alwaysListening = false;
+      (window as any).__examsarthi_mic_active_at = 0;
+    }
+    micActivatedTimestampRef.current = 0;
 
     // Eagerly ensure voices are retrieved & mic permission requested
     fetchAvailableVoices(600).catch(() => {});
@@ -141,14 +154,29 @@ export default function ExamSarthiHero() {
       briefFinished = true;
       isSpeakingBriefRef.current = false;
       hasSpokenBriefSuccessfullyRef.current = true;
+      if (typeof window !== 'undefined') {
+        (window as any).__examsarthi_brief_speaking = false;
+      }
 
       // ONLY AFTER completing the launch brief: open the mic for user to say their choice!
       unlockAudioContext();
       requestMicPermission().catch(() => {});
+
+      const now = Date.now();
+      micActivatedTimestampRef.current = now;
+      if (typeof window !== 'undefined') {
+        (window as any).__examsarthi_mic_active_at = now;
+      }
+
+      // Play pleasant earcon / chime to confirm mic is active
+      try {
+        playVoiceFeedbackChime();
+      } catch (_) {}
+
       useAccessibilityStore.getState().setIsListeningCommands(true);
       setTimeout(() => {
         voiceEngine.startAlwaysOnListening();
-      }, 150);
+      }, 200);
     };
 
     forceSpeak(
@@ -168,7 +196,7 @@ export default function ExamSarthiHero() {
         console.log("[ExamSarthiHero] Fallback timeout opening mic");
         onBriefComplete();
       }
-    }, 16000);
+    }, 26000);
   }, [isHindi]);
 
   // Mode Selection Handler: Voice or Keyboard
@@ -266,6 +294,17 @@ export default function ExamSarthiHero() {
     let clearTimer: NodeJS.Timeout | null = null;
 
     return subscribe((transcript) => {
+      // Discard any residual audio buffer / cached transcripts captured before or within 400ms of activation
+      const activatedAt = micActivatedTimestampRef.current || (typeof window !== 'undefined' ? (window as any).__examsarthi_mic_active_at : 0);
+      if (
+        isSpeakingBriefRef.current || 
+        !hasSpokenBriefSuccessfullyRef.current || 
+        !activatedAt || 
+        (Date.now() - activatedAt < 400)
+      ) {
+        return;
+      }
+
       setStatusMessage(transcript);
       if (clearTimer) clearTimeout(clearTimer);
       clearTimer = setTimeout(() => {
@@ -462,6 +501,14 @@ export default function ExamSarthiHero() {
             onClick={() => {
               unlockAudioContext();
               requestMicPermission().catch(() => {});
+              const now = Date.now();
+              micActivatedTimestampRef.current = now;
+              if (typeof window !== 'undefined') {
+                (window as any).__examsarthi_mic_active_at = now;
+              }
+              try {
+                playVoiceFeedbackChime();
+              } catch (_) {}
               voiceEngine.startAlwaysOnListening();
             }}
             title="Click to activate voice commands or hear launch overview"
