@@ -130,6 +130,9 @@ function LoginForm() {
   const { signIn, user, loading: authLoading } = useAuth();
   const isHindi = useAccessibilityStore((s) => s.language === 'hi');
 
+  const accessibilityMode = useAccessibilityStore((s) => s.accessibilityMode);
+  const isKeyboardMode = accessibilityMode === 'keyboard';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -150,8 +153,13 @@ function LoginForm() {
     }
   }, [user, authLoading, redirectTo]);
 
-  // 1. Initial Voice Greeting with Demo Credentials & User ID Prompt
+  // 1. Initial Voice Greeting with Demo Credentials & User ID Prompt (Voice mode only)
   useEffect(() => {
+    if (isKeyboardMode) {
+      hasSpokenWelcomeRef.current = true;
+      return;
+    }
+
     const triggerWelcomePrompt = () => {
       if (hasSpokenWelcomeRef.current) return;
       hasSpokenWelcomeRef.current = true;
@@ -197,10 +205,12 @@ function LoginForm() {
       window.removeEventListener('pointerdown', handleGesture);
       window.removeEventListener('click', handleGesture);
     };
-  }, [isHindi]);
+  }, [isHindi, isKeyboardMode]);
 
-  // 2. Continuous Voice Recognition Listener for User ID and Password
+  // 2. Continuous Voice Recognition Listener for User ID and Password (Voice mode only)
   useEffect(() => {
+    if (isKeyboardMode) return;
+
     return subscribe(async (transcript) => {
       const lower = transcript.toLowerCase().trim();
       if (!lower) return;
@@ -359,12 +369,21 @@ function LoginForm() {
           Sign in to access your examinations, practice modules, and performance analytics.
         </CardDescription>
 
-        {/* Demo Credentials & Voice Guidance Box */}
+        {/* Demo Credentials Guidance Box */}
         <div className="rounded-[2px] border border-primary/30 bg-primary/10 px-3 py-2 text-left text-xs">
           <div className="flex items-center justify-between font-semibold text-foreground">
             <span className="flex items-center gap-1.5 text-primary-foreground dark:text-primary">
-              <Mic className="h-3.5 w-3.5 animate-pulse text-emerald-500" />
-              Voice Login Active
+              {isKeyboardMode ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Keyboard Mode Active
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3.5 w-3.5 animate-pulse text-emerald-500" />
+                  Voice Login Active
+                </>
+              )}
             </span>
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">DEMO</span>
           </div>
@@ -372,7 +391,7 @@ function LoginForm() {
             <span>User ID: <strong className="font-mono text-foreground font-semibold">priyansh01</strong></span>
             <span>Password: <strong className="font-mono text-foreground font-semibold">12345</strong></span>
           </div>
-          {voicePromptMessage && (
+          {!isKeyboardMode && voicePromptMessage && (
             <div className="mt-1.5 text-[11px] font-medium text-primary-foreground dark:text-primary border-t border-primary/20 pt-1">
               {voicePromptMessage}
             </div>

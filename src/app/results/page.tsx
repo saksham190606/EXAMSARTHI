@@ -675,8 +675,12 @@ function ResultsContent() {
 
   }, [finalState, attemptId]);
 
-  // Automated voice guidance: speaks details of candidate's past latest 2 results upon navigating to /results
+  // Automated voice guidance: speaks details of candidate's past latest 2 results upon navigating to /results (Voice mode only)
   useEffect(() => {
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+      hasSpokenOverviewRef.current = true;
+      return;
+    }
     if (hasSpokenOverviewRef.current) return;
     if (loadingAttempt) return;
 
@@ -737,6 +741,7 @@ function ResultsContent() {
   // Voice selection listener: candidate speaks exam name or ordinal to inspect that attempt throughout
   const handleVoiceExamSelection = React.useCallback((transcript: string) => {
     if (!transcript) return;
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return;
     const history = getPerformanceHistory();
     if (history.length === 0) return;
 
@@ -761,6 +766,7 @@ function ResultsContent() {
   }, [isHindi, loadProfileAsActiveResult]);
 
   useEffect(() => {
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return;
     // 1. Subscribe to speech recognition transcripts
     const unsubscribeSpeech = subscribe((text: string) => {
       handleVoiceExamSelection(text);

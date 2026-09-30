@@ -37,6 +37,8 @@ export interface RecognizedIntent {
   optionLetter?: 'A' | 'B' | 'C' | 'D';
 }
 
+import { useAccessibilityStore } from '@/store/useAccessibilityStore';
+
 /**
  * Immediate acoustic chime using Web Audio API.
  * Provides instant feedback (< 5ms) to visually impaired candidates without external audio files.
@@ -44,6 +46,9 @@ export interface RecognizedIntent {
 export function playVoiceFeedbackChime(): void {
   if (typeof window === 'undefined') return;
   try {
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+      return;
+    }
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();

@@ -5,6 +5,7 @@ export type TextSize = 'default' | 'large' | 'xlarge';
 export type Contrast = 'default' | 'high';
 export type VoiceSpeed = 'slow' | 'normal' | 'fast';
 export type Language = 'en' | 'hi';
+export type AccessibilityMode = 'voice' | 'keyboard';
 
 interface AccessibilityState {
   textSize: TextSize;
@@ -20,6 +21,7 @@ interface AccessibilityState {
   hasAnnouncedWelcome: boolean;
   isListeningCommands: boolean;
   language: Language;
+  accessibilityMode: AccessibilityMode;
 
   // Actions
   setTextSize: (size: TextSize) => void;
@@ -35,6 +37,7 @@ interface AccessibilityState {
   setHasAnnouncedWelcome: (announced: boolean) => void;
   setIsListeningCommands: (listening: boolean) => void;
   setLanguage: (lang: Language) => void;
+  setAccessibilityMode: (mode: AccessibilityMode) => void;
 }
 
 export const useAccessibilityStore = create<AccessibilityState>()(
@@ -53,6 +56,7 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       hasAnnouncedWelcome: false,
       isListeningCommands: true,
       language: 'en',
+      accessibilityMode: 'voice',
 
       setTextSize: (size) => set({ textSize: size }),
       setContrast: (contrast) => set({ contrast: contrast }),
@@ -74,6 +78,36 @@ export const useAccessibilityStore = create<AccessibilityState>()(
       setHasAnnouncedWelcome: (announced) => set({ hasAnnouncedWelcome: announced }),
       setIsListeningCommands: (listening) => set({ isListeningCommands: listening }),
       setLanguage: (lang) => set({ language: lang }),
+      setAccessibilityMode: (mode) => {
+        if (mode === 'keyboard') {
+          if (typeof window !== 'undefined') {
+            (window as any).__alwaysListening = false;
+            try {
+              window.speechSynthesis?.cancel();
+            } catch (_) {}
+          }
+          set({
+            accessibilityMode: 'keyboard',
+            voiceModeEnabled: false,
+            audioAssistance: false,
+            enableVoiceCommands: false,
+            autoReadQuestions: false,
+            isListeningCommands: false,
+          });
+        } else {
+          if (typeof window !== 'undefined') {
+            (window as any).__alwaysListening = true;
+          }
+          set({
+            accessibilityMode: 'voice',
+            voiceModeEnabled: true,
+            audioAssistance: true,
+            enableVoiceCommands: true,
+            autoReadQuestions: true,
+            isListeningCommands: true,
+          });
+        }
+      },
     }),
     {
       name: 'examsarthi-accessibility', // unique name for localStorage key
@@ -88,13 +122,29 @@ export const useAccessibilityStore = create<AccessibilityState>()(
         speechRate: state.speechRate,
         selectedVoiceURI: state.selectedVoiceURI,
         language: state.language,
+        accessibilityMode: state.accessibilityMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          state.enableVoiceCommands = true;
-          state.voiceModeEnabled = true;
-          state.isListeningCommands = true;
-          state.audioAssistance = true;
+          if (state.accessibilityMode === 'keyboard') {
+            state.voiceModeEnabled = false;
+            state.audioAssistance = false;
+            state.enableVoiceCommands = false;
+            state.isListeningCommands = false;
+            state.autoReadQuestions = false;
+            if (typeof window !== 'undefined') {
+              (window as any).__alwaysListening = false;
+            }
+          } else {
+            state.accessibilityMode = 'voice';
+            state.enableVoiceCommands = true;
+            state.voiceModeEnabled = true;
+            state.isListeningCommands = true;
+            state.audioAssistance = true;
+            if (typeof window !== 'undefined') {
+              (window as any).__alwaysListening = true;
+            }
+          }
         }
       },
     }

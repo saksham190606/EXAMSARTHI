@@ -236,6 +236,10 @@ export function useVoiceCommands(config: VoiceCommandConfig) {
 
 
   const startListening = useCallback(() => {
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+      setIsListening(false);
+      return;
+    }
     const isHi = useAccessibilityStore.getState().language === 'hi';
     if (!isSupported) {
       setIsListening(false);

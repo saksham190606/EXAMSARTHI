@@ -5,11 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic } from 'lucide-react';
+import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic, Keyboard } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
 import { requestMicPermission } from '@/lib/accessibility/mic-permission';
-import { voiceEngine, speak, forceSpeak, unlockAudioContext } from '@/lib/accessibility/voice-companion';
+import { voiceEngine, speak, forceSpeak, stopSpeech, unlockAudioContext } from '@/lib/accessibility/voice-companion';
 import { subscribe } from '@/lib/voice/useVoiceEngine';
 import { cn } from '@/lib/utils';
 
@@ -122,8 +122,8 @@ export default function ExamSarthiHero() {
     useAccessibilityStore.getState().setIsListeningCommands(false);
 
     const briefText = isHindi
-      ? "एग्जामसारथी में आपका स्वागत है। दृष्टिबाधित अभ्यर्थियों के लिए भारत का सुलभ परीक्षा और अभ्यास मंच। क्या आप लॉगिन करना चाहते हैं? कृपया 'लॉगिन' बोलें।"
-      : "Welcome to ExamSarthi, India's accessible examination and practice platform for visually impaired candidates. Would you like to log in to your account? Please say 'Login'.";
+      ? "एग्जामसारथी में आपका स्वागत है। दृष्टिबाधित अभ्यर्थियों के लिए भारत का सुलभ परीक्षा और अभ्यास मंच। क्या आप वॉइस एक्सेसिबिलिटी या कीबोर्ड और नेविगेशन के साथ आगे बढ़ना चाहते हैं? कृपया 'वॉइस एक्सेसिबिलिटी' या 'कीबोर्ड नेविगेशन' बोलें, अथवा कीबोर्ड पर V या K दबाएं।"
+      : "Welcome to ExamSarthi, India's accessible examination and practice platform for visually impaired candidates. Would you like to proceed with voice accessibility or keyboard navigation? Please say 'Voice accessibility' or 'Keyboard navigation', or press V for voice or K for keyboard.";
 
     unlockAudioContext();
     isSpeakingBriefRef.current = true;
@@ -133,7 +133,7 @@ export default function ExamSarthiHero() {
       () => {
         isSpeakingBriefRef.current = false;
         hasSpokenBriefSuccessfullyRef.current = true;
-        // ONLY AFTER completing the launch brief: open the mic for user to say "Login"!
+        // ONLY AFTER completing the launch brief: open the mic for user to say their choice!
         unlockAudioContext();
         setTimeout(() => {
           voiceEngine.startAlwaysOnListening();
@@ -146,6 +146,61 @@ export default function ExamSarthiHero() {
       }
     );
   }, [isHindi]);
+
+  // Mode Selection Handler: Voice or Keyboard
+  const handleSelectMode = useCallback((mode: 'voice' | 'keyboard') => {
+    if (isNavigatingToLoginRef.current) return;
+    isNavigatingToLoginRef.current = true;
+
+    useAccessibilityStore.getState().setAccessibilityMode(mode);
+
+    if (mode === 'keyboard') {
+      stopSpeech();
+      try {
+        window.speechSynthesis?.cancel();
+      } catch (_) {}
+      voiceEngine.stop();
+      if (typeof window !== 'undefined') {
+        (window as any).__alwaysListening = false;
+      }
+      router.push('/login');
+    } else {
+      unlockAudioContext();
+      const confirmMsg = isHindi
+        ? "वॉइस एक्सेसिबिलिटी चुनी गई। लॉगिन पृष्ठ खोला जा रहा है।"
+        : "Voice accessibility selected. Opening login page.";
+      speak(confirmMsg, {
+        lang: isHindi ? 'hi-IN' : 'en-US',
+        onEnd: () => {
+          router.push('/login');
+        },
+      });
+      setTimeout(() => {
+        router.push('/login');
+      }, 1200);
+    }
+  }, [router, isHindi]);
+
+  // Keyboard shortcut listener on landing page (V for voice, K for keyboard, 1 or 2)
+  useEffect(() => {
+    const handleKeySelect = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.key === 'v' || e.key === 'V' || e.key === '1') {
+        e.preventDefault();
+        handleSelectMode('voice');
+      } else if (e.key === 'k' || e.key === 'K' || e.key === '2') {
+        e.preventDefault();
+        handleSelectMode('keyboard');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeySelect);
+    return () => window.removeEventListener('keydown', handleKeySelect);
+  }, [handleSelectMode]);
 
   useEffect(() => {
     // Attempt automatic playback shortly after mount
@@ -175,7 +230,7 @@ export default function ExamSarthiHero() {
     };
   }, [playBrief]);
 
-  // 2. Continuous Voice Recognition Handler for "Login"
+  // 2. Continuous Voice Recognition Handler for Accessibility Choice
   useEffect(() => {
     let clearTimer: NodeJS.Timeout | null = null;
 
@@ -187,29 +242,46 @@ export default function ExamSarthiHero() {
       }, 4500);
 
       const lower = transcript.toLowerCase().trim();
+      if (!lower) return;
 
-      const isLoginMatch =
-        lower.includes('login') ||
-        lower.includes('log in') ||
-        lower.includes('sign in') ||
-        lower.includes('लॉगिन') ||
-        lower.includes('साइन इन');
+      // Check for Keyboard & Navigation selection
+      const isKeyboardChoice =
+        lower.includes('keyboard and navigation') ||
+        lower.includes('keyboard navigation') ||
+        lower.includes('keyboard and navigations') ||
+        lower.includes('keyboard mode') ||
+        lower.includes('keyboard') ||
+        lower.includes('कीबोर्ड') ||
+        lower.includes('नेविगेशन') ||
+        lower.includes('navigation') ||
+        lower.includes('option 2') ||
+        lower.includes('option two') ||
+        lower.includes('विकल्प 2') ||
+        lower.includes('दूसरा') ||
+        lower === 'two' ||
+        lower === '2';
 
-      if (isLoginMatch && !isNavigatingToLoginRef.current) {
-        isNavigatingToLoginRef.current = true;
-        speak(
-          isHindi ? "लॉगिन पृष्ठ खोला जा रहा है" : "Opening login page",
-          {
-            lang: isHindi ? 'hi-IN' : 'en-US',
-            onEnd: () => {
-              router.push('/login');
-            },
-          }
-        );
-        router.push('/login');
+      // Check for Voice Accessibility selection
+      const isVoiceChoice =
+        lower.includes('voice accessibility') ||
+        lower.includes('voice mode') ||
+        lower.includes('voice') ||
+        lower.includes('वॉइस') ||
+        lower.includes('वाइस') ||
+        lower.includes('option 1') ||
+        lower.includes('option one') ||
+        lower.includes('विकल्प 1') ||
+        lower.includes('पहला') ||
+        lower === 'one' ||
+        lower === '1';
+
+      if (isKeyboardChoice) {
+        handleSelectMode('keyboard');
+      } else if (isVoiceChoice || lower.includes('login') || lower.includes('लॉगिन')) {
+        handleSelectMode('voice');
       }
     });
-  }, [router, isHindi]);
+  }, [handleSelectMode]);
 
   return (
     <div className="relative w-full overflow-hidden bg-transparent text-black dark:text-white transition-colors">
@@ -280,11 +352,101 @@ export default function ExamSarthiHero() {
               : "High-contrast Computer Based Tests, conversational voice navigation, and multimodal Vision AI scribes engineered for visually impaired candidates."}
           </motion.p>
 
+          {/* Accessibility Mode Selection Prompt & Cards */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-8 flex flex-wrap items-center justify-center gap-4"
+            transition={{ duration: 0.6, delay: 0.25 }}
+            className="mt-8 w-full max-w-2xl px-2"
+          >
+            <div className="text-center mb-3">
+              <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#ffed00]/20 text-black dark:text-[#ffed00] border border-[#ffed00]/40">
+                <Sparkles className="h-3.5 w-3.5" />
+                {isHindi ? "कृपया अपनी सुलभता प्रणाली चुनें (बोलें या की दबाएं)" : "Choose Your Accessibility System (Speak or Press Key)"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Option 1: Voice Accessibility */}
+              <button
+                type="button"
+                onClick={() => handleSelectMode('voice')}
+                className="group relative flex flex-col items-start p-5 rounded-xl border-2 border-[#ffed00] bg-black/5 dark:bg-[#161616] text-left transition-all hover:bg-[#ffed00]/10 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#ffed00] cursor-pointer"
+                aria-label={isHindi ? "वॉइस एक्सेसिबिलिटी मोड चुनें, V दबाएं या वॉइस बोलें" : "Select Voice Accessibility Mode, press V or say Voice"}
+              >
+                <div className="flex w-full items-center justify-between mb-3">
+                  <div className="p-2 rounded-lg bg-[#ffed00] text-black">
+                    <Volume2 className="h-5 w-5" />
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-[#ffed00] text-black tracking-wide">
+                    Press 'V' or Say 'Voice'
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-black dark:text-white group-hover:text-[#d4af37] dark:group-hover:text-[#ffed00] transition-colors">
+                  {isHindi ? "वॉइस एक्सेसिबिलिटी" : "Voice Accessibility"}
+                </h3>
+                <p className="mt-1 text-xs text-black/70 dark:text-white/70 leading-relaxed">
+                  {isHindi
+                    ? "पूर्ण ऑडियो मार्गदर्शन, हैंड्स-फ्री वॉइस कमांड और विजन एआई चित्र स्क्राइब।"
+                    : "Complete audio narration, hands-free spoken exam commands, and Vision AI diagram scribe."}
+                </p>
+                <span className="mt-3 text-xs font-semibold text-[#d4af37] dark:text-[#ffed00] flex items-center gap-1">
+                  {isHindi ? "वॉइस मोड से लॉगिन करें" : "Proceed with Voice"} &rarr;
+                </span>
+              </button>
+
+              {/* Option 2: Keyboard & Navigation */}
+              <button
+                type="button"
+                onClick={() => handleSelectMode('keyboard')}
+                className="group relative flex flex-col items-start p-5 rounded-xl border-2 border-black/20 dark:border-white/20 bg-black/5 dark:bg-[#161616] text-left transition-all hover:border-black/50 dark:hover:border-white/50 hover:bg-black/10 dark:hover:bg-white/5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#ffed00] cursor-pointer"
+                aria-label={isHindi ? "कीबोर्ड और नेविगेशन मोड चुनें, K दबाएं या कीबोर्ड बोलें" : "Select Keyboard and Navigation Mode, press K or say Keyboard"}
+              >
+                <div className="flex w-full items-center justify-between mb-3">
+                  <div className="p-2 rounded-lg bg-black/10 dark:bg-white/10 text-black dark:text-white">
+                    <Keyboard className="h-5 w-5" />
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold border border-black/30 dark:border-white/30 text-black dark:text-white tracking-wide">
+                    Press 'K' or Say 'Keyboard'
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-black dark:text-white group-hover:underline transition-all">
+                  {isHindi ? "कीबोर्ड और नेविगेशन" : "Keyboard & Navigation"}
+                </h3>
+                <p className="mt-1 text-xs text-black/70 dark:text-white/70 leading-relaxed">
+                  {isHindi
+                    ? "मानक कीबोर्ड शॉर्टकट, टैब नियंत्रण, कोई वॉइस एजेंट नहीं।"
+                    : "Standard keyboard controls, Tab focus navigation, with zero voice agent prompts."}
+                </p>
+                <span className="mt-3 text-xs font-semibold text-black dark:text-white flex items-center gap-1">
+                  {isHindi ? "कीबोर्ड मोड से लॉगिन करें" : "Proceed with Keyboard"} &rarr;
+                </span>
+              </button>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={() => playBrief(true)}
+            title="Click to hear launch overview"
+            className="mt-5 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md cursor-pointer hover:border-[#ffed00] transition-colors"
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>
+              {statusMessage
+                ? (isHindi ? `सुना: "${statusMessage}"` : `Heard: "${statusMessage}"`)
+                : (isHindi 
+                    ? "बोलें: 'वॉइस' (V दबाएं) अथवा 'कीबोर्ड' (K दबाएं)" 
+                    : "Say: 'Voice' (Press V) or 'Keyboard' (Press K)")}
+            </span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.35 }}
+            className="mt-6 flex flex-wrap items-center justify-center gap-4"
           >
             <Link 
               className="inline-flex items-center gap-2 rounded-[2px] bg-[#ffed00] px-6 py-3 text-sm font-bold text-black shadow-sm transition hover:bg-[#e6d500] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ffed00]" 
@@ -326,23 +488,6 @@ export default function ExamSarthiHero() {
               </span>
             </button>
           </motion.div>
-
-          {isListening && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={() => playBrief(true)}
-              title="Click to hear launch overview"
-              className="mt-4 inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-neutral-950/90 border border-[#ffed00]/50 text-xs text-white shadow-lg backdrop-blur-md cursor-pointer hover:border-[#ffed00] transition-colors"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>
-                {statusMessage
-                  ? (isHindi ? `सुना: "${statusMessage}" — 'लॉगिन' बोलें` : `Heard: "${statusMessage}" — Say 'Login'`)
-                  : (isHindi ? "बोलें: 'लॉगिन' अपने खाते में जाने के लिए" : "Say 'Login' to sign in to your account")}
-              </span>
-            </motion.div>
-          )}
 
           <motion.div
             initial={{ opacity: 0 }}

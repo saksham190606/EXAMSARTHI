@@ -63,8 +63,10 @@ export function useVoiceMode({
 }: UseVoiceModeProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
+  const accessibilityMode = useAccessibilityStore((s) => s.accessibilityMode);
+  const isKeyboardMode = accessibilityMode === 'keyboard';
 
-  const [isActive, setIsActive] = useState<boolean>(true);
+  const [isActive, setIsActive] = useState<boolean>(!isKeyboardMode);
   const [status, setStatus] = useState<VoiceStatus>('Listening');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
@@ -841,9 +843,10 @@ export function useVoiceMode({
     return () => window.removeEventListener('ai_voice_command', handleVoiceCommandEvent);
   }, [handleNextQuestion, handlePrevQuestion, handleToggleFlag, readCurrentQuestion]);
 
-  // Auto-read question 1 on initial load
+  // Auto-read question 1 on initial load (Voice mode only)
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (isKeyboardMode) return;
     if (hasInitializedMountRef.current) return;
     if (!currentQuestion) return;
 
@@ -863,6 +866,7 @@ export function useVoiceMode({
   }, [currentQuestion, readQuestion, state.currentQuestionIndex]);
 
   useEffect(() => {
+    if (isKeyboardMode) return;
     if (!hasInitializedMountRef.current) return;
     if (userManuallyMutedRef.current || !isActive) return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;

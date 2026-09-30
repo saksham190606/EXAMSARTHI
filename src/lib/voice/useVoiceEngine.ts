@@ -54,6 +54,9 @@ function scheduleRecognitionRestart(delayMs: number): void {
   if (recognitionRetryTimer) {
     clearTimeout(recognitionRetryTimer);
   }
+  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+    return;
+  }
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'scheduleRecognitionRestart', delayMs, isListeningGlobal, globalRecognitionExists: !!globalRecognition });
   recognitionRetryTimer = setTimeout(() => {
     const isAlwaysOn = typeof window !== 'undefined' && ((window as any).__alwaysListening !== false);
@@ -213,6 +216,10 @@ export function stopSpeaking(expectedGeneration?: number): void {
 }
 
 function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; rate?: number; pitch?: number; voiceURI?: string | null } = {}): number | null {
+  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+    if (opts.onEnd) opts.onEnd();
+    return null;
+  }
   const priority = opts.priority ?? 'content';
   const wasListeningBefore = isListeningGlobal;
   const currentPriority = currentSpeechPriority ?? 'talkback';
@@ -463,6 +470,10 @@ export function startListening(
 ): void {
   console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal });
   if (typeof window === 'undefined') return;
+  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+    (window as any).__alwaysListening = false;
+    return;
+  }
   (window as any).__alwaysListening = true;
   const normalized = normalizeLanguage(lang);
   activeLang = normalized;

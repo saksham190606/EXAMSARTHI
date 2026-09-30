@@ -51,6 +51,8 @@ export function ExamInstructionScreen({
 }: ExamInstructionScreenProps) {
   const language = useAccessibilityStore((s) => s.language);
   const isHindi = language === 'hi';
+  const accessibilityMode = useAccessibilityStore((s) => s.accessibilityMode);
+  const isKeyboardMode = accessibilityMode === 'keyboard';
 
   const [isSpeakingInstructions, setIsSpeakingInstructions] = useState(false);
   const [speechCount, setSpeechCount] = useState(0);
@@ -87,9 +89,10 @@ export function ExamInstructionScreen({
       `Please say: 'start exam', 'repeat', or 'go back'.`;
   }, [examTitle, durationMinutes, questionsCount, totalMarks, resolvedMarking, isHindi]);
 
-  // Handler to speak instructions aloud
+  // Handler to speak instructions aloud (Voice mode only)
   const speakInstructionsAloud = useCallback(() => {
     if (isTransitioningRef.current) return;
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return;
 
     unlockAudioContext();
     setIsSpeakingInstructions(true);
@@ -114,6 +117,11 @@ export function ExamInstructionScreen({
     isTransitioningRef.current = true;
     stopSpeaking();
 
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+      onStartExam();
+      return;
+    }
+
     const startMsg = isHindi ? "परीक्षा शुरू की जा रही है..." : "Starting examination now...";
     setActionStatus(startMsg);
 
@@ -136,6 +144,11 @@ export function ExamInstructionScreen({
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
     stopSpeaking();
+
+    if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+      onGoBack();
+      return;
+    }
 
     const backMsg = isHindi ? "वापस जा रहे हैं..." : "Returning to portal...";
     setActionStatus(backMsg);
@@ -165,8 +178,30 @@ export function ExamInstructionScreen({
     }, 200);
   }, [isHindi, speakInstructionsAloud]);
 
-  // Mount effect: Trigger initial speech brief & voice listener
+  // Keyboard shortcut listener (Enter = Start Exam, Escape = Go Back)
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTransitioningRef.current) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleStartExam();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleGoBack();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleStartExam, handleGoBack]);
+
+  // Mount effect: Trigger initial speech brief & voice listener (Voice mode only)
+  useEffect(() => {
+    if (isKeyboardMode) {
+      hasSpokenInitialRef.current = true;
+      return;
+    }
+
     const timer = setTimeout(() => {
       if (!hasSpokenInitialRef.current) {
         hasSpokenInitialRef.current = true;
@@ -178,10 +213,12 @@ export function ExamInstructionScreen({
       clearTimeout(timer);
       stopSpeaking();
     };
-  }, [speakInstructionsAloud]);
+  }, [speakInstructionsAloud, isKeyboardMode]);
 
-  // Continuous Voice Command Listener
+  // Continuous Voice Command Listener (Voice mode only)
   useEffect(() => {
+    if (isKeyboardMode) return;
+
     const unsubscribe = subscribe((rawTranscript: string) => {
       if (isTransitioningRef.current || !rawTranscript) return;
 

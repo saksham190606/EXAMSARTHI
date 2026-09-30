@@ -73,9 +73,19 @@ export default function DashboardPage() {
     user?.email?.split("@")[0] ||
     "Candidate"
 
-  // Automated Dashboard Welcome and Voice Command Guidance
+  // Automated Dashboard Welcome and Voice Command Guidance (Voice Accessibility Mode Only)
   const hasSpokenWelcomeRef = React.useRef(false);
   useEffect(() => {
+    const isKeyboardMode = useAccessibilityStore.getState().accessibilityMode === 'keyboard';
+    if (isKeyboardMode) {
+      hasSpokenWelcomeRef.current = true;
+      voiceEngine.stop();
+      try {
+        window.speechSynthesis?.cancel();
+      } catch (_) {}
+      return;
+    }
+
     if (hasSpokenWelcomeRef.current) return;
 
     const triggerAnnouncement = () => {
@@ -109,6 +119,7 @@ export default function DashboardPage() {
     triggerAnnouncement();
 
     const handleInteraction = () => {
+      if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return;
       unlockAudioContext();
       voiceEngine.startAlwaysOnListening();
     };

@@ -18,7 +18,7 @@ import { useVoiceEngine } from '@/lib/voice/useVoiceEngine'
 import { Mic, MicOff, Volume2, ShieldAlert } from 'lucide-react'
 
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
-  const { textSize, contrast, reducedMotion, language } = useAccessibilityStore()
+  const { textSize, contrast, reducedMotion, language, accessibilityMode } = useAccessibilityStore()
   const router = useRouter()
   const pathname = usePathname()
   const [showKeyWarning, setShowKeyWarning] = useState(false)
@@ -54,8 +54,13 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     }
   }, [textSize, contrast, reducedMotion])
 
-  // STRICT GLOBAL KEYBOARD BLOCKING (100% Voice-Based Platform, Enabled ONLY during Login / Auth)
+  // STRICT GLOBAL KEYBOARD BLOCKING (Active ONLY in Voice Accessibility mode outside auth)
   useEffect(() => {
+    // If candidate selected Keyboard & Navigation Mode, NEVER intercept or block keyboard
+    if (accessibilityMode === 'keyboard') {
+      return;
+    }
+
     const handleKeyBlock = (e: KeyboardEvent) => {
       // 1. Allow developer bypasses for DevTools and page refresh
       if (
@@ -67,8 +72,14 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // 2. Allow keyboard input ONLY when user is logging in / signing up
+      // 2. Allow keyboard input when user is logging in / signing up, or on landing page to choose accessibility mode
       const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
+      const isLanding = currentPath === '/' || currentPath === '' || currentPath.endsWith(':3000/');
+      if (isLanding) {
+        // Landing page allows keyboard navigation & hotkeys (V, K, 1, 2, Enter, Tab, etc.)
+        return;
+      }
+
       const isAuthRoute = 
         currentPath.startsWith('/login') || 
         currentPath.startsWith('/signup') || 
@@ -103,17 +114,12 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         }, 3200);
 
         const isHi = useAccessibilityStore.getState().language === 'hi';
-        const isLanding = currentPath === '/' || currentPath === '' || currentPath.endsWith(':3000/');
-        if (isLanding) {
-          forceSpeak(isHi ? WELCOME_TOUR_TEXT_HI : WELCOME_TOUR_TEXT_EN, undefined, isHi ? 'hi-IN' : 'en-US');
-        } else {
-          playVoiceFeedbackChime();
-          speak(
-            isHi 
-              ? "कीबोर्ड केवल लॉगिन के समय सक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
-              : "Keyboard is enabled only for logging in. This platform is voice operated. Please speak your command."
-          );
-        }
+        playVoiceFeedbackChime();
+        speak(
+          isHi 
+            ? "कीबोर्ड केवल लॉगिन के समय सक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
+            : "Keyboard is enabled only for logging in. This platform is voice operated. Please speak your command."
+        );
       }
     };
 
@@ -127,10 +133,23 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('keypress', handleKeyBlock, { capture: true });
       if (keyWarningTimerRef.current) clearTimeout(keyWarningTimerRef.current);
     };
-  }, [pathname]);
+  }, [pathname, accessibilityMode]);
 
   // Initialize Continuous Audio Companion & Always-On Voice Navigation
   useEffect(() => {
+    // If in keyboard mode: completely shut down voice engine, speech synthesis, and listeners
+    if (accessibilityMode === 'keyboard') {
+      stopSpeech();
+      try {
+        window.speechSynthesis?.cancel();
+      } catch (_) {}
+      voiceEngine.stop();
+      if (typeof window !== 'undefined') {
+        (window as any).__alwaysListening = false;
+      }
+      return;
+    }
+
     // Eagerly prime Chromium SpeechSynthesis engine voices
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
@@ -153,6 +172,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
 
     // Browser interaction listener to guarantee mic activation if autoplay policy restricted initial start
     const handleUserGesture = () => {
+      if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return;
       unlockAudioContext();
       const onLanding = typeof window !== 'undefined' && (window.location.pathname === '/' || window.location.pathname === '');
       if (!onLanding) {
@@ -169,7 +189,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('pointerdown', handleUserGesture);
       window.removeEventListener('click', handleUserGesture);
     };
-  }, [router]);
+  }, [router, accessibilityMode]);
 
   const isLandingRoute = pathname === '/' || !pathname || pathname === '';
 
@@ -177,8 +197,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     <>
       {children}
 
-      {/* Keyboard Disabled Alert Toast */}
-      {showKeyWarning && (
+      {/* Keyboard Disabled Alert Toast (only shown in voice mode when key is pressed outside auth) */}
+      {showKeyWarning && accessibilityMode !== 'keyboard' && (
         <div
           role="alert"
           aria-live="assertive"
@@ -198,43 +218,55 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         </div>
       )}
 
-      {/* 100% Voice Mode Live Status Indicator */}
-      <div
-        aria-live="polite"
-        className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium shadow-lg backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
-      >
-        {isSpeaking ? (
-          <>
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
-            </span>
-            <Volume2 className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
-            <span className="text-blue-600 dark:text-blue-400 font-semibold">
-              {language === 'hi' ? 'साथी बोल रहा है (माइक रुका हुआ)' : 'Companion Speaking (Mic Paused)'}
-            </span>
-          </>
-        ) : isListening ? (
-          <>
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-            </span>
-            <Mic className="h-3.5 w-3.5 text-emerald-500" />
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-              {language === 'hi' ? 'माइक सक्रिय (सुन रहा है)' : 'Mic Live (Listening Always)'}
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-            <MicOff className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-muted-foreground font-semibold">
-              {language === 'hi' ? 'वॉइस कनेक्ट हो रहा है...' : 'Voice Connecting...'}
-            </span>
-          </>
-        )}
-      </div>
+      {/* Accessibility Live Status Indicator */}
+      {accessibilityMode === 'keyboard' ? (
+        <div
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
+        >
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          <span>
+            {language === 'hi' ? 'कीबोर्ड और नेविगेशन मोड' : 'Keyboard & Navigation Mode'}
+          </span>
+        </div>
+      ) : (
+        <div
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2.5 px-3.5 py-1.5 rounded-full text-xs font-medium shadow-lg backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
+        >
+          {isSpeaking ? (
+            <>
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+              </span>
+              <Volume2 className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
+              <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                {language === 'hi' ? 'साथी बोल रहा है (माइक रुका हुआ)' : 'Companion Speaking (Mic Paused)'}
+              </span>
+            </>
+          ) : isListening ? (
+            <>
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+              <Mic className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                {language === 'hi' ? 'माइक सक्रिय (सुन रहा है)' : 'Mic Live (Listening Always)'}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+              <MicOff className="h-3.5 w-3.5 text-amber-500" />
+              <span className="text-muted-foreground font-semibold">
+                {language === 'hi' ? 'वॉइस कनेक्ट हो रहा है...' : 'Voice Connecting...'}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </>
   )
 }
