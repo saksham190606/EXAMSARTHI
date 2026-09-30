@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { getBestVoice, sanitizeExamTextForSpeech } from './speech-synthesis';
-import { injectExamGrammar, extractTranscriptsFromEvent, resolveMultiAlternativeCommand } from './speech-recognition';
+import { injectExamGrammar } from './speech-recognition';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
-import { wholeWordMatch, routeVoiceCommand, hasActiveContext } from './commandRouter';
+import { routeVoiceCommand, hasActiveContext } from './commandRouter';
 
 export type VoicePriority = 'critical' | 'response' | 'content' | 'talkback';
 
@@ -793,9 +793,40 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     return { intent: 'UNKNOWN', target: '' };
   }
 
-  // Try local routing first
+  // Check for specific exam launch locally before general navigation
+  if (lowerTranscript.includes('ssc') || lowerTranscript.includes('cgl')) {
+    if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(lowerTranscript) || lowerTranscript.includes('mock')) {
+      return { intent: 'EXAM_LAUNCH', target: 'ssc-cgl' };
+    }
+  }
+  if (lowerTranscript.includes('upsc') || lowerTranscript.includes('csat')) {
+    if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(lowerTranscript) || lowerTranscript.includes('mock')) {
+      return { intent: 'EXAM_LAUNCH', target: 'upsc-prelims' };
+    }
+  }
+  if (lowerTranscript.includes('banking') || lowerTranscript.includes('ibps') || lowerTranscript.includes('po')) {
+    if (/\b(start|take|open|launch|shuru|शुरू)\b/.test(lowerTranscript) || lowerTranscript.includes('mock')) {
+      return { intent: 'EXAM_LAUNCH', target: 'banking-po' };
+    }
+  }
+
+  // Try deterministic local routing first (zero-network)
   const routed = routeVoiceCommand(lowerTranscript, 'global-nav');
   if (routed.handled) {
+    if (routed.type === 'route' && routed.path) {
+      return { intent: 'NAVIGATE', target: routed.path };
+    }
+    if (routed.type === 'next') return { intent: 'CONTROL', target: 'NEXT' };
+    if (routed.type === 'previous') return { intent: 'CONTROL', target: 'PREVIOUS' };
+    if (routed.type === 'submit') return { intent: 'CONTROL', target: 'SUBMIT' };
+    if (routed.type === 'repeat-question') return { intent: 'CONTROL', target: 'REPEAT' };
+    if (routed.type === 'pause') return { intent: 'CONTROL', target: 'PAUSE' };
+    if (routed.type === 'resume') return { intent: 'CONTROL', target: 'RESUME' };
+    if (routed.type === 'stop') return { intent: 'CONTROL', target: 'STOP' };
+    if (routed.type === 'flag-unflag') return { intent: 'CONTROL', target: 'FLAG' };
+    if (routed.type === 'select-option' && routed.optionIndex !== undefined) {
+      return { intent: 'ANSWER', target: String.fromCharCode(65 + routed.optionIndex) };
+    }
     return { intent: 'UNKNOWN', target: '' };
   }
 
@@ -819,6 +850,10 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transcript: transcript.substring(0, 300) }),
     });
+    if (!res.ok) {
+      console.warn(`[VoiceEngine] /api/intent responded with HTTP ${res.status}`);
+      return { intent: 'UNKNOWN', target: '' };
+    }
     const data = await res.json();
     return { intent: data.intent || 'UNKNOWN', target: data.target || '' };
   } catch (err) {

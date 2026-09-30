@@ -1,12 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Groq } from 'groq-sdk';
 import { isExamRoute } from '@/lib/assistant/sarthiExamLock';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { AI_CONFIG, getGroqClient } from '@/lib/ai/config';
+import { SarthiAction } from '@/lib/assistant/sarthiActions';
 
-// We initialize Groq here. It will pick up GROQ_API_KEY from the environment automatically.
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || '',
-});
+// Deterministic local resolver for common voice commands in Sarthi
+function resolveSarthiLocally(transcript: string, language: string): SarthiAction | null {
+  const t = transcript.toLowerCase().trim();
+  const isHi = language === 'hi';
+
+  // Navigation: Exam
+  if (
+    t === 'exam' ||
+    t === 'exams' ||
+    t === 'open exam' ||
+    t === 'go to exam' ||
+    t === 'exam kholo' ||
+    t === 'exam shuru' ||
+    t === 'exam shuru karo' ||
+    /\b(exam|exams|mock|test|परीक्षा|मॉक टेस्ट|टेस्ट)\b/.test(t)
+  ) {
+    if (t.includes('ssc') || t.includes('cgl')) {
+      return {
+        action: 'START_EXAM',
+        payload: { examId: 'e1' },
+        spokenResponse: isHi ? 'एसएससी सीजीएल परीक्षा शुरू की जा रही है।' : 'Starting SSC CGL exam.',
+      };
+    }
+    if (t.includes('upsc') || t.includes('csat')) {
+      return {
+        action: 'START_EXAM',
+        payload: { examId: 'e3' },
+        spokenResponse: isHi ? 'यूपीएससी परीक्षा शुरू की जा रही है।' : 'Starting UPSC exam.',
+      };
+    }
+    return {
+      action: 'NAVIGATE',
+      payload: { path: '/exam' },
+      spokenResponse: isHi ? 'परीक्षा केंद्र खोला जा रहा है।' : 'Navigating to the exams hub.',
+    };
+  }
+
+  // Navigation: Dashboard
+  if (/\b(dashboard|home|main screen|डैशबोर्ड|होम|मुख्य पृष्ठ)\b/.test(t)) {
+    return {
+      action: 'NAVIGATE',
+      payload: { path: '/dashboard' },
+      spokenResponse: isHi ? 'डैशबोर्ड खोला जा रहा है।' : 'Navigating to your dashboard.',
+    };
+  }
+
+  // Navigation: Practice
+  if (/\b(practice|learn|study|prepare|प्रैक्टिस|अभ्यास|पढ़ाई)\b/.test(t)) {
+    return {
+      action: 'NAVIGATE',
+      payload: { path: '/practice' },
+      spokenResponse: isHi ? 'अभ्यास अनुभाग खोला जा रहा है।' : 'Navigating to the practice section.',
+    };
+  }
+
+  // Navigation: Settings
+  if (/\b(settings?|preferences|accessibility|सेटिंग|विकल्प)\b/.test(t)) {
+    return {
+      action: 'NAVIGATE',
+      payload: { path: '/settings' },
+      spokenResponse: isHi ? 'सेटिंग्स खोली जा रही हैं।' : 'Navigating to settings.',
+    };
+  }
+
+  // Navigation: Results
+  if (/\b(results?|scores?|स्कोर|रिजल्ट)\b/.test(t)) {
+    return {
+      action: 'NAVIGATE',
+      payload: { path: '/results' },
+      spokenResponse: isHi ? 'रिजल्ट पृष्ठ पर जाया जा रहा है।' : 'Navigating to results.',
+    };
+  }
+
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,29 +91,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { transcript, language, currentUrl, examContext } = body;
+    let body: { transcript?: string; language?: string; currentUrl?: string; examContext?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+
+    const { transcript, language = 'en', currentUrl = '/', examContext } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: 'Missing transcript' }, { status: 400 });
     }
 
-    const limitedTranscript = transcript.substring(0, 300);
+    const limitedTranscript = transcript.substring(0, 300).trim();
 
     // Server-side safety check: Sarthi is strictly disabled during active exams
     if (isExamRoute(currentUrl)) {
       return NextResponse.json({ error: 'Sarthi is disabled during active exams.' }, { status: 403 });
     }
 
-    if (!process.env.GROQ_API_KEY) {
-      console.warn('GROQ_API_KEY is missing. AI will not function correctly.');
-      // Provide a fallback graceful failure
+    // 1. Try deterministic local resolution first
+    const localAction = resolveSarthiLocally(limitedTranscript, language);
+    if (localAction) {
+      return NextResponse.json(localAction, { status: 200 });
+    }
+
+    // 2. Groq AI processing
+    const groq = getGroqClient();
+    if (!groq) {
+      console.warn('[/api/ai/sarthi] GROQ_API_KEY is not set. Returning graceful fallback.');
       return NextResponse.json(
         {
           action: 'GENERAL_RESPONSE',
           spokenResponse: language === 'hi'
-            ? 'क्षमा करें, मेरा एआई ब्रेन अभी चालू नहीं है। कृपया GROQ API KEY सेट करें।'
-            : 'Sorry, my AI brain is currently disconnected. Please configure the GROQ API KEY.',
+            ? 'क्षमा करें, मेरा एआई ब्रेन अभी चालू नहीं है।'
+            : 'Sorry, my AI brain is currently disconnected. Please configure the API key.',
         },
         { status: 200 }
       );
@@ -86,70 +171,38 @@ IMPORTANT RULES:
 - You MUST return a JSON object with at least two fields: "action" and "spokenResponse".
 - "action" MUST be exactly one of the Whitelisted Actions above.
 - "spokenResponse" MUST be a short, natural, conversational response acknowledging the action in the user's preferred language. Do not output raw JSON or Markdown in spokenResponse.
-- "payload" is optional and depends on the action.
-- If the user asks if they are improving, or asks about their performance trend, return {"action": "GET_PERFORMANCE_TREND"}.
-- If the user asks why their score is low or why they are losing marks, return {"action": "DIAGNOSE_SCORE"}.
-- If the user asks what topics they are weak in, or asks which topics in a subject (e.g. Mathematics, English, Reasoning) they are weak in, return {"action": "WHAT_ARE_MY_WEAK_TOPICS", "payload": { "subject": "Mathematics" (if specified) }}.
-- If the user asks for a target score or improvement goal, return {"action": "SET_GOAL_GUIDANCE", "payload": { "subject": "Mathematics" (if specified) }}.
-- If the user asks what they should focus on this week or what to prioritize this week, return {"action": "GET_WEEKLY_FOCUS"}.
-- If the user asks to create or generate a study plan, return {"action": "GENERATE_STUDY_PLAN"}.
-- If the user asks for their weak areas, return {"action": "WHAT_ARE_MY_WEAK_AREAS"}.
-- If the user asks what they should practice or study, return {"action": "WHAT_SHOULD_I_PRACTICE"}.
-- If the user asks to start practice, return {"action": "START_PRACTICE"}. If they specify a subject, include it in the payload.
-- If the user asks how to improve, return {"action": "HOW_SHOULD_I_IMPROVE"}.
-- If the user asks how they are performing, return {"action": "GET_PERFORMANCE_SUMMARY"}.
-- If the user asks how much time is left in the exam, return {"action": "GET_EXAM_TIME_REMAINING"}.
-- If the user asks how they are doing in the current exam, return {"action": "GET_CURRENT_EXAM_PERFORMANCE"}.
-- If the user asks what you can do, return {"action": "HELP_CAPABILITIES"}.
-- If the user asks "What can I do here?", use GENERAL_RESPONSE to explain relevant actions for their currentUrl.
-- If the user says "Close Sarthi" or "Thank you", return {"action": "CLOSE_SARTHI", "spokenResponse": "You're welcome. Closing Sarthi now."}.
-- If the user asks to start an exam, return {"action": "START_EXAM"}.
-
-Example 1:
-User: "Make the text bigger please"
-{
-  "action": "SET_FONT_SIZE",
-  "payload": { "size": "large" },
-  "spokenResponse": "${language === 'hi' ? 'मैंने अक्षर बड़े कर दिए हैं।' : 'I have increased the text size.'}"
-}
-
-Example 2:
-User: "What is the question?"
-{
-  "action": "READ_QUESTION",
-  "spokenResponse": "${language === 'hi' ? 'मैं सवाल पढ़ रही हूँ।' : 'I will read the question now.'}"
-}`;
+- "payload" is optional and depends on the action.`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `User's Request: ${JSON.stringify(limitedTranscript)}` }
+        { role: 'user', content: `User's Request: ${JSON.stringify(limitedTranscript)}` },
       ],
-      model: 'openai/gpt-oss-120b', // Fast model suitable for JSON and quick responses
+      model: AI_CONFIG.SARTHI_MODEL,
       temperature: 0.1,
       response_format: { type: 'json_object' },
     });
 
-    const aiResponseText = chatCompletion.choices[0]?.message?.content;
-
-    if (!aiResponseText) {
-      throw new Error('Empty response from Groq');
-    }
-
-    let parsedAction;
+    const actionText = chatCompletion.choices[0]?.message?.content || '{}';
+    let parsedAction: SarthiAction;
     try {
-      parsedAction = JSON.parse(aiResponseText);
+      parsedAction = JSON.parse(actionText) as SarthiAction;
     } catch {
-      console.error('Failed to parse JSON from Groq:', aiResponseText);
-      return NextResponse.json({ error: 'Invalid JSON returned from AI' }, { status: 500 });
+      parsedAction = {
+        action: 'GENERAL_RESPONSE',
+        spokenResponse: language === 'hi' ? 'क्षमा करें, मुझे समझ नहीं आया।' : "Sorry, I couldn't understand that.",
+      };
     }
 
     return NextResponse.json(parsedAction);
   } catch (error: unknown) {
-    console.error('Error in Sarthi AI endpoint:', error);
+    console.error('[/api/ai/sarthi] Error:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
+      {
+        action: 'GENERAL_RESPONSE',
+        spokenResponse: 'Sorry, something went wrong. Please try again.',
+      },
+      { status: 200 }
     );
   }
 }

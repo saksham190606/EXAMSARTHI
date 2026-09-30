@@ -1,45 +1,67 @@
 import { NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { AI_CONFIG, getGroqClient } from '@/lib/ai/config';
 
 export const runtime = 'nodejs';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
+// Graceful fallback text used when Groq is unavailable.
+const FALLBACK_SUMMARY = 'Exam complete. Review your answers.';
 
 export async function POST(req: Request) {
-  console.log("[BACKEND DIAGNOSTIC] API Route Hit. GROQ_API_KEY present:", !!process.env.GROQ_API_KEY);
   try {
     const supabase = await createSupabaseServerClient();
     if (!supabase) {
-      return NextResponse.json({ summary: "Exam complete. Review your answers." });
+      return NextResponse.json({ summary: FALLBACK_SUMMARY });
     }
     const { data: userData, error: authError } = await supabase.auth.getUser();
     if (authError || !userData?.user) {
-      return NextResponse.json({ summary: "Exam complete. Review your answers." });
+      return NextResponse.json({ summary: FALLBACK_SUMMARY });
     }
 
-    const { score, total, correctTopics, weakTopics } = await req.json();
+    let body: { score?: number; total?: number; correctTopics?: string; weakTopics?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ summary: FALLBACK_SUMMARY });
+    }
 
-    const prompt = `You are "Exam Saarthi", an encouraging, accessible AI tutor for visually impaired students. 
-    The student just finished an exam. They scored ${score} out of ${total}. 
-    Their strong areas: ${correctTopics}. Their weak areas: ${weakTopics}.
-    
-    Write a very short, conversational, encouraging summary (maximum 3 sentences). 
-    End with exactly this sentence: "Exam complete. Review your answers."
-    Do not use emojis, asterisks, or markdown. Use plain spoken text.`;
+    const { score, total, correctTopics, weakTopics } = body;
 
-    const { data, response } = await groq.chat.completions.create({
-      messages: [{ role: 'system', content: prompt }],
-      model: 'llama-3.1-8b-instant',
-      temperature: 0.7,
-    }).withResponse();
+    const groq = getGroqClient();
+    if (!groq) {
+      console.warn('[/api/tutor-summary] GROQ_API_KEY is not set. Returning fallback summary.');
+      return NextResponse.json({ summary: FALLBACK_SUMMARY });
+    }
 
-    console.log("[BACKEND DIAGNOSTIC] Groq API response status:", response.status);
-    console.log("[BACKEND DIAGNOSTIC] Summary successfully generated. Preview:", data.choices[0]?.message?.content?.substring(0, 50) + "...");
+    const prompt = `You are "Exam Saarthi", an encouraging, accessible AI tutor for visually impaired students.
+The student just finished an exam. They scored ${score} out of ${total}.
+Their strong areas: ${correctTopics}. Their weak areas: ${weakTopics}.
 
-    return NextResponse.json({ summary: data.choices[0]?.message?.content });
-  } catch (error) {
-    console.error("[BACKEND DIAGNOSTIC] Fatal API Error:", error);
-    return NextResponse.json({ summary: "Exam complete. Review your answers." });
+Write a very short, conversational, encouraging summary (maximum 3 sentences).
+End with exactly this sentence: "Exam complete. Review your answers."
+Do not use emojis, asterisks, or markdown. Use plain spoken text.`;
+
+    try {
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: 'system', content: prompt }],
+        model: AI_CONFIG.TUTOR_MODEL,
+        temperature: 0.7,
+      });
+
+      const summary = chatCompletion.choices[0]?.message?.content;
+      return NextResponse.json({ summary: summary || FALLBACK_SUMMARY });
+    } catch (groqError: unknown) {
+      console.error(
+        '[/api/tutor-summary] Groq API call failed:',
+        groqError instanceof Error ? groqError.message : String(groqError)
+      );
+      return NextResponse.json({ summary: FALLBACK_SUMMARY });
+    }
+  } catch (error: unknown) {
+    console.error(
+      '[/api/tutor-summary] Unexpected error:',
+      error instanceof Error ? error.message : String(error)
+    );
+    return NextResponse.json({ summary: FALLBACK_SUMMARY });
   }
 }
