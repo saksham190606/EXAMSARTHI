@@ -397,6 +397,7 @@ function ActiveExamSession({
     questions,
     activeSection: state.activeSection,
     sectionTimeRemaining: state.sectionTimeRemaining,
+    isSubmitDialogOpen,
     onOpenSubmitDialog: () => setIsSubmitDialogOpen(true),
     onCloseSubmitDialog: () => setIsSubmitDialogOpen(false),
   });

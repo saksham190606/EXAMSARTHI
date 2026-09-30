@@ -373,9 +373,79 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     'flag', 'flag for review', 'flagfor review', 'flagfor', 'mark for review', 'flag this', 'flag question',
     'mark', 'review later', 'bookmark', 'review', 'फ्लैग', 'रिव्यू', 'चिह्नित करो', 'चिह्नित'
   ];
-  const submitPhrases = ['submit', 'submit exam', 'finish exam', 'submit test', 'सबमिट', 'परीक्षा समाप्त'];
-  const confirmPhrases = ['yes', 'confirm', 'haan', 'हाँ', 'हां', 'proceed'];
-  const cancelPhrases = ['no', 'cancel', 'nahin', 'नहीं', 'रद्द'];
+  const submitPhrases = [
+    'submit',
+    'submit exam',
+    'submit the exam',
+    'submit my exam',
+    'submit final exam',
+    'finish exam',
+    'finish the exam',
+    'submit test',
+    'submit the test',
+    'finish test',
+    'submit practice',
+    'submit practice set',
+    'submit practice exam',
+    'submit paper',
+    'submit session',
+    'end exam',
+    'end test',
+    'complete exam',
+    'complete test',
+    'सबमिट',
+    'सबमिट करो',
+    'सबमिट करें',
+    'परीक्षा समाप्त',
+    'परीक्षा सबमिट',
+    'सबमिट परीक्षा',
+    'एग्जाम सबमिट',
+    'सबमिट एग्जाम',
+    'टेस्ट सबमिट',
+    'सबमिट टेस्ट',
+    'पेपर सबमिट',
+    'सबमिट पेपर',
+    'pariksha submit',
+    'exam submit',
+    'test submit',
+  ];
+  const confirmPhrases = [
+    'yes',
+    'confirm',
+    'haan',
+    'हाँ',
+    'हां',
+    'proceed',
+    'yes submit',
+    'confirm submit',
+    'haan submit',
+    'yes confirm',
+    'submit it',
+    'kar do',
+    'सबमिट कर दो',
+    'हाँ सबमिट',
+    'ha',
+    'sure',
+    'ok',
+    'okay',
+    'yes please',
+    'bilkul',
+    'पुष्टि',
+  ];
+  const cancelPhrases = [
+    'no',
+    'cancel',
+    'nahin',
+    'nahi',
+    'नहीं',
+    'रद्द',
+    'cancel submit',
+    'dont submit',
+    "don't submit",
+    'छोड़ो',
+    'वापस',
+    'wapas',
+  ];
   const describePhrases = ['describe diagram', 'explain diagram', 'diagram', 'चित्र समझाओ', 'विवरण'];
   const pausePhrases = ['pause', 'ruko', 'रुको', 'pause speech'];
   const resumePhrases = (context === 'review' || context === 'practice') ? ['resume', 'continue', 'आगे', 'chalu', 'जारी रखें'] : ['resume', 'chalu', 'जारी रखें'];
@@ -682,6 +752,78 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
     'लॉगिन': '/login',
   };
 
+  // 1. Cancel commands (Evaluated before submit so "cancel submit", "don't submit" are treated as cancellation)
+  const isCancelRegex = /(?:cancel\s*submit|don\s*t\s*submit|dont\s*submit|nahi\s*karo|submit\s*mat\s*karo)/i.test(normalized);
+  if (matchesAnyWholeWord(normalized, cancelPhrases) || isCancelRegex) {
+    const dedupe = maybeDedupe('cancel', normalized);
+    return { ...base, type: 'cancel', handled: true, confidence: 1, readback: dedupe.deduped ? 'Cancellation already processed' : 'Cancelled', deduped: dedupe.deduped };
+  }
+
+  // 2. Confirm commands (Evaluated before submit so "yes submit", "confirm submit", "haan submit" are treated as confirmation)
+  const isConfirmRegex = /(?:confirm\s*submit|yes\s*(?:please|submit|confirm)|haan\s*(?:submit|karo)|submit\s*kar\s*do|haan\s*kar\s*do)/i.test(normalized);
+  if (matchesAnyWholeWord(normalized, confirmPhrases) || isConfirmRegex) {
+    const dedupe = maybeDedupe('confirm', normalized);
+    return { ...base, type: 'confirm', handled: true, confidence: 1, readback: dedupe.deduped ? 'Confirmation already processed' : 'Confirmed', deduped: dedupe.deduped };
+  }
+
+  // 3. Submit commands (Checked before navigation so "submit exam" / "submit practice" won't route to /exam or /practice)
+  const isSubmitRegex = /(?:submit|finish|end|complete)\s*(?:the\s*)?(?:my\s*)?(?:final\s*)?(?:exam|test|practice|paper|session)/i.test(normalized) ||
+    /(?:exam|test|practice|paper|pariksha|परीक्षा|एग्जाम|टेस्ट)\s*(?:ko\s*)?(?:submit|finish|end|samapt|समाप्त|सबमिट)/i.test(normalized);
+  if (matchesAnyWholeWord(normalized, submitPhrases) || isSubmitRegex) {
+    const dedupe = maybeDedupe('submit', normalized);
+    return { ...base, type: 'submit', handled: true, confidence: 0.95, readback: dedupe.deduped ? 'Submit already processed' : 'Submit exam', deduped: dedupe.deduped };
+  }
+
+  // 2. Question / Section Action commands (Checked before navigation so "next section" isn't misrouted)
+  if (matchesAnyWholeWord(normalized, nextSectionPhrases)) {
+    return { ...base, type: 'next-section', handled: true, confidence: 0.8, readback: 'Next section' };
+  }
+  if (matchesAnyWholeWord(normalized, readOptionsPhrases)) {
+    return { ...base, type: 'read-options', handled: true, confidence: 0.8, readback: 'Reading options' };
+  }
+  if (matchesAnyWholeWord(normalized, readAllPhrases)) {
+    return { ...base, type: 'read-everything', handled: true, confidence: 0.8, readback: 'Reading everything' };
+  }
+  if (matchesAnyWholeWord(normalized, positivePhrases)) {
+    const dedupe = maybeDedupe('next', normalized);
+    return { ...base, type: 'next', handled: true, confidence: 0.92, readback: dedupe.deduped ? 'Next already processed' : 'Next question', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, negativePhrases)) {
+    const dedupe = maybeDedupe('previous', normalized);
+    return { ...base, type: 'previous', handled: true, confidence: 0.92, readback: dedupe.deduped ? 'Previous already processed' : 'Previous question', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, repeatPhrases)) {
+    const dedupe = maybeDedupe('repeat-question', normalized);
+    return { ...base, type: 'repeat-question', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Repeat already processed' : 'Repeating question', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, clearPhrases)) {
+    const dedupe = maybeDedupe('clear-answer', normalized);
+    return { ...base, type: 'clear-answer', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Clear already processed' : 'Response cleared', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, flagPhrases)) {
+    const dedupe = maybeDedupe('flag-unflag', normalized);
+    return { ...base, type: 'flag-unflag', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Flag already processed' : 'Question flagged', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, describePhrases)) {
+    const dedupe = maybeDedupe('describe-diagram', normalized);
+    return { ...base, type: 'describe-diagram', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Diagram description already processed' : 'Describing diagram', deduped: dedupe.deduped };
+  }
+  if (matchesAnyWholeWord(normalized, pausePhrases)) {
+    return { ...base, type: 'pause', handled: true, confidence: 0.9, readback: 'Paused' };
+  }
+  if (matchesAnyWholeWord(normalized, resumePhrases)) {
+    return { ...base, type: 'resume', handled: true, confidence: 0.9, readback: 'Resumed' };
+  }
+  if (matchesAnyWholeWord(normalized, stopPhrases)) {
+    return { ...base, type: 'stop', handled: true, confidence: 0.9, readback: 'Stopped' };
+  }
+  if (matchesAnyWholeWord(normalized, timePhrases)) {
+    return { ...base, type: 'time-left', handled: true, confidence: 0.8, readback: 'Time left requested' };
+  }
+  if (matchesAnyWholeWord(normalized, answeredPhrases)) {
+    return { ...base, type: 'how-many-answered', handled: true, confidence: 0.8, readback: 'How many answered requested' };
+  }
+
   // Sort navigation phrases by length descending so multi-word commands are matched first
   const sortedNavEntries = Object.entries(navPhrases).sort((a, b) => b[0].length - a[0].length);
   for (const [phrase, path] of sortedNavEntries) {
@@ -746,67 +888,6 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
         readback,
       };
     }
-  }
-
-  if (matchesAnyWholeWord(normalized, positivePhrases)) {
-    const dedupe = maybeDedupe('next', normalized);
-    return { ...base, type: 'next', handled: true, confidence: 0.92, readback: dedupe.deduped ? 'Next already processed' : 'Next question', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, negativePhrases)) {
-    const dedupe = maybeDedupe('previous', normalized);
-    return { ...base, type: 'previous', handled: true, confidence: 0.92, readback: dedupe.deduped ? 'Previous already processed' : 'Previous question', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, repeatPhrases)) {
-    const dedupe = maybeDedupe('repeat-question', normalized);
-    return { ...base, type: 'repeat-question', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Repeat already processed' : 'Repeating question', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, clearPhrases)) {
-    const dedupe = maybeDedupe('clear-answer', normalized);
-    return { ...base, type: 'clear-answer', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Clear already processed' : 'Response cleared', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, flagPhrases)) {
-    const dedupe = maybeDedupe('flag-unflag', normalized);
-    return { ...base, type: 'flag-unflag', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Flag already processed' : 'Question flagged', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, submitPhrases)) {
-    const dedupe = maybeDedupe('submit', normalized);
-    return { ...base, type: 'submit', handled: true, confidence: 0.93, readback: dedupe.deduped ? 'Submit already processed' : 'Submit exam', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, confirmPhrases)) {
-    const dedupe = maybeDedupe('confirm', normalized);
-    return { ...base, type: 'confirm', handled: true, confidence: 1, readback: dedupe.deduped ? 'Confirmation already processed' : 'Confirmed', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, cancelPhrases)) {
-    const dedupe = maybeDedupe('cancel', normalized);
-    return { ...base, type: 'cancel', handled: true, confidence: 1, readback: dedupe.deduped ? 'Cancellation already processed' : 'Cancelled', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, describePhrases)) {
-    const dedupe = maybeDedupe('describe-diagram', normalized);
-    return { ...base, type: 'describe-diagram', handled: true, confidence: 0.9, readback: dedupe.deduped ? 'Diagram description already processed' : 'Describing diagram', deduped: dedupe.deduped };
-  }
-  if (matchesAnyWholeWord(normalized, pausePhrases)) {
-    return { ...base, type: 'pause', handled: true, confidence: 0.9, readback: 'Paused' };
-  }
-  if (matchesAnyWholeWord(normalized, resumePhrases)) {
-    return { ...base, type: 'resume', handled: true, confidence: 0.9, readback: 'Resumed' };
-  }
-  if (matchesAnyWholeWord(normalized, stopPhrases)) {
-    return { ...base, type: 'stop', handled: true, confidence: 0.9, readback: 'Stopped' };
-  }
-  if (matchesAnyWholeWord(normalized, timePhrases)) {
-    return { ...base, type: 'time-left', handled: true, confidence: 0.8, readback: 'Time left requested' };
-  }
-  if (matchesAnyWholeWord(normalized, answeredPhrases)) {
-    return { ...base, type: 'how-many-answered', handled: true, confidence: 0.8, readback: 'How many answered requested' };
-  }
-  if (matchesAnyWholeWord(normalized, nextSectionPhrases)) {
-    return { ...base, type: 'next-section', handled: true, confidence: 0.8, readback: 'Next section' };
-  }
-  if (matchesAnyWholeWord(normalized, readOptionsPhrases)) {
-    return { ...base, type: 'read-options', handled: true, confidence: 0.8, readback: 'Reading options' };
-  }
-  if (matchesAnyWholeWord(normalized, readAllPhrases)) {
-    return { ...base, type: 'read-everything', handled: true, confidence: 0.8, readback: 'Reading everything' };
   }
 
   if (context === 'exam' || context === 'review' || context === 'practice') {

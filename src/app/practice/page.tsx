@@ -83,6 +83,11 @@ function PracticeContent() {
   const [hasExamHistory, setHasExamHistory] = React.useState(false)
   const [loadingAnalytics, setLoadingAnalytics] = React.useState(true)
   const [analyticsError, setAnalyticsError] = React.useState<string | null>(null)
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // 1. Reset Child Filters on Subject Change
   const handleSubjectSelect = React.useCallback((newSubject: string) => {
@@ -528,7 +533,7 @@ function PracticeContent() {
             <h2 id="filters-heading" className="text-xl font-bold text-foreground">
               Filter Practice Sets
             </h2>
-            {isListening && (
+            {mounted && isListening && (
               <Badge variant="outline" className="ml-2 gap-1.5 text-2xs font-semibold text-emerald-400 border-emerald-500/40 bg-emerald-950/30">
                 <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Voice Active</span>

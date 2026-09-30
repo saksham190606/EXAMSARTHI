@@ -48,6 +48,7 @@ interface UseVoiceModeProps {
   onOpenSubmitDialog?: () => void;
   onCloseSubmitDialog?: () => void;
   onStartExam?: () => void;
+  isSubmitDialogOpen?: boolean;
 }
 
 export function useVoiceMode({
@@ -58,6 +59,7 @@ export function useVoiceMode({
   questions,
   activeSection,
   sectionTimeRemaining,
+  isSubmitDialogOpen,
   onOpenSubmitDialog,
   onCloseSubmitDialog,
 }: UseVoiceModeProps) {
@@ -100,6 +102,7 @@ export function useVoiceMode({
   const hasInitializedMountRef = useRef(false);
   const pendingActionRef = useRef<string | null>(null);
   const onCloseSubmitDialogRef = useRef(onCloseSubmitDialog);
+  const isSubmitDialogOpenRef = useRef(isSubmitDialogOpen);
   const lastCommandTimeRef = useRef<number>(0);
 
   useEffect(() => { actionsRef.current = actions; }, [actions]);
@@ -110,6 +113,24 @@ export function useVoiceMode({
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
   useEffect(() => { pendingActionRef.current = pendingAction; }, [pendingAction]);
   useEffect(() => { onCloseSubmitDialogRef.current = onCloseSubmitDialog; }, [onCloseSubmitDialog]);
+  useEffect(() => {
+    isSubmitDialogOpenRef.current = isSubmitDialogOpen;
+    if (isSubmitDialogOpen && isActiveRef.current && pendingActionRef.current !== 'submit_exam') {
+      setPendingAction('submit_exam');
+      pendingActionRef.current = 'submit_exam';
+      const promptText = languageRef.current === 'hi'
+        ? 'क्या आप परीक्षा सबमिट करना चाहते हैं? हाँ या ना बोलें।'
+        : 'Do you want to submit the exam? Say yes to confirm or no to cancel.';
+      speakText(promptText, languageRef.current === 'hi' ? 'hi-IN' : 'en-US', () => {
+        if (isActiveRef.current && !userManuallyMutedRef.current) {
+          startListening(languageRef.current === 'hi' ? 'hi-IN' : 'en-US');
+        }
+      });
+    } else if (!isSubmitDialogOpen && pendingActionRef.current === 'submit_exam') {
+      setPendingAction(null);
+      pendingActionRef.current = null;
+    }
+  }, [isSubmitDialogOpen]);
 
   // Action handlers
   const handleSelectOption = useCallback((optionIndex: number) => {
@@ -336,9 +357,25 @@ export function useVoiceMode({
     const isHi = languageRef.current === 'hi';
     const speechLang = isHi ? 'hi-IN' : 'en-US';
 
+    const words = transcript.split(/\s+/);
+    const routed = routeVoiceCommand(transcript, 'exam');
+    const phoneticMatch = matchTokenToCommand(transcript);
+
     // Two-step confirmation active (e.g. submit exam)
-    if (pendingActionRef.current) {
-      if (/^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि)/i.test(transcript)) {
+    const isPendingConfirmation = Boolean(pendingActionRef.current) || Boolean(isSubmitDialogOpenRef.current);
+    if (isPendingConfirmation) {
+      const isConfirm =
+        /^(yes|yeah|sure|confirm|submit|proceed|haan|sahi|thik\s*hai|हाँ|हां|सबमिट|पुष्टि|कर\s*दो|ok|okay)/i.test(transcript) ||
+        /(?:confirm\s*submit|yes\s*(?:please|submit|confirm)?|haan\s*(?:submit|karo)?|submit\s*(?:exam|test|practice|it)?)/i.test(transcript) ||
+        routed.type === 'confirm' ||
+        routed.type === 'submit';
+
+      const isCancel =
+        /^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो|वापस|wapas|back)/i.test(transcript) ||
+        /(?:cancel\s*submit|dont\s*submit|don't\s*submit|nahi\s*karo)/i.test(transcript) ||
+        routed.type === 'cancel';
+
+      if (isConfirm) {
         lastCommandTimeRef.current = now;
         playVoiceFeedbackChime();
         setPendingAction(null);
@@ -352,7 +389,7 @@ export function useVoiceMode({
           isActiveRef.current = false;
         });
         return;
-      } else if (/^(no|nope|cancel|nahi|nahin|chhodo|नहीं|ना|रद्द|छोड़ो)/i.test(transcript)) {
+      } else if (isCancel) {
         lastCommandTimeRef.current = now;
         playVoiceFeedbackChime();
         setPendingAction(null);
@@ -365,11 +402,18 @@ export function useVoiceMode({
         });
         return;
       }
-    }
 
-    const words = transcript.split(/\s+/);
-    const routed = routeVoiceCommand(transcript, 'exam');
-    const phoneticMatch = matchTokenToCommand(transcript);
+      // If in submit confirmation modal and input was not confirm or cancel, guide candidate
+      const reprompt = isHi
+        ? 'परीक्षा सबमिट करने के लिए हाँ बोलें, या रद्द करने के लिए ना बोलें।'
+        : 'Please say yes to submit the exam, or say no to cancel.';
+      speakText(reprompt, speechLang, () => {
+        if (isActiveRef.current && !userManuallyMutedRef.current) {
+          startListening(speechLang);
+        }
+      });
+      return;
+    }
 
     if (routed.handled) {
       lastCommandTimeRef.current = now;
