@@ -48,7 +48,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isDemoAuth = request.cookies.get('examsarthi_demo_auth')?.value === '1';
+  const rawCookieHeader = request.headers.get('cookie') || '';
+  const isDemoAuth = 
+    request.cookies.get('examsarthi_demo_auth')?.value === '1' ||
+    request.cookies.has('examsarthi_demo_auth') ||
+    rawCookieHeader.includes('examsarthi_demo_auth=1') ||
+    rawCookieHeader.includes('examsarthi_demo_auth');
+
   const hasUser = Boolean(user || isDemoAuth);
 
   const pathname = request.nextUrl.pathname;
@@ -80,9 +86,7 @@ export async function updateSession(request: NextRequest) {
       ? rawRedirect
       : '/dashboard';
 
-    const destinationUrl = request.nextUrl.clone();
-    destinationUrl.pathname = safeRedirect;
-    destinationUrl.search = '';
+    const destinationUrl = new URL(safeRedirect, request.nextUrl.origin);
 
     const redirectResponse = NextResponse.redirect(destinationUrl);
     for (const cookie of supabaseResponse.cookies.getAll()) {

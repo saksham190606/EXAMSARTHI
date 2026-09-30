@@ -127,7 +127,7 @@ function LoginForm() {
   const rawRedirect = searchParams?.get('redirectTo') || '/dashboard';
   const redirectTo = (rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')) ? rawRedirect : '/dashboard';
 
-  const { signIn } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
   const isHindi = useAccessibilityStore((s) => s.language === 'hi');
 
   const [email, setEmail] = useState('');
@@ -141,6 +141,14 @@ function LoginForm() {
   const voiceStepRef = useRef<VoiceLoginStep>('IDLE');
   const hasSpokenWelcomeRef = useRef(false);
   const isSubmittingRef = useRef(false);
+
+  // If already authenticated (e.g. via demo session in localStorage/cookie), redirect immediately
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('[LoginForm] Candidate already authenticated, navigating to:', redirectTo);
+      window.location.href = redirectTo;
+    }
+  }, [user, authLoading, redirectTo]);
 
   // 1. Initial Voice Greeting with Demo Credentials & User ID Prompt
   useEffect(() => {
@@ -274,6 +282,11 @@ function LoginForm() {
               if (hasNavigated) return;
               hasNavigated = true;
               router.push(redirectTo);
+              setTimeout(() => {
+                if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+                  window.location.href = redirectTo;
+                }
+              }, 150);
             };
 
             speak(successText, {
@@ -321,6 +334,11 @@ function LoginForm() {
         setLoading(false);
       } else {
         router.push(redirectTo);
+        setTimeout(() => {
+          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            window.location.href = redirectTo;
+          }
+        }, 150);
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'An unexpected error occurred during sign-in.');

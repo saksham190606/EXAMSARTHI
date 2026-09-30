@@ -33,6 +33,7 @@ export function isDemoCredentials(loginId: string, pass: string): boolean {
 
   const passMatches =
     cleanPass === '12345' ||
+    cleanPass === '2345' ||
     cleanPass === 'onetwothreefourfive' ||
     cleanPass === '123456';
 
@@ -233,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             profile: demoProfile,
           }));
           document.cookie = 'examsarthi_demo_auth=1; path=/; max-age=2592000; SameSite=Lax';
+          await fetch('/api/auth/demo-session', { method: 'POST' }).catch(() => {});
         } catch (_) {}
       }
 
@@ -289,6 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.removeItem('examsarthi_demo_auth');
         document.cookie = 'examsarthi_demo_auth=; path=/; max-age=0; SameSite=Lax';
+        await fetch('/api/auth/demo-session', { method: 'DELETE' }).catch(() => {});
       } catch (_) {}
     }
 
