@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAccessibilityStore } from '@/store/useAccessibilityStore'
 import { 
   initFocusTalkBack, 
@@ -17,6 +17,7 @@ import { Mic, MicOff, Volume2, ShieldAlert } from 'lucide-react'
 export function AccessibilityProvider({ children }: { children: React.ReactNode }) {
   const { textSize, contrast, reducedMotion, language } = useAccessibilityStore()
   const router = useRouter()
+  const pathname = usePathname()
   const [showKeyWarning, setShowKeyWarning] = useState(false)
   const lastKeyWarningTimeRef = useRef<number>(0)
   const keyWarningTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -50,10 +51,10 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     }
   }, [textSize, contrast, reducedMotion])
 
-  // STRICT GLOBAL KEYBOARD BLOCKING (100% Voice-Based Platform)
+  // STRICT GLOBAL KEYBOARD BLOCKING (100% Voice-Based Platform, Enabled ONLY during Login / Auth)
   useEffect(() => {
     const handleKeyBlock = (e: KeyboardEvent) => {
-      // Allow developer bypasses for DevTools and page refresh
+      // 1. Allow developer bypasses for DevTools and page refresh
       if (
         e.key === 'F12' ||
         e.key === 'F5' ||
@@ -63,7 +64,28 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      // Intercept and completely disable keyboard input
+      // 2. Allow keyboard input ONLY when user is logging in / signing up
+      const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
+      const isAuthRoute = 
+        currentPath.startsWith('/login') || 
+        currentPath.startsWith('/signup') || 
+        currentPath.startsWith('/auth');
+
+      const target = e.target as HTMLElement | null;
+      const isAuthInput = Boolean(
+        target && (
+          target.closest('form')?.getAttribute('action')?.includes('auth') ||
+          target.closest('form')?.getAttribute('action')?.includes('login') ||
+          target.closest('[data-auth-container]') ||
+          (isAuthRoute && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.isContentEditable))
+        )
+      );
+
+      if (isAuthRoute || isAuthInput) {
+        return;
+      }
+
+      // 3. Everywhere else across the platform, intercept and completely disable keyboard input
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -81,8 +103,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         const isHi = useAccessibilityStore.getState().language === 'hi';
         speak(
           isHi 
-            ? "कीबोर्ड अक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
-            : "Keyboard is disabled. This platform is 100% voice operated. Please speak your command."
+            ? "कीबोर्ड केवल लॉगिन के समय सक्षम है। यह प्लेटफॉर्म पूरी तरह से आवाज द्वारा संचालित है। कृपया अपनी कमांड बोलें।"
+            : "Keyboard is enabled only for logging in. This platform is voice operated. Please speak your command."
         );
       }
     };
@@ -97,7 +119,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('keypress', handleKeyBlock, { capture: true });
       if (keyWarningTimerRef.current) clearTimeout(keyWarningTimerRef.current);
     };
-  }, []);
+  }, [pathname]);
 
   // Initialize Continuous Audio Companion & Always-On Voice Navigation
   useEffect(() => {
