@@ -466,10 +466,63 @@ export function SarthiWidget() {
     processInput(input);
   };
 
+  const isAuthOrLandingRoute = 
+    !pathname ||
+    pathname === '/' || 
+    pathname.startsWith('/login') || 
+    pathname.startsWith('/signup');
+
+  // Auto-start Sarthi ONLY for keyboard & navigation user after login at dashboard
+  useEffect(() => {
+    if (
+      accessibilityMode !== 'keyboard' ||
+      !user ||
+      pathname !== '/dashboard' ||
+      isExamActive
+    ) {
+      return;
+    }
+
+    const userSessionKey = `examsarthi_sarthi_started_${user.id || 'candidate'}`;
+    const hasStarted = typeof window !== 'undefined' && window.sessionStorage.getItem(userSessionKey);
+
+    if (!hasStarted) {
+      try {
+        window.sessionStorage.setItem(userSessionKey, 'true');
+      } catch (_) {}
+
+      // Give dashboard page a moment to mount and stabilize, then activate Sarthi
+      const timer = setTimeout(() => {
+        handleStateChange('ACTIVATED');
+      }, 750);
+
+      return () => clearTimeout(timer);
+    }
+  }, [accessibilityMode, user, pathname, isExamActive, handleStateChange]);
+
+  // Clean shutdown if user logs out or switches to voice mode
+  useEffect(() => {
+    if (accessibilityMode !== 'keyboard' || !user || isAuthOrLandingRoute || isExamActive) {
+      if (state !== 'CLOSED') {
+        setState('CLOSED');
+        stop();
+        stopListening();
+      }
+    }
+  }, [accessibilityMode, user, isAuthOrLandingRoute, isExamActive, state, stop, stopListening]);
+
   // Keyboard shortcut listener: Alt+S to toggle, Escape to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isExamRoute(pathnameRef.current) || isExamActiveNow()) return;
+      if (
+        accessibilityMode !== 'keyboard' ||
+        !user ||
+        isAuthOrLandingRoute ||
+        isExamRoute(pathnameRef.current) ||
+        isExamActiveNow()
+      ) {
+        return;
+      }
 
       if (e.altKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
@@ -480,20 +533,34 @@ export function SarthiWidget() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [accessibilityMode, user, isAuthOrLandingRoute]);
 
   // Custom event listener to open Sarthi (e.g. from pressing 'S' navigation key)
   useEffect(() => {
     const handleOpenEvent = () => {
-      if (isExamActiveRef.current || isExamActiveNow() || isExamRoute(pathnameRef.current)) return;
+      if (
+        accessibilityMode !== 'keyboard' ||
+        !user ||
+        isAuthOrLandingRoute ||
+        isExamActiveRef.current ||
+        isExamActiveNow() ||
+        isExamRoute(pathnameRef.current)
+      ) {
+        return;
+      }
       handleStateChange('ACTIVATED');
     };
     window.addEventListener('examsarthi-open-sarthi', handleOpenEvent);
     return () => window.removeEventListener('examsarthi-open-sarthi', handleOpenEvent);
-  }, [handleStateChange]);
+  }, [accessibilityMode, user, isAuthOrLandingRoute, handleStateChange]);
 
   // STRICT REQUIREMENT: Only render Sarthi for keyboard navigation users!
   if (accessibilityMode !== 'keyboard') {
+    return null;
+  }
+
+  // STRICT REQUIREMENT: Only start AFTER login! (No rendering on launch page or unauthenticated)
+  if (!user || isAuthOrLandingRoute) {
     return null;
   }
 

@@ -280,6 +280,10 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
 
       // 5. Sarthi AI Assistant (S or Alt+S)
       if (key === 's' || (e.altKey && key === 's')) {
+        const isAuthOrLanding = currentPath === '/' || currentPath === '' || currentPath.startsWith('/login') || currentPath.startsWith('/signup');
+        if (isAuthOrLanding) {
+          return;
+        }
         e.preventDefault();
         speak(isHi ? 'सारथी सहायक' : 'Sarthi AI Assistant', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
         window.dispatchEvent(new CustomEvent('examsarthi-open-sarthi'));

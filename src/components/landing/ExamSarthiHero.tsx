@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Volume2, ShieldCheck, Sparkles, Mic, Keyboard } from 'lucide-react';
 import { useAccessibilityStore } from '@/lib/store/accessibility';
 import ExamSelectorModal from '@/components/exam/ExamSelectorModal';
-import { requestMicPermission } from '@/lib/accessibility/mic-permission';
+import { requestMicPermission, fetchAvailableVoices } from '@/lib/accessibility/mic-permission';
 import { voiceEngine, speak, forceSpeak, stopSpeech, unlockAudioContext } from '@/lib/accessibility/voice-companion';
 import { subscribe } from '@/lib/voice/useVoiceEngine';
 import { cn } from '@/lib/utils';
@@ -113,13 +113,18 @@ export default function ExamSarthiHero() {
   }, []);
 
   // 1. Initial Voice Assistant Brief on Landing Page
-  const playBrief = useCallback((force: boolean = false) => {
+  // 1. Initial Voice Assistant Brief on Landing Page
+  const playBrief = useCallback(async (force: boolean = false) => {
     if (!force && hasSpokenBriefSuccessfullyRef.current) return;
     if (isSpeakingBriefRef.current) return;
 
     // Strictly stop microphone while the launch brief is playing so it doesn't listen to itself
     voiceEngine.stop();
     useAccessibilityStore.getState().setIsListeningCommands(false);
+
+    // Eagerly ensure voices are retrieved & mic permission requested
+    fetchAvailableVoices(600).catch(() => {});
+    requestMicPermission().catch(() => {});
 
     const briefText = isHindi
       ? "एग्जामसारथी में आपका स्वागत है। दृष्टिबाधित अभ्यर्थियों के लिए भारत का सुलभ परीक्षा और अभ्यास मंच। क्या आप वॉइस एक्सेसिबिलिटी या कीबोर्ड और नेविगेशन के साथ आगे बढ़ना चाहते हैं? कृपया 'वॉइस एक्सेसिबिलिटी' या 'कीबोर्ड नेविगेशन' बोलें, अथवा कीबोर्ड पर V या K दबाएं।"
@@ -135,6 +140,7 @@ export default function ExamSarthiHero() {
         hasSpokenBriefSuccessfullyRef.current = true;
         // ONLY AFTER completing the launch brief: open the mic for user to say their choice!
         unlockAudioContext();
+        requestMicPermission().catch(() => {});
         setTimeout(() => {
           voiceEngine.startAlwaysOnListening();
         }, 200);
@@ -203,6 +209,9 @@ export default function ExamSarthiHero() {
   }, [handleSelectMode]);
 
   useEffect(() => {
+    // Eagerly pre-load browser voices on landing page mount
+    fetchAvailableVoices().catch(() => {});
+
     // Attempt automatic playback shortly after mount
     const timer = setTimeout(() => {
       playBrief(false);
@@ -211,6 +220,7 @@ export default function ExamSarthiHero() {
     // Guaranteed trigger on ANY first user gesture (touch, click, key) if browser blocked autoplay
     const handleGesture = () => {
       unlockAudioContext();
+      requestMicPermission().catch(() => {});
       if (!hasSpokenBriefSuccessfullyRef.current && !isSpeakingBriefRef.current) {
         playBrief(true);
       }
@@ -415,8 +425,8 @@ export default function ExamSarthiHero() {
                 </h3>
                 <p className="mt-1 text-xs text-black/70 dark:text-white/70 leading-relaxed">
                   {isHindi
-                    ? "मानक कीबोर्ड शॉर्टकट, टैब नियंत्रण, कोई वॉइस एजेंट नहीं।"
-                    : "Standard keyboard controls, Tab focus navigation, with zero voice agent prompts."}
+                    ? "मानक कीबोर्ड शॉर्टकट, श्रवण उच्चारण, और लॉगिन के बाद डैशबोर्ड पर सारथी एआई सहायक।"
+                    : "Standard keyboard shortcuts, auditory pronunciation, and Sarthi AI assistant after login at Dashboard."}
                 </p>
                 <span className="mt-3 text-xs font-semibold text-black dark:text-white flex items-center gap-1">
                   {isHindi ? "कीबोर्ड मोड से लॉगिन करें" : "Proceed with Keyboard"} &rarr;

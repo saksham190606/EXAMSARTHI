@@ -642,13 +642,26 @@ export function startListening(
         /\b(hi|hey|hello|open|start)\s+sarthi\b/.test(cleanSarthiText);
 
       if (isSarthiWakeWord) {
+        // Sarthi is strictly for Keyboard & Navigation users only after login at dashboard!
+        // Voice mode candidates must never trigger Sarthi.
+        const currentMode = useAccessibilityStore.getState().accessibilityMode;
+        if (currentMode !== 'keyboard') {
+          return;
+        }
+
+        const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+        const isAuthOrLanding = currentPath === '/' || currentPath === '' || currentPath.startsWith('/login') || currentPath.startsWith('/signup');
+        if (isAuthOrLanding) {
+          return;
+        }
+
         const inExamTab = isExamActiveNow() || (typeof window !== 'undefined' && isExamRoute(window.location.pathname));
         if (inExamTab) {
           console.log("🚫 [VOICE ENGINE] 'Hi Sarthi' ignored: Sarthi AI is strictly locked on the Exams tab!");
           return;
         }
 
-        console.log("🔥 [VOICE ENGINE] 'Hi Sarthi' caught! Dispatching assistant open event...");
+        console.log("🔥 [VOICE ENGINE] 'Hi Sarthi' caught for keyboard user! Dispatching assistant open event...");
         if (isSpeakingGlobal || (typeof window !== 'undefined' && (window as any).isSystemSpeaking)) {
           stopSpeaking();
         }

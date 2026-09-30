@@ -340,21 +340,28 @@ export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onEr
   const voices = synth.getVoices();
   if (voices.length === 0) {
     let triggered = false;
-    synth.onvoiceschanged = () => {
+    const handleVoices = () => {
       if (!triggered) {
         triggered = true;
-        synth.onvoiceschanged = null;
+        try {
+          synth.removeEventListener('voiceschanged', handleVoices);
+        } catch (_) {}
         play();
       }
     };
-    // Fallback if onvoiceschanged doesn't fire in 150ms
+    try {
+      synth.addEventListener('voiceschanged', handleVoices);
+    } catch (_) {}
+    // Fallback if voiceschanged doesn't fire in 400ms
     setTimeout(() => {
       if (!triggered) {
         triggered = true;
-        synth.onvoiceschanged = null;
+        try {
+          synth.removeEventListener('voiceschanged', handleVoices);
+        } catch (_) {}
         play();
       }
-    }, 150);
+    }, 400);
   } else {
     play();
   }
@@ -1433,12 +1440,39 @@ class VoiceNavigationEngine {
     const input = rawInput.trim();
     const isHi = useAccessibilityStore.getState().language === "hi";
 
-    // Isolate landing page: On the landing page, the voice assistant expects the user to say "Login".
-    // If the candidate says "Login", navigate to /login.
-    // If anything else is heard (noise/words), ask them back to say "Login" — NEVER speak dashboard commands!
+    // Isolate landing page: On the landing page, the voice assistant expects the candidate
+    // to choose between Voice Accessibility and Keyboard Navigation, or say Login.
     const isLanding = typeof window !== "undefined" && (window.location.pathname === '/' || window.location.pathname === '');
     if (isLanding) {
       const lower = input.toLowerCase();
+
+      const isKeyboardChoice =
+        lower.includes('keyboard and navigation') ||
+        lower.includes('keyboard navigation') ||
+        lower.includes('keyboard') ||
+        lower.includes('कीबोर्ड') ||
+        lower.includes('नेविगेशन') ||
+        lower.includes('navigation') ||
+        lower.includes('option 2') ||
+        lower.includes('option two') ||
+        lower.includes('विकल्प 2') ||
+        lower.includes('दूसरा') ||
+        lower === 'two' ||
+        lower === '2';
+
+      const isVoiceChoice =
+        lower.includes('voice accessibility') ||
+        lower.includes('voice mode') ||
+        lower.includes('voice') ||
+        lower.includes('वॉइस') ||
+        lower.includes('वाइस') ||
+        lower.includes('option 1') ||
+        lower.includes('option one') ||
+        lower.includes('विकल्प 1') ||
+        lower.includes('पहला') ||
+        lower === 'one' ||
+        lower === '1';
+
       const isLogin =
         lower.includes('login') ||
         lower.includes('log in') ||
@@ -1447,16 +1481,25 @@ class VoiceNavigationEngine {
         lower.includes('साइन इन') ||
         lower.includes('signin');
 
-      if (isLogin) {
-        const announcement = isHi ? "लॉगिन पृष्ठ खोला जा रहा है" : "Opening login page";
+      if (isKeyboardChoice) {
+        useAccessibilityStore.getState().setAccessibilityMode('keyboard');
+        stopSpeech();
+        this.stopListening();
+        this.navigate('/login', isHi ? "कीबोर्ड और नेविगेशन चुना गया। लॉगिन पृष्ठ खोला जा रहा है।" : "Keyboard and navigation selected. Opening login page.");
+        return;
+      }
+
+      if (isVoiceChoice || isLogin) {
+        useAccessibilityStore.getState().setAccessibilityMode('voice');
+        const announcement = isHi ? "वॉइस एक्सेसिबिलिटी चुनी गई। लॉगिन पृष्ठ खोला जा रहा है।" : "Voice accessibility selected. Opening login page.";
         this.navigate('/login', announcement);
         return;
       }
 
-      // If candidate said something different from login on landing page, prompt back to say 'Login'
+      // If candidate said something unrecognized on landing page, prompt back gently
       const promptAgain = isHi
-        ? "कृपया लॉगिन करने के लिए 'लॉगिन' बोलें।"
-        : "Please say 'Login' to sign in to your account.";
+        ? "कृपया 'वॉइस' या 'कीबोर्ड' बोलें, अथवा 'लॉगिन' बोलें।"
+        : "Please say 'Voice' for voice accessibility, 'Keyboard' for keyboard navigation, or 'Login'.";
 
       this.stopListening();
       speak(promptAgain, {

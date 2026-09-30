@@ -1,11 +1,66 @@
 import { stopSpeaking } from '@/lib/voice/useVoiceEngine';
 
 /**
+ * Ensures voices are retrieved and cached by the browser.
+ * Resolves with the voices list or an empty list if timeout expires.
+ */
+export function fetchAvailableVoices(timeoutMs: number = 1500): Promise<SpeechSynthesisVoice[]> {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    return Promise.resolve([]);
+  }
+
+  const existingVoices = window.speechSynthesis.getVoices();
+  if (existingVoices && existingVoices.length > 0) {
+    return Promise.resolve(existingVoices);
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const handleVoices = () => {
+      if (resolved) return;
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        resolved = true;
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoices);
+        resolve(voices);
+      }
+    };
+
+    window.speechSynthesis.addEventListener('voiceschanged', handleVoices);
+
+    // Also poll every 100ms in case the voiceschanged event is swallowed
+    const interval = setInterval(() => {
+      if (resolved) {
+        clearInterval(interval);
+        return;
+      }
+      const v = window.speechSynthesis.getVoices();
+      if (v && v.length > 0) {
+        resolved = true;
+        clearInterval(interval);
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoices);
+        resolve(v);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(interval);
+        window.speechSynthesis.removeEventListener('voiceschanged', handleVoices);
+        resolve(window.speechSynthesis.getVoices() || []);
+      }
+    }, timeoutMs);
+  });
+}
+
+/**
  * Exam Saarthi - Audio Session & Microphone Initializer
- * Executed during explicit user gestures (e.g. clicking "Start Practice", "Take Mock Exam", or entering exam)
+ * Executed during explicit user gestures or landing page initialization.
  * 1. Solves Browser Autoplay & Audio Lock:
- *    - Requests microphone access via getUserMedia
  *    - Primes window.speechSynthesis with an empty utterance to unlock browser audio playback
+ *    - Requests microphone access via getUserMedia without locking the hardware stream
  * 2. Stores examSessionStarted = true in sessionStorage so the exam screen knows it is authorized to speak immediately
  */
 export async function initializeExamAudioSession(): Promise<boolean> {
@@ -30,7 +85,17 @@ export async function initializeExamAudioSession(): Promise<boolean> {
     sessionStorage.setItem('examSessionStarted', 'true');
   } catch (e) {}
 
-  // 3. Request mic access
+  // 3. Query permissions API first if supported
+  if (navigator?.permissions?.query) {
+    try {
+      const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      if (status.state === 'granted') {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // 4. Request mic access via getUserMedia
   let micGranted = false;
   if (navigator?.mediaDevices && navigator.mediaDevices.getUserMedia) {
     try {
@@ -48,3 +113,4 @@ export async function initializeExamAudioSession(): Promise<boolean> {
 
 // Backward-compatibility alias
 export const requestMicPermission = initializeExamAudioSession;
+
