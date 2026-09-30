@@ -216,10 +216,6 @@ export function stopSpeaking(expectedGeneration?: number): void {
 }
 
 function queueSpeechChunk(text: string, lang: string, opts: { priority?: VoicePriority; interrupt?: boolean; onStart?: () => void; onEnd?: () => void; onError?: (error: SpeechSynthesisErrorEvent | { error: 'not-supported' }) => void; rate?: number; pitch?: number; voiceURI?: string | null } = {}): number | null {
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
-    if (opts.onEnd) opts.onEnd();
-    return null;
-  }
   const priority = opts.priority ?? 'content';
   const wasListeningBefore = isListeningGlobal;
   const currentPriority = currentSpeechPriority ?? 'talkback';
@@ -466,15 +462,15 @@ function handleRecognitionError(error: any): void {
 export function startListening(
   lang = 'en-IN',
   onTranscript?: (text: string) => void,
-  options: { resolveAlternatives?: boolean } = {}
+  options: { resolveAlternatives?: boolean; explicitSession?: boolean } = {}
 ): void {
-  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal });
+  console.log('[EXAMSARTHI VOICE DEBUG]', { event: 'startListening', lang, isSpeakingGlobal, isListeningGlobal, explicitSession: options.explicitSession });
   if (typeof window === 'undefined') return;
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
+  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard' && !options.explicitSession) {
     (window as any).__alwaysListening = false;
     return;
   }
-  (window as any).__alwaysListening = true;
+  (window as any).__alwaysListening = options.explicitSession ? false : true;
   const normalized = normalizeLanguage(lang);
   activeLang = normalized;
   if (isSpeakingGlobal) {

@@ -137,17 +137,16 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
 
   // Initialize Continuous Audio Companion & Always-On Voice Navigation
   useEffect(() => {
-    // If in keyboard mode: completely shut down voice engine, speech synthesis, and listeners
+    // If in keyboard mode: stop continuous voice recognition engine, but activate focus talk-back for partially visually impaired users
     if (accessibilityMode === 'keyboard') {
-      stopSpeech();
-      try {
-        window.speechSynthesis?.cancel();
-      } catch (_) {}
       voiceEngine.stop();
       if (typeof window !== 'undefined') {
         (window as any).__alwaysListening = false;
       }
-      return;
+      const cleanupFocus = initFocusTalkBack();
+      return () => {
+        cleanupFocus();
+      };
     }
 
     // Eagerly prime Chromium SpeechSynthesis engine voices
@@ -191,6 +190,136 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     };
   }, [router, accessibilityMode]);
 
+  // KEYBOARD NAVIGATION & AUDITORY PRONUNCIATION FOR PARTIALLY VISUALLY IMPAIRED USERS
+  useEffect(() => {
+    if (accessibilityMode !== 'keyboard') return;
+
+    const handleKeyNav = (e: KeyboardEvent) => {
+      // Allow developer bypasses
+      if (
+        e.key === 'F12' ||
+        e.key === 'F5' ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'i' || e.key === 'I'))
+      ) {
+        return;
+      }
+
+      // Allow typing inside text inputs, textareas, and contentEditable
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.getAttribute('role') === 'textbox'
+      );
+
+      // If user is typing in a text field, do not hijack single keys unless Alt is held
+      if (isInput && !e.altKey) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      const isHi = useAccessibilityStore.getState().language === 'hi';
+
+      // Check if inside active exam session
+      const currentPath = pathname || (typeof window !== 'undefined' ? window.location.pathname : '');
+      const isInExamSession = currentPath.includes('/exam') && currentPath.includes('session');
+      if (isInExamSession && !e.altKey) {
+        return;
+      }
+
+      // 1. Exam Hub (E or Alt+E)
+      if (key === 'e' || (e.altKey && key === 'e')) {
+        e.preventDefault();
+        speak(isHi ? 'परीक्षा केंद्र' : 'Exam', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        router.push('/exam');
+        return;
+      }
+
+      // 2. Dashboard (D or Alt+D)
+      if (key === 'd' || (e.altKey && key === 'd')) {
+        e.preventDefault();
+        speak(isHi ? 'डैशबोर्ड' : 'Dashboard', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        router.push('/dashboard');
+        return;
+      }
+
+      // 3. Practice Section (P or Alt+P)
+      if (key === 'p' || (e.altKey && key === 'p')) {
+        e.preventDefault();
+        speak(isHi ? 'अभ्यास' : 'Practice', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        router.push('/practice');
+        return;
+      }
+
+      // 4. Results (R or Alt+R)
+      if (key === 'r' || (e.altKey && key === 'r')) {
+        e.preventDefault();
+        speak(isHi ? 'परिणाम' : 'Results', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        router.push('/results');
+        return;
+      }
+
+      // 5. Sarthi AI Assistant (S or Alt+S)
+      if (key === 's' || (e.altKey && key === 's')) {
+        e.preventDefault();
+        speak(isHi ? 'सारथी सहायक' : 'Sarthi AI Assistant', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        window.dispatchEvent(new CustomEvent('examsarthi-open-sarthi'));
+        return;
+      }
+
+      // 6. Home (H or Alt+H)
+      if (key === 'h' || (e.altKey && key === 'h')) {
+        e.preventDefault();
+        speak(isHi ? 'होम' : 'Home', { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        router.push('/');
+        return;
+      }
+
+      // 7. Toggle Language (L or Alt+L)
+      if (key === 'l' || (e.altKey && key === 'l')) {
+        e.preventDefault();
+        const currentLang = useAccessibilityStore.getState().language;
+        const nextLang = currentLang === 'hi' ? 'en' : 'hi';
+        useAccessibilityStore.getState().setLanguage(nextLang);
+        speak(
+          nextLang === 'hi' ? 'भाषा बदलकर हिंदी की गई।' : 'Language switched to English.',
+          { cancelPrevious: true, langOverride: nextLang === 'hi' ? 'hi-IN' : 'en-US' }
+        );
+        return;
+      }
+
+      // 8. Toggle Contrast (C or Alt+C)
+      if (key === 'c' || (e.altKey && key === 'c')) {
+        e.preventDefault();
+        const cur = useAccessibilityStore.getState().contrast;
+        const next = cur === 'high' ? 'default' : 'high';
+        useAccessibilityStore.getState().setContrast(next);
+        speak(
+          next === 'high' 
+            ? (isHi ? 'उच्च कंट्रास्ट मोड सक्षम किया गया।' : 'High contrast mode enabled.')
+            : (isHi ? 'सामान्य कंट्रास्ट मोड सक्षम किया गया।' : 'Standard contrast mode enabled.'),
+          { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' }
+        );
+        return;
+      }
+
+      // 9. Keyboard Shortcuts Guide (? or Shift+/)
+      if (key === '?' || (e.shiftKey && key === '/')) {
+        e.preventDefault();
+        const help = isHi
+          ? 'नेविगेशन शॉर्टकट: परीक्षा के लिए ई, डैशबोर्ड के लिए डी, अभ्यास के लिए पी, परिणाम के लिए आर, सारथी सहायक के लिए एस, भाषा के लिए एल, कंट्रास्ट के लिए सी दबाएं। आगे बढ़ने के लिए टैब का उपयोग करें।'
+          : 'Navigation shortcuts: Press E for Exam, D for Dashboard, P for Practice, R for Results, S for Sarthi Assistant, L for Language, C for Contrast. Use Tab to navigate elements.';
+        speak(help, { cancelPrevious: true, langOverride: isHi ? 'hi-IN' : 'en-US' });
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyNav);
+    return () => window.removeEventListener('keydown', handleKeyNav);
+  }, [accessibilityMode, pathname, router]);
+
   const isLandingRoute = pathname === '/' || !pathname || pathname === '';
 
   return (
@@ -222,11 +351,13 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       {accessibilityMode === 'keyboard' ? (
         <div
           aria-live="polite"
-          className="fixed bottom-4 right-4 z-[9998] flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md backdrop-blur-md border transition-all duration-300 pointer-events-none select-none bg-background/90 text-foreground border-border/80"
+          className="fixed bottom-4 left-16 z-[9998] flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md backdrop-blur-md border transition-all duration-300 select-none bg-background/90 text-foreground border-border/80"
         >
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
           <span>
-            {language === 'hi' ? 'कीबोर्ड और नेविगेशन मोड' : 'Keyboard & Navigation Mode'}
+            {language === 'hi' 
+              ? 'कीबोर्ड मोड (E: परीक्षा | D: डैशबोर्ड | S: सारथी | ?: मदद)' 
+              : 'Keyboard Mode (E: Exam | D: Dashboard | S: Sarthi | ?: Help)'}
           </span>
         </div>
       ) : (

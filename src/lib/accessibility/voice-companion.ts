@@ -248,11 +248,6 @@ export function getNaturalFemaleVoice(langPref?: string): SpeechSynthesisVoice |
 export function forceSpeak(text: string, onEnd?: () => void, lang?: string, onError?: (err: any) => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
-    if (onEnd) onEnd();
-    return;
-  }
-
   // 1. Prime hardware audio
   unlockAudioContext();
 
@@ -388,11 +383,6 @@ export function stopSpeech(): void {
  */
 export function speak(text: string, options?: SpeakOptions): void {
   if (!isSpeechSupported() || !text || !text.trim()) return;
-
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') {
-    if (options?.onEnd) options.onEnd();
-    return;
-  }
 
   const { cancelPrevious = true, lang, langOverride, onEnd, onError } = options || {};
 
@@ -2109,11 +2099,10 @@ export function initGestureTrigger(): () => void {
  */
 export function initFocusTalkBack(): () => void {
   if (typeof window === "undefined") return () => {};
-  if (useAccessibilityStore.getState().accessibilityMode === 'keyboard') return () => {};
 
   const handleFocusIn = (event: FocusEvent) => {
     const store = useAccessibilityStore.getState();
-    if (!store.voiceModeEnabled || store.accessibilityMode === 'keyboard') return;
+    if (!store.voiceModeEnabled && store.accessibilityMode !== 'keyboard') return;
 
     // If initial welcome is still being spoken, do not interrupt it
     if (isAnnouncingWelcome) return;
