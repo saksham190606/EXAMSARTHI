@@ -22,6 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAccessibilityStore } from '@/store/useAccessibilityStore';
 import { forceSpeak, unlockAudioContext, voiceEngine } from '@/lib/accessibility/voice-companion';
 import { stopSpeaking, subscribe } from '@/lib/voice/useVoiceEngine';
+import { registerVoiceContext, unregisterVoiceContext } from '@/lib/voice/commandRouter';
+import { playVoiceFeedbackChime } from '@/lib/voice/intent-parser';
 import { ExamSectionConfig } from '@/types/section';
 
 export interface ExamInstructionScreenProps {
@@ -60,6 +62,8 @@ export function ExamInstructionScreen({
 
   const isTransitioningRef = useRef(false);
   const hasSpokenInitialRef = useRef(false);
+  const lastReminderTimeRef = useRef(0);
+
 
   // Negative marking display fallback
   const resolvedMarking = negativeMarking || (
@@ -77,7 +81,7 @@ export function ExamInstructionScreen({
         `मुख्य निर्देश: परीक्षा के दौरान आप 'अगला प्रश्न', 'पिछला प्रश्न', 'विकल्प चुनें', या 'सबमिट' बोलकर परीक्षा दे सकते हैं। ` +
         `परीक्षा शुरू होते ही सुरक्षा लॉकडाउन सक्रिय हो जाएगा। ` +
         `क्या आप निर्देश दोबारा सुनना चाहते हैं, वापस जाना चाहते हैं, या परीक्षा शुरू करना चाहते हैं? ` +
-        `कृपया बोलें 'परीक्षा शुरू करें', 'दोबारा', या 'वापस'।"`;
+        `कृपया बोलें 'परीक्षा शुरू करें', 'दोबारा', या 'वापस'।`;
     }
 
     return `Welcome to the instructions for ${examTitle}. ` +
@@ -111,64 +115,57 @@ export function ExamInstructionScreen({
     );
   }, [getSpeechScript, isHindi]);
 
-  // Action: Start Exam
+  // Action: Start Exam (starts that particular exam directly)
   const handleStartExam = useCallback(() => {
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
+
+    // Cleanly unregister instruction context & flag immediately
+    unregisterVoiceContext('instruction');
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_instruction_active = false;
+    }
+
     stopSpeaking();
+    try {
+      playVoiceFeedbackChime();
+    } catch (_) {}
 
-    const startMsg = isHindi ? "परीक्षा शुरू की जा रही है..." : "Starting examination now...";
-    setActionStatus(startMsg);
-
-    forceSpeak(
-      startMsg,
-      () => {
-        onStartExam();
-      },
-      isHindi ? 'hi-IN' : 'en-US'
-    );
-
-    // Guaranteed fallback transition
-    setTimeout(() => {
-      onStartExam();
-    }, 600);
-  }, [isHindi, onStartExam]);
+    // Immediately launch active exam session so question 1 narration can begin cleanly
+    onStartExam();
+  }, [onStartExam]);
 
   // Action: Go Back
   const handleGoBack = useCallback(() => {
     if (isTransitioningRef.current) return;
     isTransitioningRef.current = true;
+
+    unregisterVoiceContext('instruction');
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_instruction_active = false;
+    }
+
     stopSpeaking();
+    try {
+      playVoiceFeedbackChime();
+    } catch (_) {}
 
-    const backMsg = isHindi ? "वापस जा रहे हैं..." : "Returning to portal...";
-    setActionStatus(backMsg);
-
-    forceSpeak(
-      backMsg,
-      () => {
-        onGoBack();
-      },
-      isHindi ? 'hi-IN' : 'en-US'
-    );
-
-    // Guaranteed fallback
-    setTimeout(() => {
-      onGoBack();
-    }, 600);
-  }, [isHindi, onGoBack]);
+    onGoBack();
+  }, [onGoBack]);
 
   // Action: Repeat Instructions
   const handleRepeatInstructions = useCallback(() => {
+    if (isTransitioningRef.current) return;
     stopSpeaking();
     setSpeechCount((prev) => prev + 1);
     setActionStatus(isHindi ? "निर्देश दोबारा पढ़े जा रहे हैं..." : "Repeating instructions...");
     setTimeout(() => {
       speakInstructionsAloud();
       setActionStatus(null);
-    }, 200);
+    }, 150);
   }, [isHindi, speakInstructionsAloud]);
 
-  // Keyboard shortcut listener (Enter = Start Exam, Escape = Go Back, I/R = Read Instructions)
+  // Keyboard shortcut listener (Enter = Start Exam, Escape = Go Back, R = Repeat)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTransitioningRef.current) return;
@@ -178,16 +175,15 @@ export function ExamInstructionScreen({
       } else if (e.key === 'Escape') {
         e.preventDefault();
         handleGoBack();
-      } else if (e.key === 'i' || e.key === 'I' || e.key === 'r' || e.key === 'R') {
+      } else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'i') {
         e.preventDefault();
-        unlockAudioContext();
-        forceSpeak(getSpeechScript(), () => {}, isHindi ? 'hi-IN' : 'en-US');
+        handleRepeatInstructions();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleStartExam, handleGoBack, getSpeechScript, isHindi]);
+  }, [handleStartExam, handleGoBack, handleRepeatInstructions]);
 
   // Mount effect: Trigger initial speech brief & voice listener (Voice mode only)
   useEffect(() => {
@@ -210,97 +206,124 @@ export function ExamInstructionScreen({
   }, [speakInstructionsAloud, isKeyboardMode]);
 
   // Continuous Voice Command Listener (Voice mode only)
+  // Strictly isolates instruction commands to ONLY:
+  // 1. Start Exam (starts this particular exam)
+  // 2. Repeat Instructions
+  // 3. Go Back
+  const handleInstructionVoiceCommand = useCallback((rawTranscript: string) => {
+    if (isTransitioningRef.current || !rawTranscript) return;
+
+    const lower = rawTranscript.toLowerCase().trim();
+    console.log('[ExamInstructionScreen] Spoken voice input:', lower);
+
+    // 1. START EXAM TRIGGERS
+    const isStart =
+      lower.includes('start exam') ||
+      lower.includes('start test') ||
+      lower.includes('start mock') ||
+      lower.includes('start the exam') ||
+      lower.includes('start the test') ||
+      lower.includes('take exam') ||
+      lower.includes('take test') ||
+      lower.includes('begin exam') ||
+      lower.includes('begin test') ||
+      lower.includes('launch exam') ||
+      lower.includes('launch test') ||
+      lower === 'start' ||
+      lower === 'begin' ||
+      lower.includes('परीक्षा शुरू करें') ||
+      lower.includes('शुरू करें') ||
+      lower.includes('परीक्षा शुरू') ||
+      lower.includes('स्टार्ट') ||
+      lower.includes('एग्जाम शुरू') ||
+      lower.includes('टेस्ट शुरू');
+
+    if (isStart) {
+      handleStartExam();
+      return;
+    }
+
+    // 2. REPEAT INSTRUCTIONS TRIGGERS
+    const isRepeat =
+      lower.includes('repeat instruction') ||
+      lower.includes('repeat instructions') ||
+      lower.includes('repeat the instruction') ||
+      lower.includes('repeat') ||
+      lower.includes('again') ||
+      lower.includes('read again') ||
+      lower.includes('tell again') ||
+      lower.includes('speak again') ||
+      lower.includes('दोबारा') ||
+      lower.includes('फिर से') ||
+      lower.includes('दोबारा बोलो') ||
+      lower.includes('दोबारा बताओ') ||
+      lower.includes('निर्देश दोबारा') ||
+      lower.includes('दोहराएं');
+
+    if (isRepeat) {
+      handleRepeatInstructions();
+      return;
+    }
+
+    // 3. GO BACK TRIGGERS
+    const isBack =
+      lower.includes('go back') ||
+      lower.includes('back') ||
+      lower.includes('return') ||
+      lower.includes('exit') ||
+      lower.includes('cancel') ||
+      lower.includes('वापस') ||
+      lower.includes('पीछे') ||
+      lower.includes('वापस जाएं') ||
+      lower.includes('बाहर') ||
+      lower.includes('रद्द');
+
+    if (isBack) {
+      handleGoBack();
+      return;
+    }
+
+    // 4. ANY OTHER COMMAND ON INSTRUCTION PAGE:
+    // Politely prompt candidate that only 'start exam', 'repeat', or 'go back' are valid here
+    const now = Date.now();
+    if (now - lastReminderTimeRef.current > 3500) {
+      lastReminderTimeRef.current = now;
+      const prompt = isHindi 
+        ? "निर्देश पृष्ठ पर केवल 'परीक्षा शुरू करें', 'दोबारा', या 'वापस' बोलें।"
+        : "Please say 'start exam', 'repeat', or 'go back'.";
+      forceSpeak(prompt, () => {}, isHindi ? 'hi-IN' : 'en-US');
+    }
+  }, [handleStartExam, handleRepeatInstructions, handleGoBack, isHindi]);
+
   useEffect(() => {
-    if (isKeyboardMode) return;
+    registerVoiceContext('instruction', handleInstructionVoiceCommand);
+    if (typeof window !== 'undefined') {
+      (window as any).__examsarthi_instruction_active = true;
+    }
 
-    const unsubscribe = subscribe((rawTranscript: string) => {
-      if (isTransitioningRef.current || !rawTranscript) return;
+    if (isKeyboardMode) {
+      return () => {
+        unregisterVoiceContext('instruction');
+        if (typeof window !== 'undefined') {
+          (window as any).__examsarthi_instruction_active = false;
+        }
+      };
+    }
 
-      const lower = rawTranscript.toLowerCase().trim();
-      console.log('[ExamInstructionScreen] Spoken voice input:', lower);
-
-      // 1. START EXAM TRIGGERS
-      if (
-        lower.includes('start exam') ||
-        lower.includes('start test') ||
-        lower.includes('start mock') ||
-        lower.includes('take exam') ||
-        lower.includes('take test') ||
-        lower.includes('begin exam') ||
-        lower.includes('begin test') ||
-        lower.includes('start') ||
-        lower.includes('begin') ||
-        lower.includes('परीक्षा शुरू करें') ||
-        lower.includes('शुरू करें') ||
-        lower.includes('परीक्षा शुरू') ||
-        lower.includes('स्टार्ट')
-      ) {
-        handleStartExam();
-        return;
-      }
-
-      // 2. REPEAT INSTRUCTIONS TRIGGERS
-      if (
-        lower.includes('repeat instruction') ||
-        lower.includes('repeat the instruction') ||
-        lower.includes('repeat') ||
-        lower.includes('again') ||
-        lower.includes('read again') ||
-        lower.includes('tell again') ||
-        lower.includes('speak again') ||
-        lower.includes('दोबारा') ||
-        lower.includes('फिर से') ||
-        lower.includes('दोबारा बोलो') ||
-        lower.includes('दोबारा बताओ') ||
-        lower.includes('निर्देश दोबारा')
-      ) {
-        handleRepeatInstructions();
-        return;
-      }
-
-      // 3. GO BACK TRIGGERS
-      if (
-        lower.includes('go back') ||
-        lower.includes('back') ||
-        lower.includes('return') ||
-        lower.includes('exit') ||
-        lower.includes('cancel') ||
-        lower.includes('वापस') ||
-        lower.includes('पीछे') ||
-        lower.includes('वापस जाएं') ||
-        lower.includes('बाहर')
-      ) {
-        handleGoBack();
-        return;
-      }
-    });
+    const unsubscribe = subscribe(handleInstructionVoiceCommand);
 
     return () => {
+      unregisterVoiceContext('instruction');
+      if (typeof window !== 'undefined') {
+        (window as any).__examsarthi_instruction_active = false;
+      }
       unsubscribe();
     };
-  }, [handleStartExam, handleRepeatInstructions, handleGoBack]);
-
-  // Keyboard shortcut navigation (Enter = Start, R = Repeat, Esc = Back)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleStartExam();
-      } else if (e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        handleRepeatInstructions();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        handleGoBack();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleStartExam, handleRepeatInstructions, handleGoBack]);
+  }, [handleInstructionVoiceCommand, isKeyboardMode]);
 
   return (
     <div 
+      id="exam-instruction-screen"
       className="min-h-screen bg-background text-foreground flex flex-col justify-between py-6 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto"
       role="region"
       aria-label="Examination Instructions and Readiness Briefing"

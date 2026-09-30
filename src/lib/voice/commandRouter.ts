@@ -1,4 +1,4 @@
-export type VoiceContextName = 'global-nav' | 'exam' | 'review' | 'practice' | 'hub' | 'results';
+export type VoiceContextName = 'global-nav' | 'exam' | 'review' | 'practice' | 'hub' | 'results' | 'instruction';
 
 export type CommandType =
   | 'next'
@@ -45,8 +45,8 @@ const idempotencyMap = new Map<string, number>();
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-export function registerVoiceContext(context: VoiceContextName, handler: (transcript: string) => void): void {
-  contextHandlers.set(context, handler);
+export function registerVoiceContext(context: VoiceContextName, handler?: (transcript: string) => void): void {
+  contextHandlers.set(context, handler || (() => {}));
 }
 
 export function unregisterVoiceContext(context: VoiceContextName): void {
@@ -326,6 +326,24 @@ export function routeVoiceCommand(raw: string, context: VoiceContextName = 'glob
 
   const inExam = typeof window !== 'undefined' && window.location.pathname.startsWith('/exam');
   const inResults = (typeof window !== 'undefined' && window.location.pathname.startsWith('/results')) || context === 'results';
+  const inInstruction = context === 'instruction' || hasActiveContext(['instruction']) || (typeof window !== 'undefined' && Boolean((window as any).__examsarthi_instruction_active));
+
+  if (context === 'instruction' || inInstruction) {
+    const isStart = ['start exam', 'start test', 'start mock', 'begin exam', 'begin test', 'start the exam', 'start the test', 'take exam', 'take test', 'start', 'begin', 'परीक्षा शुरू करें', 'शुरू करें', 'स्टार्ट', 'परीक्षा शुरू', 'एग्जाम शुरू', 'टेस्ट शुरू'].some(p => wholeWordMatch(normalized, p) || normalized.includes(p));
+    if (isStart) {
+      return { ...base, type: 'continue', handled: true, confidence: 1, readback: 'Starting examination' };
+    }
+    const isRepeat = ['repeat', 'repeat instruction', 'repeat instructions', 'repeat the instruction', 'read again', 'tell again', 'speak again', 'again', 'दोबारा', 'फिर से', 'दोबारा बोलो', 'दोबारा बताओ', 'निर्देश दोबारा', 'दोहराएं', 'dobara'].some(p => wholeWordMatch(normalized, p) || normalized.includes(p));
+    if (isRepeat) {
+      return { ...base, type: 'repeat-question', handled: true, confidence: 1, readback: 'Repeating instructions' };
+    }
+    const isBack = ['back', 'go back', 'return', 'exit', 'cancel', 'वापस', 'पीछे', 'वापस जाएं', 'बाहर', 'रद्द', 'wapas'].some(p => wholeWordMatch(normalized, p) || normalized.includes(p));
+    if (isBack) {
+      return { ...base, type: 'route', path: 'back', handled: true, confidence: 1, readback: 'Going back' };
+    }
+    return { ...base, handled: false, message: 'Invalid command on instruction screen' };
+  }
+
   if (context === 'global-nav' && inExam && (['next', 'previous', 'select-option', 'clear-answer', 'flag-unflag', 'submit', 'confirm', 'cancel'] as CommandType[]).includes(base.type)) {
     return { ...base, handled: false, message: 'exam command ignored by global-nav context' };
   }

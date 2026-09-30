@@ -1464,6 +1464,18 @@ class VoiceNavigationEngine {
       return;
     }
 
+    // Strictly isolate Instruction Screen: only 'start exam', 'repeat', and 'go back' are valid,
+    // and they are strictly handled by ExamInstructionScreen itself!
+    const isInstructionActive = 
+      hasActiveContext(['instruction']) || 
+      (typeof window !== "undefined" && Boolean((window as any).__examsarthi_instruction_active)) ||
+      (typeof document !== "undefined" && Boolean(document.getElementById('exam-instruction-screen')));
+
+    if (isInstructionActive) {
+      console.log('[VoiceCompanion] Instruction screen active; bypassing global companion commands');
+      return;
+    }
+
     // Isolate login page: login page has its own dedicated voice state machine.
     // Never run global companion commands or speak the "You can say Dashboard..." fallback on login page.
     if (typeof window !== "undefined" && window.location.pathname.startsWith('/login')) {
@@ -1790,6 +1802,14 @@ class VoiceNavigationEngine {
       }
 
       case "START_EXAM": {
+        const inInstruction = hasActiveContext(['instruction']) || (typeof window !== "undefined" && Boolean((window as any).__examsarthi_instruction_active));
+        if (inInstruction) {
+          return;
+        }
+        const inExam = typeof window !== "undefined" && window.location.pathname.startsWith("/exam") && (window.location.search.includes("set=") || window.location.search.includes("exam=") || window.location.search.includes("id="));
+        if (inExam) {
+          return;
+        }
         const mockBtn = document.querySelector<HTMLElement>(
           'button[aria-haspopup="dialog"], button:has-text("Take Mock Exam"), button:has-text("मॉक टेस्ट दें")'
         );

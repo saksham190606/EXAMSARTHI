@@ -571,6 +571,20 @@ export function startListening(
         });
       };
 
+      // Strictly isolate Instruction Screen:
+      // When on the instruction screen, NO global navigation or exam-launch commands should run.
+      // Handlers are strictly in ExamInstructionScreen for 'start exam', 'repeat', and 'go back'.
+      const isInstructionActive = 
+        hasActiveContext(['instruction']) || 
+        (typeof window !== "undefined" && Boolean((window as any).__examsarthi_instruction_active)) ||
+        (typeof document !== "undefined" && Boolean(document.getElementById('exam-instruction-screen')));
+
+      if (isInstructionActive) {
+        console.log('[VoiceEngine] Instruction screen active: forwarding exclusively to instruction listeners.');
+        forwardTranscript(transcript);
+        return;
+      }
+
       // Always allow critical navigation, flag & review commands to fire immediately and notify handlers!
       const isFlagCommand = 
         lower.includes('flag') || 
@@ -1021,8 +1035,8 @@ export async function fetchAIIntent(transcript: string): Promise<AIIntentResult>
     return { intent: 'UNKNOWN', target: '' };
   }
 
-  // Also skip if any active voice context is registered (exam/review/hub/practice)
-  if (hasActiveContext(['exam', 'review', 'hub', 'practice'])) {
+  // Also skip if any active voice context is registered (exam/review/hub/practice/instruction)
+  if (hasActiveContext(['exam', 'review', 'hub', 'practice', 'instruction']) || (typeof window !== 'undefined' && Boolean((window as any).__examsarthi_instruction_active))) {
     return { intent: 'UNKNOWN', target: '' };
   }
 

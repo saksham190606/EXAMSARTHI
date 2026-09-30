@@ -1337,7 +1337,13 @@ function ExamSessionLoader({ rawSet, rawExam }: ExamSessionLoaderProps) {
         subject={resolvedSubject}
         sections={sections}
         onStartExam={() => setHasStartedExam(true)}
-        onGoBack={() => router.push('/exam')}
+        onGoBack={() => {
+          if (setId) {
+            router.push('/practice');
+          } else {
+            router.push('/exam');
+          }
+        }}
       />
     );
   }
